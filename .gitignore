@@ -1,14 +1,16 @@
-# compiled output
-/dist
-/node_modules
-/build
+# Dependencies
+**/node_modules/
+
+# Compiled / build output
+**/dist/
+**/build/
 
 # TypeScript build cache
-*.tsbuildinfo
+**/*.tsbuildinfo
 
 # Logs
-logs
-*.log
+**/logs/
+**/*.log
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
@@ -17,13 +19,14 @@ lerna-debug.log*
 
 # OS
 .DS_Store
+Thumbs.db
 
-# Tests
-/coverage
-/.nyc_output
+# Tests / coverage
+**/coverage/
+.nyc_output
 
 # IDEs and editors
-/.idea
+.idea/
 .project
 .classpath
 .c9/
@@ -38,23 +41,23 @@ lerna-debug.log*
 !.vscode/launch.json
 !.vscode/extensions.json
 
-# dotenv environment variable files
-.env
-!.env.example
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+# Environment variables
+**/.env
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
+!**/.env.example
 
-# temp directory
-.temp
-.tmp
+# Temporary files
+**/.temp/
+**/.tmp/
 
 # Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
+**/pids/
+**/*.pid
+**/*.seed
+**/*.pid.lock
 
-# Diagnostic reports (https://nodejs.org/api/report.html)
+# Diagnostic reports
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
