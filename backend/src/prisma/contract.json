@@ -4,6 +4,10 @@
   "target": "postgres",
   "profileHash": "3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2",
   "roots": {
+    "roles": {
+      "model": "Role",
+      "namespace": "public"
+    },
     "user": {
       "model": "User",
       "namespace": "public"
@@ -13,6 +17,40 @@
     "namespaces": {
       "public": {
         "models": {
+          "Role": {
+            "fields": {
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "roleName": {
+                "nullable": false,
+                "type": {
+                  "codecId": "sql/varchar@1",
+                  "kind": "scalar",
+                  "typeParams": {
+                    "length": 50
+                  }
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "id": {
+                  "column": "id"
+                },
+                "roleName": {
+                  "column": "role_name"
+                }
+              },
+              "namespaceId": "public",
+              "table": "roles"
+            }
+          },
           "User": {
             "fields": {
               "createdAt": {
@@ -26,6 +64,13 @@
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "emailVerified": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
                   "kind": "scalar"
                 }
               },
@@ -52,6 +97,27 @@
               },
               "lastName": {
                 "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "otpAttempts": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "otpExpiresAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "otpHash": {
+                "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
@@ -88,6 +154,9 @@
                 "email": {
                   "column": "email"
                 },
+                "emailVerified": {
+                  "column": "emailVerified"
+                },
                 "firstName": {
                   "column": "firstName"
                 },
@@ -99,6 +168,15 @@
                 },
                 "lastName": {
                   "column": "lastName"
+                },
+                "otpAttempts": {
+                  "column": "otpAttempts"
+                },
+                "otpExpiresAt": {
+                  "column": "otpExpiresAt"
+                },
+                "otpHash": {
+                  "column": "otpHash"
                 },
                 "passwordHash": {
                   "column": "passwordHash"
@@ -123,6 +201,41 @@
       "public": {
         "entries": {
           "table": {
+            "roles": {
+              "columns": {
+                "id": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "expression": "autoincrement()",
+                    "kind": "function"
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "role_name": {
+                  "codecId": "sql/varchar@1",
+                  "nativeType": "character varying",
+                  "nullable": false,
+                  "typeParams": {
+                    "length": 50
+                  }
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "role_name"
+                  ]
+                }
+              ]
+            },
             "user": {
               "columns": {
                 "createdAt": {
@@ -137,6 +250,15 @@
                 "email": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
+                  "nullable": false
+                },
+                "emailVerified": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
                   "nullable": false
                 },
                 "firstName": {
@@ -166,6 +288,25 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
+                },
+                "otpAttempts": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "otpExpiresAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "otpHash": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
                 },
                 "passwordHash": {
                   "codecId": "pg/text@1",
@@ -208,7 +349,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "2d876daaca4531b10606525b614ee67233910b0e44546d62b6d73e0b9bba0b1a"
+    "storageHash": "75add78e841d7e13753641b504777ed2f9bb2b890ce5d7faedaadb3bb3332d74"
   },
   "execution": {
     "executionHash": "a499031370d1fd1891ca11072d3f7e11be752b686057f7c6d0900ee0159f4ed0",

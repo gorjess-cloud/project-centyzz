@@ -1,13 +1,25 @@
 // use prisma-8
 
+
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
-  passwordHash String
-  firstName    String
-  lastName     String
-  role         String   @default("STAFF")
-  isActive     Boolean  @default(true)
-  createdAt    TimestamptzString @default(now())
-  updatedAt    temporal.updatedAtString()
+  id             Int               @id @default(autoincrement())
+  email          String            @unique
+  passwordHash   String
+  firstName      String
+  lastName       String
+  role           String            @default("STAFF")
+  isActive       Boolean           @default(true)
+  emailVerified  Boolean           @default(false)
+  otpHash        String?
+  otpExpiresAt   TimestamptzString?
+  otpAttempts    Int               @default(0)
+  createdAt      TimestamptzString @default(now())
+  updatedAt      temporal.updatedAtString()
+}
+
+model Role {
+  id       Int          @id @default(autoincrement())
+  roleName VarChar(50)  @unique @map("role_name")
+
+  @@map("roles")
 }
