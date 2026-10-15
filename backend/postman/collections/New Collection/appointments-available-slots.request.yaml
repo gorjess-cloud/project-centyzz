@@ -1,0 +1,9 @@
+$kind: http-request
+name: appointments/available-slots
+description: ""
+url: http://localhost:3000/api/appointments/available-slots?date=2026-10-15&service_id=1
+method: GET
+queryParams:
+  date: 2026-10-15
+  service_id: "1"
+order: 5000

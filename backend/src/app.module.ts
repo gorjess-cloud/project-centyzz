@@ -3,9 +3,12 @@ import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
 import { EmailModule } from './email/email.module.js';
+import { ServicesModule } from './services/services.module.js';
+import { AppointmentsModule } from './appointments/appointments.module.js';
+import { PromosModule } from './promos/promos.module.js';
 
 @Module({
-  imports: [AuthModule, EmailModule],
+  imports: [AuthModule, EmailModule, ServicesModule, AppointmentsModule, PromosModule],
   controllers: [AppController],
   providers: [AppService],
 })
