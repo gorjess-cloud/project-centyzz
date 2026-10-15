@@ -1,0 +1,599 @@
+import { useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight, KeyRound, Moon, Sun } from 'lucide-react';
+
+const DEMO_OTP = '123456';
+
+export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPreviewDashboard, isDarkMode, setIsDarkMode }) {
+  const isSignup = mode === 'signup';
+  const [firstName, setFirstName] = useState('');
+  const [middleInitial, setMiddleInitial] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [username, setUsername] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [birthday, setBirthday] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [formMessage, setFormMessage] = useState({ type: '', text: '' });
+  const [isOtpStep, setIsOtpStep] = useState(false);
+  const [otp, setOtp] = useState(() => Array(6).fill(''));
+  const [isOtpVerified, setIsOtpVerified] = useState(false);
+  const otpInputRefs = useRef([]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+
+    setFormMessage({ type: '', text: '' });
+
+    const normalizedEmail = email.trim();
+    const normalizedUsername = username.trim();
+
+    if (isSignup) {
+      if (!firstName.trim() || !lastName.trim() || !normalizedUsername || !phoneNumber.trim() || !birthday || !normalizedEmail || !password || !confirmPassword) {
+        setFormMessage({ type: 'error', text: 'Please complete all required fields to create an account.' });
+        return;
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        setFormMessage({ type: 'error', text: 'Please enter a valid email address.' });
+        return;
+      }
+
+      if (password.length < 8) {
+        setFormMessage({ type: 'error', text: 'Password must be at least 8 characters long.' });
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        setFormMessage({ type: 'error', text: 'Passwords do not match. Please re-enter them.' });
+        return;
+      }
+
+      setOtp(Array(6).fill(''));
+      setIsOtpVerified(false);
+      setIsOtpStep(true);
+      setFormMessage({ type: 'info', text: `Demo only: no email was sent. Enter ${DEMO_OTP} to test verification.` });
+      return;
+    }
+
+    if (!normalizedEmail || !password) {
+      setFormMessage({ type: 'error', text: 'Please enter your email/username and password.' });
+      return;
+    }
+
+    setFormMessage({ type: 'error', text: 'Sign-in is unavailable because authentication has not been set up yet.' });
+  };
+
+  const handleVerifyOtp = (e) => {
+    e.preventDefault();
+
+    const enteredCode = otp.join('');
+    if (enteredCode.length !== 6) {
+      setFormMessage({ type: 'error', text: 'Please enter all six digits of the demo code.' });
+      return;
+    }
+
+    if (enteredCode !== DEMO_OTP) {
+      setFormMessage({ type: 'error', text: 'That demo code is incorrect. Please try again.' });
+      return;
+    }
+
+    setIsOtpVerified(true);
+    setFormMessage({ type: 'success', text: 'Demo email verification complete. No account was created; authentication is not set up.' });
+  };
+
+  const handleOtpChange = (index, value) => {
+    const digits = value.replace(/\D/g, '');
+
+    if (digits.length > 1) {
+      const pastedCode = digits.slice(0, 6);
+      const nextOtp = Array(6).fill('');
+      [...pastedCode].forEach((digit, digitIndex) => {
+        nextOtp[digitIndex] = digit;
+      });
+      setOtp(nextOtp);
+      otpInputRefs.current[Math.min(pastedCode.length, 5)]?.focus();
+      return;
+    }
+
+    const nextOtp = [...otp];
+    nextOtp[index] = digits;
+    setOtp(nextOtp);
+    if (digits && index < 5) otpInputRefs.current[index + 1]?.focus();
+  };
+
+  const handleOtpKeyDown = (index, event) => {
+    if (event.key === 'Backspace' && !otp[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    } else if (event.key === 'ArrowLeft' && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    } else if (event.key === 'ArrowRight' && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleResendOtp = () => {
+    setOtp(Array(6).fill(''));
+    setFormMessage({ type: 'info', text: `Demo only: no email was sent. The test code is still ${DEMO_OTP}.` });
+  };
+
+  const handleBackToRegistration = () => {
+    setOtp(Array(6).fill(''));
+    setIsOtpVerified(false);
+    setIsOtpStep(false);
+    setFormMessage({ type: '', text: '' });
+  };
+
+  const handlePreviewDashboard = (profile = {}) => {
+    const submittedName = profile.firstName || email.trim().split('@')[0].replace(/[._-]+/g, ' ');
+    const displayName = submittedName
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ') || 'Jennie';
+
+    onPreviewDashboard?.({
+      ...profile,
+      name: displayName,
+      email: profile.email || email.trim(),
+    });
+  };
+
+  const socialProviders = [
+    { name: 'Google', bg: 'bg-white border border-[#E8DFD1] text-[#2A1E1B]' },
+  ];
+
+  const panelBase = isDarkMode ? 'bg-[#111111] text-[#F5F1EA]' : 'bg-[#F4EFE6] text-[#2A201C]';
+  const fieldLabel = isDarkMode ? 'text-[#D8C2A0]' : 'text-[#5C524B]';
+  const fieldClass = isDarkMode
+    ? 'mt-1.5 w-full rounded-md border border-[#3B3B3B] bg-[#1A1A1A] px-4 py-3 text-xs text-[#F5F1EA] placeholder-[#A19A90] outline-none transition-all duration-300 focus:border-[#C5A059] focus:ring-2 focus:ring-[#9E7B3B]/30'
+    : 'mt-1.5 w-full rounded-md border border-[#E8DFD1] bg-white px-4 py-3 text-xs text-[#121212] placeholder-[#5C524B] outline-none transition-all duration-300 focus:border-[#C5A059] focus:ring-2 focus:ring-[#9E7B3B]/30';
+  const softText = isDarkMode ? 'text-[#D6D0C8]' : 'text-[#5C524B]';
+  const divider = isDarkMode ? 'border-[#2F2F2F]' : 'border-[#E8DFD1]';
+
+  return (
+    <div className={`flex h-screen w-full overflow-hidden ${panelBase}`}>
+      
+      {/* Left Panel - Fixed & Static Hero Canvas */}
+      <div className="relative hidden w-1/2 h-screen flex-col justify-between p-10 lg:flex shrink-0 select-none">
+        {/* Background Image with Overlay */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center grayscale transition-all duration-700 ease-out"
+          style={{
+            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.75)), url('https://images.unsplash.com/photo-1560066984-138dadb4c035?q=80&w=1600&auto=format&fit=crop')`
+          }}
+        />
+
+        {/* Top Header */}
+        <div className="relative z-10 flex items-center justify-between">
+          <button 
+            onClick={onBackToSalon}
+            className="flex items-center gap-2 rounded-full bg-white/20 px-4 py-1.5 text-xs font-medium text-white backdrop-blur-md transition-all duration-300 hover:bg-white/30 hover:scale-105 active:scale-95"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Salon
+          </button>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsDarkMode((prev) => !prev)}
+              className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.2em] text-white backdrop-blur-md transition-all duration-300 hover:bg-white/20"
+              aria-label="Toggle dark mode"
+            >
+              {isDarkMode ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+              {isDarkMode ? 'Light' : 'Dark'}
+            </button>
+          </div>
+        </div>
+
+        {/* Middle Hero Typography */}
+        <div className="relative z-10 my-auto max-w-lg">
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#C5A059]">
+            CLIENT SANCTUARY PORTAL
+          </p>
+          <h1 className="mt-3 font-serif text-4xl font-normal leading-tight text-white lg:text-5xl">
+            Elevate Your <br />
+            <span className="italic text-[#C5A059]">Personal Elegance.</span>
+          </h1>
+          <p className="mt-4 text-xs font-light leading-relaxed text-white/70">
+            Manage your bookings, view tailored hair & nail consultation histories, and claim exclusive VIP pampering rewards.
+          </p>
+        </div>
+
+        {/* Bottom Footer */}
+        <div className="relative z-10">
+          <p className="text-[10px] text-white/60">
+            © Centy'zz Hair & Beauty Salon - Caloocan City
+          </p>
+        </div>
+      </div>
+
+      {/* Right Panel - Smooth Flowing Independent Scroll Container */}
+      <div className={`flex-1 h-screen overflow-y-auto px-6 py-12 lg:px-12 flex items-center justify-center custom-scrollbar ${isDarkMode ? 'bg-[#101010]' : 'bg-[#F4EFE6]'}`}>
+        <div className="w-full max-w-md my-auto py-6 space-y-6 text-center">
+
+          {/* Logo */}
+          <div className="flex justify-center mb-2">
+            <img 
+              src="/logo.png" 
+              alt="Centy'zz Salon Logo" 
+              className="h-16 w-auto object-contain transition-transform duration-500 hover:scale-105" 
+            />
+          </div>
+
+          {/* Header Title with Smooth Fade Transition */}
+          <div className="transition-all duration-300 ease-in-out transform">
+            <h2 className={`${isOtpStep ? 'font-sans text-2xl font-semibold text-[#9B6B39]' : `font-serif text-3xl ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#121212]'}`} transition-all duration-300`}>
+              {isOtpStep ? 'Enter the code' : isSignup ? 'Create an Account' : 'Welcome Back'}
+            </h2>
+            <p className={`mt-2 text-xs transition-all duration-300 ${isDarkMode ? 'text-[#D6D0C8]' : 'text-[#5C524B]'}`}>
+              {isOtpStep ? `Enter the six-digit code from your email${email.trim() ? ` (${email.trim()})` : ''}.` : isSignup ? 'Register to manage your bookings & profile' : 'Sign in to access your bookings & profile'}
+            </p>
+          </div>
+
+          {!isOtpStep && <form onSubmit={handleSubmit} className="mt-8 space-y-4 text-left">
+            
+            {/* Dynamic Registration Fields Container (Collapses smoothly during Login) */}
+            <div 
+              className={`space-y-3 overflow-hidden transition-all duration-500 ease-in-out ${
+                isSignup ? 'max-h-[420px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-4 pointer-events-none'
+              }`}
+              inert={!isSignup}
+              aria-hidden={!isSignup}
+            >
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
+                    FIRST NAME
+                  </label>
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="First Name"
+                    required={isSignup}
+                    className={fieldClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
+                    MIDDLE INIT
+                  </label>
+                  <input
+                    type={isSignup ? 'email' : 'text'}
+                    value={middleInitial}
+                    onChange={(e) => setMiddleInitial(e.target.value.slice(0, 2))}
+                    placeholder="M.I."
+                    maxLength={2}
+                    className={fieldClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
+                    LAST NAME
+                  </label>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="Last Name"
+                    required={isSignup}
+                    className={fieldClass}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
+                  USERNAME
+                </label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="yourusername"
+                  required={isSignup}
+                  className={fieldClass}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
+                    PHONE NUMBER
+                  </label>
+                  <input
+                    type="tel"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    placeholder="09XXXXXXXXX"
+                    required={isSignup}
+                    className={fieldClass}
+                  />
+                </div>
+
+                <div>
+                  <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
+                    BIRTHDAY
+                  </label>
+                  <input
+                    type="date"
+                    value={birthday}
+                    onChange={(e) => setBirthday(e.target.value)}
+                    required={isSignup}
+                    className={fieldClass}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Email Field */}
+            <div className="transition-all duration-300">
+              <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
+                {isSignup ? 'EMAIL ADDRESS' : 'EMAIL OR USERNAME'}
+              </label>
+              <input
+                type={isSignup ? 'email' : 'text'}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={isSignup ? 'you@example.com' : 'Enter Email or Username'}
+                required
+                className={fieldClass}
+              />
+            </div>
+
+            {/* Password Field */}
+            <div className="transition-all duration-300">
+              <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
+                PASSWORD
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter Your Password"
+                autoComplete={isSignup ? 'new-password' : 'current-password'}
+                required
+                className={fieldClass}
+              />
+            </div>
+
+            {/* Re-type Password Field (Smooth Collapse) */}
+            <div 
+              className={`overflow-hidden transition-all duration-500 ease-in-out ${
+                isSignup ? 'max-h-[96px] opacity-100 translate-y-0 mt-3' : 'max-h-0 opacity-0 -translate-y-2 pointer-events-none'
+              }`}
+            >
+              <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
+                RE-TYPE PASSWORD
+              </label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm Your Password"
+                autoComplete="new-password"
+                required={isSignup}
+                className={fieldClass}
+              />
+            </div>
+
+            {/* Submit Button */}
+            {formMessage.text && (
+              <p
+                role={formMessage.type === 'error' ? 'alert' : 'status'}
+                className={`rounded-md border px-3 py-2 text-[11px] ${
+                  formMessage.type === 'error'
+                    ? isDarkMode
+                      ? 'border-[#7a4d4d] bg-[#2a1d1d] text-[#f7c8c8]'
+                      : 'border-[#e9c7c7] bg-[#fff4f4] text-[#7a2b2b]'
+                    : formMessage.type === 'info'
+                      ? isDarkMode
+                        ? 'border-[#66552f] bg-[#2a251b] text-[#f3dfaa]'
+                        : 'border-[#ead9a9] bg-[#fffaf0] text-[#715b25]'
+                      : isDarkMode
+                      ? 'border-[#3d5d3d] bg-[#1d2a1d] text-[#d6f5d7]'
+                      : 'border-[#d4e7d4] bg-[#f3fff3] text-[#2f6b3e]'
+                }`}
+              >
+                {formMessage.text}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              className="mt-4 w-full rounded-md bg-[#C5A059] py-3 text-xs font-semibold uppercase tracking-[0.2em] text-white shadow-sm transition-all duration-300 hover:bg-[#D8B775] hover:shadow-md active:scale-[0.99] focus:ring-2 focus:ring-[#9E7B3B]/30"
+            >
+              {isSignup ? 'Register Now' : 'Log In'}
+            </button>
+          </form>}
+
+          {isOtpStep && (
+            <form onSubmit={handleVerifyOtp} className="mt-8 space-y-5 text-center">
+              <KeyRound aria-hidden="true" className={`mx-auto h-14 w-14 ${isDarkMode ? 'text-[#C5A059]' : 'text-[#78450C]'}`} strokeWidth={2.5} />
+
+              <div
+                role="group"
+                aria-label="Six-digit email verification code"
+                aria-describedby="otp-demo-note"
+                className="grid grid-cols-6 gap-2 sm:gap-3"
+              >
+                {Array.from({ length: 6 }, (_, index) => (
+                  <input
+                    key={index}
+                    ref={(element) => { otpInputRefs.current[index] = element; }}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                    pattern="[0-9]"
+                    maxLength={6}
+                    value={otp[index] || ''}
+                    onChange={(e) => handleOtpChange(index, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                    aria-label={`Digit ${index + 1} of 6`}
+                    required
+                    disabled={isOtpVerified}
+                    className={`h-14 min-w-0 rounded-2xl border text-center text-xl font-medium outline-none transition-colors focus:border-[#A36C32] focus:ring-2 focus:ring-[#A36C32]/20 disabled:opacity-70 ${
+                      isDarkMode
+                        ? 'border-[#3B3B3B] bg-[#1A1A1A] text-[#F5F1EA]'
+                        : 'border-[#E2E0DC] bg-transparent text-[#2A201C]'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <p id="otp-demo-note" className={`text-[11px] ${softText}`}>
+                Demo only: no email was sent. Test code: <strong>{DEMO_OTP}</strong>
+              </p>
+
+              {formMessage.text && (
+                <p
+                  role={formMessage.type === 'error' ? 'alert' : 'status'}
+                  className={`rounded-md border px-3 py-2 text-[11px] ${
+                    formMessage.type === 'error'
+                      ? isDarkMode
+                        ? 'border-[#7a4d4d] bg-[#2a1d1d] text-[#f7c8c8]'
+                        : 'border-[#e9c7c7] bg-[#fff4f4] text-[#7a2b2b]'
+                      : formMessage.type === 'info'
+                        ? isDarkMode
+                          ? 'border-[#66552f] bg-[#2a251b] text-[#f3dfaa]'
+                          : 'border-[#ead9a9] bg-[#fffaf0] text-[#715b25]'
+                        : isDarkMode
+                          ? 'border-[#3d5d3d] bg-[#1d2a1d] text-[#d6f5d7]'
+                          : 'border-[#d4e7d4] bg-[#f3fff3] text-[#2f6b3e]'
+                  }`}
+                >
+                  {formMessage.text}
+                </p>
+              )}
+
+              {!isOtpVerified && (
+                <button
+                  type="submit"
+                  aria-label="Verify code"
+                  className="mx-auto flex h-12 w-14 items-center justify-center rounded-lg border-2 border-[#9B6B39] text-[#78450C] transition-all hover:bg-[#9B6B39] hover:text-white focus:outline-none focus:ring-2 focus:ring-[#9B6B39]/30 active:scale-95"
+                >
+                  <ArrowRight aria-hidden="true" className="h-8 w-8" strokeWidth={2} />
+                </button>
+              )}
+
+              {isOtpVerified && (
+                <button
+                  type="button"
+                  onClick={() => handlePreviewDashboard({
+                    firstName,
+                    lastName,
+                    username,
+                    phoneNumber,
+                    birthday,
+                    email: email.trim(),
+                  })}
+                  className="w-full rounded-md bg-[#C5A059] py-3 text-xs font-semibold uppercase tracking-[0.16em] text-white transition-colors hover:bg-[#D8B775]"
+                >
+                  Preview Member Dashboard
+                </button>
+              )}
+
+              <div className="flex justify-between text-xs">
+                <button
+                  type="button"
+                  onClick={handleBackToRegistration}
+                  className="font-semibold text-[#C5A059] hover:underline"
+                >
+                  Back to registration
+                </button>
+                {!isOtpVerified && (
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    className="font-semibold text-[#C5A059] hover:underline"
+                  >
+                    Resend code
+                  </button>
+                )}
+              </div>
+            </form>
+          )}
+
+          {!isSignup && !isOtpStep && (
+            <button
+              type="button"
+              onClick={() => handlePreviewDashboard()}
+              className={`text-[11px] underline underline-offset-2 ${softText} hover:text-[#C5A059]`}
+            >
+              Preview signed-in member dashboard
+            </button>
+          )}
+
+          {/* Divider */}
+          {!isOtpStep && <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className={`w-full border-t ${divider}`} />
+            </div>
+            <div className={`relative flex justify-center text-[10px] uppercase tracking-[0.2em] ${softText}`}>
+              <span className={`px-3 ${isDarkMode ? 'bg-[#101010]' : 'bg-[#F4EFE6]'}`}>Or continue with</span>
+            </div>
+          </div>}
+
+          {/* Social Logins */}
+          {!isOtpStep && <div className="flex justify-center">
+            {socialProviders.map((provider) => (
+              <button
+                key={provider.name}
+                type="button"
+                onClick={() => setFormMessage({ type: 'error', text: 'Google sign-in is unavailable because authentication has not been set up yet.' })}
+                className={`flex h-10 w-full items-center justify-center gap-2 rounded-md px-3 text-xs font-semibold transition-all duration-300 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] ${provider.bg}`}
+              >
+                <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09Z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23Z" />
+                  <path fill="#FBBC05" d="M5.84 14.09a6.8 6.8 0 0 1 0-4.18V7.07H2.18a11 11 0 0 0 0 9.86l3.66-2.84Z" />
+                  <path fill="#EA4335" d="M12 4.58c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 1.09 14.97 0 12 0 7.7 0 3.99 2.47 2.18 6.07l3.66 2.84C6.71 6.31 9.14 4.58 12 4.58Z" />
+                </svg>
+                {provider.name}
+              </button>
+            ))}
+          </div>}
+
+          {/* Mode Toggle Link */}
+          {!isOtpStep && <div className="pt-2 text-xs">
+            {isSignup ? (
+              <p className={isDarkMode ? 'text-[#D6D0C8]' : 'text-[#5C524B]'}>
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormMessage({ type: '', text: '' });
+                    setMode?.('login');
+                  }}
+                  className="font-semibold text-[#C5A059] hover:underline uppercase transition-colors duration-200"
+                >
+                  SIGN IN HERE
+                </button>
+              </p>
+            ) : (
+              <p className={isDarkMode ? 'text-[#D6D0C8]' : 'text-[#5C524B]'}>
+                New client?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormMessage({ type: '', text: '' });
+                    setMode?.('signup');
+                  }}
+                  className="font-semibold text-[#C5A059] hover:underline uppercase transition-colors duration-200"
+                >
+                  REGISTER HERE
+                </button>
+              </p>
+            )}
+          </div>}
+
+        </div>
+      </div>
+
+    </div>
+  );
+}
