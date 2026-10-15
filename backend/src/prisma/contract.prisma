@@ -1,6 +1,5 @@
 // use prisma-8
 
-
 model User {
   id             Int               @id @default(autoincrement())
   email          String            @unique
@@ -15,6 +14,7 @@ model User {
   otpAttempts    Int               @default(0)
   createdAt      TimestamptzString @default(now())
   updatedAt      temporal.updatedAtString()
+  appointments Appointment[]
 }
 
 model Role {
@@ -22,4 +22,71 @@ model Role {
   roleName VarChar(50)  @unique @map("role_name")
 
   @@map("roles")
+}
+
+model ServiceCategory {
+  id          Int       @id @default(autoincrement())
+  name        VarChar(100) @unique
+  description String?
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   TimestamptzString @default(now()) @map("created_at")
+  updatedAt   TimestamptzString @default(now()) @map("updated_at")
+  services    Service[]
+
+  @@map("service_categories")
+}
+
+model Service {
+  id              Int       @id @default(autoincrement())
+  categoryId      Int       @map("category_id")
+  name            VarChar(150)
+  description     String?
+  price           Decimal
+  durationMinutes Int       @map("duration_minutes")
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       TimestamptzString @default(now()) @map("created_at")
+  updatedAt       TimestamptzString @default(now()) @map("updated_at")
+  category        ServiceCategory @relation(fields: [categoryId], references: [id])
+  appointments Appointment[]
+
+  @@map("services")
+}
+
+model Appointment {
+  id             Int               @id @default(autoincrement())
+  referenceCode  VarChar(30)?       @unique @map("reference_code")
+  userId         Int?              @map("user_id")
+  serviceId      Int               @map("service_id")
+  customerName   VarChar(150)       @map("customer_name")
+  customerEmail  VarChar(255)       @map("customer_email")
+  appointmentDate String @map("appointment_date")
+  startTime      TimeString         @map("start_time")
+  endTime        TimeString         @map("end_time")
+  status         VarChar(30)        @default("PENDING")
+  notes          String?
+  createdAt      TimestamptzString  @default(now()) @map("created_at")
+  updatedAt      TimestamptzString  @default(now()) @map("updated_at")
+
+  service        Service            @relation(fields: [serviceId], references: [id])
+  user           User?              @relation(fields: [userId], references: [id])
+
+  @@map("appointments")
+}
+
+model Promo {
+  id            Int               @id @default(autoincrement())
+  code          VarChar(50)        @unique
+  description   String?
+  discountType  VarChar(20)        @map("discount_type")
+  discountValue Decimal            @map("discount_value")
+  minPurchase   Decimal            @default(0) @map("min_purchase")
+  startsAt      TimestamptzString? @map("starts_at")
+  expiresAt     TimestamptzString? @map("expires_at")
+  usageLimit    Int?               @map("usage_limit")
+  usageCount    Int               @default(0) @map("usage_count")
+  isActive      Boolean           @default(true) @map("is_active")
+  createdAt     TimestamptzString @default(now()) @map("created_at")
+  updatedAt     TimestamptzString @default(now()) @map("updated_at")
+
+  @@map("promos")
 }
