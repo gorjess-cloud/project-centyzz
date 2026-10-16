@@ -4,6 +4,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { db } from '../prisma/db.js';
 import type { Varchar } from '@prisma/orm-postgres/target/codec-types';
@@ -13,7 +14,81 @@ import type { CreateAppointmentDto } from './dto/create-appointment.dto.js';
 export class AppointmentsService {
   private readonly logger = new Logger(AppointmentsService.name);
 
-  async create(input: CreateAppointmentDto) {
+  async createForUser(
+    input: CreateAppointmentDto,
+    userId: number,
+    email: string,
+  ) {
+    const user = await db.orm.public.User.where({
+      id: userId,
+      email: email as Varchar<255>,
+    }).first();
+
+    if (!user || !user.isActive || !user.emailVerified) {
+      throw new UnauthorizedException('An active verified account is required');
+    }
+
+    return this.create({
+      ...input,
+      customerName: `${user.firstName} ${user.lastName}`.trim() as Varchar<150>,
+      customerEmail: user.email,
+    }, user.id);
+  }
+
+  async findMine(userId: number, email: string) {
+    try {
+      const [userAppointments, emailAppointments] = await Promise.all([
+        db.orm.public.Appointment.where({ userId }).all(),
+        db.orm.public.Appointment.where({
+          customerEmail: email.toLowerCase() as Varchar<255>,
+        }).all(),
+      ]);
+      const appointments = Array.from(
+        new Map(
+          [...userAppointments, ...emailAppointments].map((appointment) => [
+            appointment.id,
+            appointment,
+          ]),
+        ).values(),
+      ).sort((first, second) =>
+        `${first.appointmentDate} ${first.startTime}`.localeCompare(
+          `${second.appointmentDate} ${second.startTime}`,
+        ),
+      );
+
+      const data = await Promise.all(
+        appointments.map(async (appointment) => {
+          const service = await db.orm.public.Service.where({
+            id: appointment.serviceId,
+          }).first();
+
+          return {
+            ...appointment,
+            service: service
+              ? {
+                  id: service.id,
+                  name: service.name,
+                  price: Number(service.price),
+                  durationMinutes: service.durationMinutes,
+                }
+              : null,
+          };
+        }),
+      );
+
+      return { success: true, data };
+    } catch (error) {
+      this.logger.error(
+        'Failed to fetch member appointments',
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw new InternalServerErrorException(
+        'Unable to retrieve your appointments',
+      );
+    }
+  }
+
+  async create(input: CreateAppointmentDto, userId?: number) {
     const { appointmentDate, customerEmail, customerName, serviceId, startTime } = input;
     this.validateDate(appointmentDate);
 
@@ -67,6 +142,7 @@ export class AppointmentsService {
       }
 
       const created = await db.orm.public.Appointment.create({
+        ...(userId ? { userId } : {}),
         serviceId,
         customerName: customerName.trim() as Varchar<150>,
         customerEmail: customerEmail.trim().toLowerCase() as Varchar<255>,

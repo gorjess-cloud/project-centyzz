@@ -5,7 +5,11 @@ import {
   Post,
   ParseIntPipe,
   Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import type { AuthenticatedRequest } from '../auth/jwt-auth.guard.js';
 import { AppointmentsService } from './appointments.service.js';
 import { CreateAppointmentDto } from './dto/create-appointment.dto.js';
 
@@ -15,6 +19,15 @@ export class AppointmentsController {
     private readonly appointmentsService: AppointmentsService,
   ) {}
 
+  @Get('mine')
+  @UseGuards(JwtAuthGuard)
+  getMine(@Req() request: AuthenticatedRequest) {
+    return this.appointmentsService.findMine(
+      request.user.sub,
+      request.user.email,
+    );
+  }
+
   @Get('available-slots')
   getAvailableSlots(
     @Query('date') date: string,
@@ -23,6 +36,19 @@ export class AppointmentsController {
     return this.appointmentsService.getAvailableSlots(
       date,
       serviceId,
+    );
+  }
+
+  @Post('mine')
+  @UseGuards(JwtAuthGuard)
+  createMine(
+    @Body() appointment: CreateAppointmentDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.appointmentsService.createForUser(
+      appointment,
+      request.user.sub,
+      request.user.email,
     );
   }
 

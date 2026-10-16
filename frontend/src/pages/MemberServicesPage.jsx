@@ -97,8 +97,8 @@ export default function MemberServicesPage({
   const [search, setSearch] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  const fullName = user?.fullName || "Jennie Baby Jane";
-  const username = user?.username || "@jenniebabyjanepetitehome";
+  const fullName = user?.fullName || user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Member";
+  const initials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 
   const cardSurface = isDarkMode
     ? "border-[#39342B] bg-[#211F1B]"
@@ -149,7 +149,7 @@ export default function MemberServicesPage({
       id: "booking",
       label: "Booking",
       icon: CalendarDays,
-      action: () => onOpenBooking(),
+      action: () => setActivePage("member-bookings"),
     },
     {
       id: "account",
@@ -203,21 +203,20 @@ export default function MemberServicesPage({
         </div>
 
         <div className="flex flex-col items-center justify-center border-b border-inherit px-2 py-4 text-center">
-          <img
-            src={
-              user?.avatar ||
-              "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"
-            }
-            alt={fullName}
-            className={`rounded-full border-2 border-[#C5A059] object-cover transition-all duration-300 ${isSidebarCollapsed ? "h-9 w-9" : "mb-2 h-12 w-12"}`}
-          />
+          <div
+            role="img"
+            aria-label={`${fullName} profile`}
+            className={`flex items-center justify-center rounded-full border-2 border-[#C5A059] bg-[#4A3928] font-semibold text-white transition-all duration-300 ${isSidebarCollapsed ? "h-9 w-9 text-[10px]" : "mb-2 h-12 w-12 text-xs"}`}
+          >
+            {initials || "M"}
+          </div>
           {!isSidebarCollapsed && (
             <div className="w-full px-2">
               <span className="mb-1 inline-block rounded-full bg-[#E8D9C2]/50 px-2 py-0.5 text-[9px] font-medium text-[#6F4C25]">
                 Exclusive Member
               </span>
               <p className="truncate text-xs font-bold">{fullName}</p>
-              <p className={`truncate text-[9px] ${mutedText}`}>{username}</p>
+              <p className={`truncate text-[9px] ${mutedText}`}>{user?.email || "Email not provided"}</p>
             </div>
           )}
         </div>

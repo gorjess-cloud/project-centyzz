@@ -18,81 +18,6 @@ import {
   X,
 } from "lucide-react";
 
-const UPCOMING_BOOKINGS = [
-  {
-    id: "BK-001",
-    ref: "#A-78402",
-    service: "Balayage & Color Gloss",
-    stylist: "Senior Artist - Marco",
-    date: "2026-09-15",
-    time: "10:00 AM",
-    duration: "2.0 hrs",
-    location: "Centy'zz Salon - Main Branch",
-    price: "₱185",
-    status: "confirmed",
-  },
-  {
-    id: "BK-002",
-    ref: "#A-78403",
-    service: "Luxury Spa Pedicure",
-    stylist: "Nail Technician - Lisa",
-    date: "2026-09-22",
-    time: "02:30 PM",
-    duration: "60 mins",
-    location: "Centy'zz Salon - Main Branch",
-    price: "₱70",
-    status: "confirmed",
-  },
-  {
-    id: "BK-003",
-    ref: "#A-78404",
-    service: "Precision Cut & Blowout",
-    stylist: "Senior Artist - Jin",
-    date: "2026-10-05",
-    time: "11:00 AM",
-    duration: "1.0 hr",
-    location: "Centy'zz Salon - Main Branch",
-    price: "₱75",
-    status: "pending",
-  },
-];
-
-const PAST_BOOKINGS = [
-  {
-    id: "BK-004",
-    ref: "#A-78401",
-    service: "Hair Cut",
-    stylist: "Senior Stylist - Karl",
-    date: "2026-08-31",
-    time: "11:00 AM",
-    duration: "90 mins",
-    price: "₱698.00",
-    status: "completed",
-  },
-  {
-    id: "BK-005",
-    ref: "#A-78400",
-    service: "Basic Hair Color",
-    stylist: "Senior Stylist - Karl",
-    date: "2026-08-31",
-    time: "11:00 AM",
-    duration: "90 mins",
-    price: "₱698.00",
-    status: "completed",
-  },
-  {
-    id: "BK-006",
-    ref: "#A-78399",
-    service: "Signature Foot Spa",
-    stylist: "Nail Technician - Lisa",
-    date: "2026-09-16",
-    time: "02:00 PM",
-    duration: "60 mins",
-    price: "₱70",
-    status: "cancelled",
-  },
-];
-
 export default function MemberBookingsPage({
   user,
   isDarkMode,
@@ -100,6 +25,9 @@ export default function MemberBookingsPage({
   setActivePage,
   onOpenBooking,
   onLogout,
+  appointments = [],
+  isLoadingAppointments,
+  appointmentsError,
 }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
@@ -107,8 +35,38 @@ export default function MemberBookingsPage({
   const [pastFilter, setPastFilter] = useState("completed");
   const [selectedBooking, setSelectedBooking] = useState(null);
 
-  const fullName = user?.fullName || user?.name || "Jennie Baby Jane";
-  const username = user?.username || "@jenniebabyjanepetitehome";
+  const fullName = user?.fullName || user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Member";
+  const initials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+  }).format(new Date());
+  const bookings = appointments.map((appointment) => {
+    const [hours, minutes] = String(appointment.startTime).split(":").map(Number);
+    const time = new Date(2000, 0, 1, hours, minutes).toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    const durationMinutes = appointment.service?.durationMinutes;
+
+    return {
+      ...appointment,
+      ref: appointment.referenceCode || `#A-${String(appointment.id).padStart(5, "0")}`,
+      serviceName: appointment.service?.name || "Service unavailable",
+      date: appointment.appointmentDate,
+      time,
+      duration: durationMinutes ? `${durationMinutes} mins` : "Not provided",
+      price: appointment.service?.price == null
+        ? "Not provided"
+        : `₱${Number(appointment.service.price).toFixed(2)}`,
+      status: String(appointment.status).toLowerCase(),
+    };
+  });
+  const upcomingBookings = bookings.filter(
+    (booking) => booking.date >= today && ["pending", "confirmed"].includes(booking.status),
+  );
+  const pastBookings = bookings.filter(
+    (booking) => booking.date < today || ["completed", "cancelled"].includes(booking.status),
+  );
 
   const surface = isDarkMode
     ? "bg-[#171512] text-[#F5F1EA]"
@@ -168,7 +126,7 @@ export default function MemberBookingsPage({
     return null;
   };
 
-  const filteredPastBookings = PAST_BOOKINGS.filter(
+  const filteredPastBookings = pastBookings.filter(
     (b) => b.status === pastFilter,
   );
 
@@ -223,23 +181,20 @@ export default function MemberBookingsPage({
         </div>
 
         <div className="flex flex-col items-center justify-center border-b border-inherit py-4 px-2 text-center transition-all duration-300">
-          <img
-            src={
-              user?.avatar ||
-              "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"
-            }
-            alt={fullName}
-            className={`rounded-full object-cover border-2 border-[#C5A059] transition-all duration-300 ${
-              isSidebarCollapsed ? "h-9 w-9" : "h-12 w-12 mb-2"
-            }`}
-          />
+          <div
+            role="img"
+            aria-label={`${fullName} profile`}
+            className={`flex items-center justify-center rounded-full border-2 border-[#C5A059] bg-[#4A3928] font-semibold text-white transition-all duration-300 ${isSidebarCollapsed ? "h-9 w-9 text-[10px]" : "mb-2 h-12 w-12 text-xs"}`}
+          >
+            {initials || "M"}
+          </div>
           {!isSidebarCollapsed && (
             <div className="w-full px-2">
               <span className="inline-block rounded-full bg-[#E8D9C2]/50 px-2 py-0.5 text-[9px] font-medium text-[#6F4C25] mb-1">
                 Exclusive Member
               </span>
               <p className="text-xs font-bold truncate">{fullName}</p>
-              <p className={`text-[9px] truncate ${mutedText}`}>{username}</p>
+              <p className={`text-[9px] truncate ${mutedText}`}>{user?.email || "Email not provided"}</p>
             </div>
           )}
         </div>
@@ -265,7 +220,7 @@ export default function MemberBookingsPage({
               id: "booking",
               label: "Booking",
               icon: CalendarDays,
-              action: () => {},
+              action: () => setActivePage("member-bookings"),
             },
             {
               id: "account",
@@ -316,7 +271,13 @@ export default function MemberBookingsPage({
             <div className="min-w-0">
               <h1 className="text-xl font-bold truncate">My Bookings</h1>
               <p className={`mt-0.5 text-xs ${mutedText} truncate`}>
-                Today is Sunday, August 20 2026
+                Today is {new Intl.DateTimeFormat("en-US", {
+                  timeZone: "Asia/Manila",
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                }).format(new Date())}
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -404,7 +365,15 @@ export default function MemberBookingsPage({
                 </button>
               </div>
 
-              {UPCOMING_BOOKINGS.length === 0 ? (
+              {appointmentsError ? (
+                <p role="alert" className={`rounded-xl border p-5 text-sm ${cardSurface}`}>
+                  {appointmentsError}
+                </p>
+              ) : isLoadingAppointments ? (
+                <p role="status" className={`rounded-xl border p-5 text-center text-sm ${cardSurface}`}>
+                  Loading your appointments...
+                </p>
+              ) : upcomingBookings.length === 0 ? (
                 <div
                   className={`text-center py-20 rounded-2xl border transition-all duration-300 ${cardSurface}`}
                 >
@@ -424,7 +393,7 @@ export default function MemberBookingsPage({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {UPCOMING_BOOKINGS.map((booking) => (
+                  {upcomingBookings.map((booking) => (
                     <div
                       key={booking.id}
                       className={`rounded-2xl border p-5 shadow-sm transition-all duration-300 ${cardSurface}`}
@@ -451,19 +420,9 @@ export default function MemberBookingsPage({
                               Hair Service
                             </p>
                             <p className="text-sm font-bold">
-                              {booking.service}
+                              {booking.serviceName}
                             </p>
                           </div>
-                          {booking.id === "BK-001" && (
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8174]">
-                                Hair Service
-                              </p>
-                              <p className="text-sm font-bold">
-                                Basic Hair Color
-                              </p>
-                            </div>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -499,7 +458,15 @@ export default function MemberBookingsPage({
                 </button>
               </div>
 
-              {filteredPastBookings.length === 0 ? (
+              {appointmentsError ? (
+                <p role="alert" className={`rounded-xl border p-5 text-sm ${cardSurface}`}>
+                  {appointmentsError}
+                </p>
+              ) : isLoadingAppointments ? (
+                <p role="status" className={`rounded-xl border p-5 text-center text-sm ${cardSurface}`}>
+                  Loading your appointments...
+                </p>
+              ) : filteredPastBookings.length === 0 ? (
                 <div
                   className={`text-center py-20 rounded-2xl border transition-all duration-300 ${cardSurface}`}
                 >
@@ -539,7 +506,7 @@ export default function MemberBookingsPage({
                               ? "Cancelled Service"
                               : "Service"}
                           </p>
-                          <p className="text-sm font-bold">{booking.service}</p>
+                          <p className="text-sm font-bold">{booking.serviceName}</p>
                         </div>
                       </div>
                     </div>
@@ -598,7 +565,7 @@ export default function MemberBookingsPage({
                     </span>
                   </div>
                   <h3 className="text-xl font-bold mb-4 leading-tight">
-                    {selectedBooking.service}
+                    {selectedBooking.serviceName}
                   </h3>
                   <div className="flex items-center gap-6 text-xs text-[#8A8174]">
                     <div className="flex items-center gap-1.5">
@@ -634,17 +601,13 @@ export default function MemberBookingsPage({
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <img
-                      src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100"
-                      alt="Stylist"
-                      className="w-10 h-10 rounded-full object-cover border border-[#E9E4D8]"
-                    />
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[#E9E4D8]">
+                      <UserRound className="h-5 w-5 text-[#8A8174]" />
+                    </span>
                     <div>
-                      <p className="text-sm font-bold">
-                        {selectedBooking.stylist || "Karl Maverick Anonuevo"}
-                      </p>
+                      <p className="text-sm font-bold">{selectedBooking.stylist || "Not assigned"}</p>
                       <p className="text-[10px] text-[#8A8174]">
-                        Senior Stylist
+                        Stylist
                       </p>
                     </div>
                   </div>
@@ -657,12 +620,12 @@ export default function MemberBookingsPage({
                   <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-3">
                     Guest
                   </h4>
-                  <p className="text-sm font-bold mb-1">{fullName}</p>
+                  <p className="text-sm font-bold mb-1">{selectedBooking.customerName || fullName}</p>
                   <p className="text-xs text-[#8A8174] mb-0.5">
-                    {user?.email || "blackwidow@gmail.com"}
+                    {selectedBooking.customerEmail || user?.email || "Email not provided"}
                   </p>
                   <p className="text-xs text-[#8A8174]">
-                    {user?.phone || "+1 (555) 382-9012"}
+                    {user?.phone || "Phone not provided"}
                   </p>
                 </div>
 
@@ -676,8 +639,9 @@ export default function MemberBookingsPage({
                         ? "bg-[#2A2723] border-[#39342B] text-[#F5F1EA]"
                         : "bg-[#FDFBF7] border-[#E9E4D8] text-[#443523]"
                     }`}
+                    value={selectedBooking.notes || ""}
                     placeholder="No special requests."
-                    disabled
+                    readOnly
                   />
                 </div>
 
@@ -748,7 +712,7 @@ export default function MemberBookingsPage({
               id: "booking",
               label: "Booking",
               icon: CalendarDays,
-              action: () => {},
+              action: () => setActivePage("member-bookings"),
             },
             {
               id: "account",
