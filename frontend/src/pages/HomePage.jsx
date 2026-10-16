@@ -54,7 +54,7 @@ export default function HomePage({ setActivePage, setServiceFilter, onOpenBookin
             Luxury Beauty Sanctuary
           </div>
 
-          <h1 className="text-[3rem] leading-[0.88] sm:text-[5.5rem] lg:text-[7rem] font-serif font-light text-white">
+          <h1 className="text-[4rem] leading-[0.88] sm:text-[5.5rem] lg:text-[7rem] font-serif font-light text-white">
             Your Beauty,<br />
             <span className="italic font-normal text-[#D4AF37]">Our Passion</span>
           </h1>
