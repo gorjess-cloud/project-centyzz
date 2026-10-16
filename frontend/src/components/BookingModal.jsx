@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { readJsonResponse } from '../api/client.js';
 import { 
   X, 
   ChevronLeft, 
@@ -161,7 +162,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
         }),
       });
 
-      const data = await response.json();
+      const data = await readJsonResponse(response);
 
       if (data.checkoutUrl) {
         window.location.href = data.checkoutUrl;

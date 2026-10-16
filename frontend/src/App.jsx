@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import BookingModal from './components/BookingModal';
+import { api } from './api/client.js';
 
 import HomePage from './pages/HomePage';
 import ServicesPage from './pages/ServicesPage';
@@ -10,6 +11,8 @@ import AboutPage from './pages/AboutPage';
 import AuthPage from './pages/AuthPage';
 import MemberHomePage from './pages/MemberHomePage';
 import MemberServicesPage from './pages/MemberServicesPage';
+import MemberBookingsPage from './pages/MemberBookingsPage';
+import MemberBook from './pages/MemberBook';
 
 export default function App() {
   const [activePage, setActivePage] = useState('home');
@@ -20,23 +23,75 @@ export default function App() {
   const [authMode, setAuthMode] = useState('login');
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [memberUser, setMemberUser] = useState(null);
+  const [memberAppointments, setMemberAppointments] = useState([]);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
+  const [appointmentsError, setAppointmentsError] = useState('');
+  const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (!memberUser?.accessToken) return undefined;
+
+    let isCurrent = true;
+
+    api.getMyAppointments(memberUser.accessToken)
+      .then((result) => {
+        if (isCurrent) setMemberAppointments(result.data ?? []);
+      })
+      .catch((error) => {
+        if (isCurrent) setAppointmentsError(error.message);
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoadingAppointments(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [memberUser?.accessToken, appointmentsRefreshKey]);
 
   const handleOpenBooking = (service = null) => {
+    if (memberUser) {
+      setIsBookingOpen(false);
+      setSelectedService(service);
+      setActivePage('member-book');
+      return;
+    }
+
     setSelectedService(service);
     setBookingSessionId((currentId) => currentId + 1);
     setIsBookingOpen(true);
   };
 
+  const handleMemberBooking = (service = null) => {
+    setIsBookingOpen(false);
+    setSelectedService(service);
+    setActivePage('member-book');
+  };
+
+  const handleAppointmentCreated = () => {
+    setIsLoadingAppointments(true);
+    setAppointmentsError('');
+    setAppointmentsRefreshKey((key) => key + 1);
+  };
+
   const isAuthPage = activePage === 'auth';
   const isMemberDashboard = Boolean(memberUser)
-    && ['home', 'member-services', 'member-account'].includes(activePage);
+    && ['home', 'member-services', 'member-bookings', 'member-book', 'member-account'].includes(activePage);
   const enterDemoDashboard = (user) => {
+    setMemberAppointments([]);
+    setAppointmentsError('');
+    setIsLoadingAppointments(false);
     setMemberUser({ ...user, isDemo: true });
     setActivePage('home');
   };
-  const enterMemberDashboard = (user) => {
+  const enterMemberDashboard = (user, accessToken) => {
+    setIsBookingOpen(false);
+    setMemberAppointments([]);
+    setAppointmentsError('');
+    setIsLoadingAppointments(true);
     setMemberUser({
       ...user,
+      accessToken,
       name: `${user.firstName} ${user.lastName}`.trim(),
       isDemo: false,
     });
@@ -44,6 +99,9 @@ export default function App() {
   };
   const handleLogout = () => {
     setMemberUser(null);
+    setMemberAppointments([]);
+    setAppointmentsError('');
+    setIsLoadingAppointments(false);
     setActivePage('home');
   };
 
@@ -71,8 +129,11 @@ export default function App() {
               isDarkMode={isDarkMode}
               setIsDarkMode={setIsDarkMode}
               setActivePage={setActivePage}
-              onOpenBooking={handleOpenBooking}
+              onOpenBooking={handleMemberBooking}
               onLogout={handleLogout}
+              appointments={memberAppointments}
+              isLoadingAppointments={isLoadingAppointments}
+              appointmentsError={appointmentsError}
             />
           ) : (
             <HomePage
@@ -89,9 +150,12 @@ export default function App() {
             isDarkMode={isDarkMode}
             setIsDarkMode={setIsDarkMode}
             setActivePage={setActivePage}
-            onOpenBooking={handleOpenBooking}
+            onOpenBooking={handleMemberBooking}
             onLogout={handleLogout}
             initialSection="account"
+            appointments={memberAppointments}
+            isLoadingAppointments={isLoadingAppointments}
+            appointmentsError={appointmentsError}
           />
         )}
         {activePage === 'member-services' && memberUser && (
@@ -99,7 +163,31 @@ export default function App() {
             user={memberUser}
             isDarkMode={isDarkMode}
             setActivePage={setActivePage}
-            onOpenBooking={handleOpenBooking}
+            onOpenBooking={handleMemberBooking}
+            onLogout={handleLogout}
+            appointments={memberAppointments}
+            isLoadingAppointments={isLoadingAppointments}
+            appointmentsError={appointmentsError}
+          />
+        )}
+        {activePage === 'member-book' && memberUser && (
+          <MemberBook
+            user={memberUser}
+            isDarkMode={isDarkMode}
+            setIsDarkMode={setIsDarkMode}
+            setActivePage={setActivePage}
+            onLogout={handleLogout}
+            selectedService={selectedService}
+            onAppointmentCreated={handleAppointmentCreated}
+          />
+        )}
+        {activePage === 'member-bookings' && memberUser && (
+          <MemberBookingsPage
+            user={memberUser}
+            isDarkMode={isDarkMode}
+            setIsDarkMode={setIsDarkMode}
+            setActivePage={setActivePage}
+            onOpenBooking={handleMemberBooking}
             onLogout={handleLogout}
           />
         )}
@@ -139,13 +227,15 @@ export default function App() {
         <Footer setActivePage={setActivePage} setServiceFilter={setServiceFilter} isDarkMode={isDarkMode} />
       )}
 
-      <BookingModal 
-        key={bookingSessionId}
-        isOpen={isBookingOpen} 
-        onClose={() => setIsBookingOpen(false)} 
-        selectedService={selectedService}
-        isDarkMode={isDarkMode}
-      />
+      {!memberUser && (
+        <BookingModal
+          key={bookingSessionId}
+          isOpen={isBookingOpen}
+          onClose={() => setIsBookingOpen(false)}
+          selectedService={selectedService}
+          isDarkMode={isDarkMode}
+        />
+      )}
     </div>
   );
 }

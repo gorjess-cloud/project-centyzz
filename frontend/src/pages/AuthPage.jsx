@@ -1,23 +1,53 @@
 import { useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, KeyRound, Moon, Sun } from 'lucide-react';
-import { api } from '../api/client';
+import { ArrowLeft, ArrowRight, Eye, EyeOff, KeyRound, Moon, Sun } from 'lucide-react';
+import { api } from '../api/client.js';
+
+const DEMO_OTP = '123456';
 
 export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPreviewDashboard, onAuthenticated, isDarkMode, setIsDarkMode }) {
   const isSignup = mode === 'signup';
   const [firstName, setFirstName] = useState('');
-  const [middleInitial, setMiddleInitial] = useState('');
   const [lastName, setLastName] = useState('');
-  const [username, setUsername] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [birthday, setBirthday] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [activeValidationField, setActiveValidationField] = useState('');
   const [formMessage, setFormMessage] = useState({ type: '', text: '' });
   const [isOtpStep, setIsOtpStep] = useState(false);
   const [otp, setOtp] = useState(() => Array(6).fill(''));
+  const [isOtpVerified, setIsOtpVerified] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const otpInputRefs = useRef([]);
+
+  const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const passwordRules = [
+    { label: 'at least 8 characters', isValid: password.length >= 8 },
+    { label: 'one uppercase letter', isValid: /[A-Z]/.test(password) },
+    { label: 'one number', isValid: /\d/.test(password) },
+    { label: 'one symbol', isValid: /[^A-Za-z0-9\s]/.test(password) },
+  ];
+  const unmetPasswordRule = passwordRules.find((rule) => !rule.isValid);
+  const fieldErrors = {
+    email: !email.trim() ? 'Email is required.' : !emailIsValid ? 'Enter a valid email address.' : '',
+    password: !password ? 'Password is required.' : unmetPasswordRule ? `Add ${unmetPasswordRule.label}.` : '',
+    confirmPassword: !confirmPassword
+      ? 'Re-enter your password.'
+      : confirmPassword !== password
+        ? 'Passwords do not match.'
+        : '',
+  };
+
+  const renderFieldError = (field) => {
+    if (!isSignup || activeValidationField !== field || !fieldErrors[field]) return null;
+
+    return (
+      <p id={`${field}-error`} role="alert" className={`mt-1 text-[10px] ${isDarkMode ? 'text-[#f7a6a6]' : 'text-[#a13c3c]'}`}>
+        {fieldErrors[field]}
+      </p>
+    );
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -25,58 +55,50 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
     setFormMessage({ type: '', text: '' });
 
     const normalizedEmail = email.trim();
+
     if (isSignup) {
-      if (!firstName.trim() || !lastName.trim() || !normalizedEmail || !password || !confirmPassword) {
+      if (!firstName.trim() || !lastName.trim()) {
+        setActiveValidationField('');
         setFormMessage({ type: 'error', text: 'Please complete all required fields to create an account.' });
         return;
       }
 
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-        setFormMessage({ type: 'error', text: 'Please enter a valid email address.' });
+      if (!emailIsValid) {
+        setActiveValidationField('email');
         return;
       }
 
-      if (password.length < 8) {
-        setFormMessage({ type: 'error', text: 'Password must be at least 8 characters long.' });
+      if (unmetPasswordRule) {
+        setActiveValidationField('password');
         return;
       }
 
       if (password !== confirmPassword) {
-        setFormMessage({ type: 'error', text: 'Passwords do not match. Please re-enter them.' });
+        setActiveValidationField('confirmPassword');
         return;
       }
 
-      setIsSubmitting(true);
-      try {
-        const result = await api.register({
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          email: normalizedEmail,
-          password,
-        });
-        setOtp(Array(6).fill(''));
-        setIsOtpStep(true);
-        setFormMessage({ type: 'info', text: result.message });
-      } catch (error) {
-        setFormMessage({ type: 'error', text: error.message });
-      } finally {
-        setIsSubmitting(false);
-      }
+      setOtp(Array(6).fill(''));
+      setIsOtpVerified(false);
+      setIsOtpStep(true);
+      setFormMessage({ type: 'info', text: `Demo only: no email was sent. Enter ${DEMO_OTP} to test verification.` });
       return;
     }
 
     if (!normalizedEmail || !password) {
-      setFormMessage({ type: 'error', text: 'Please enter your email and password.' });
+      setFormMessage({ type: 'error', text: 'Please enter your email address and password.' });
+      return;
+    }
+
+    if (!emailIsValid) {
+      setFormMessage({ type: 'error', text: 'Please enter a valid email address.' });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const result = await api.login({
-        email: normalizedEmail,
-        password,
-      });
-      onAuthenticated?.(result.data.user);
+      const result = await api.login({ email: normalizedEmail, password });
+      onAuthenticated?.(result.data.user, result.data.accessToken);
     } catch (error) {
       setFormMessage({ type: 'error', text: error.message });
     } finally {
@@ -84,26 +106,22 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
     }
   };
 
-  const handleVerifyOtp = async (e) => {
+  const handleVerifyOtp = (e) => {
     e.preventDefault();
 
     const enteredCode = otp.join('');
     if (enteredCode.length !== 6) {
-      setFormMessage({ type: 'error', text: 'Please enter all six digits of the verification code.' });
+      setFormMessage({ type: 'error', text: 'Please enter all six digits of the demo code.' });
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      const result = await api.verifyEmail({ email: email.trim(), otp: enteredCode });
-      setIsOtpStep(false);
-      setMode?.('login');
-      setFormMessage({ type: 'success', text: `${result.message} Sign in to continue.` });
-    } catch (error) {
-      setFormMessage({ type: 'error', text: error.message });
-    } finally {
-      setIsSubmitting(false);
+    if (enteredCode !== DEMO_OTP) {
+      setFormMessage({ type: 'error', text: 'That demo code is incorrect. Please try again.' });
+      return;
     }
+
+    setIsOtpVerified(true);
+    setFormMessage({ type: 'success', text: 'Demo email verification complete. No account was created; authentication is not set up.' });
   };
 
   const handleOtpChange = (index, value) => {
@@ -136,8 +154,14 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
     }
   };
 
+  const handleResendOtp = () => {
+    setOtp(Array(6).fill(''));
+    setFormMessage({ type: 'info', text: `Demo only: no email was sent. The test code is still ${DEMO_OTP}.` });
+  };
+
   const handleBackToRegistration = () => {
     setOtp(Array(6).fill(''));
+    setIsOtpVerified(false);
     setIsOtpStep(false);
     setFormMessage({ type: '', text: '' });
   };
@@ -255,12 +279,12 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
             {/* Dynamic Registration Fields Container (Collapses smoothly during Login) */}
             <div 
               className={`space-y-3 overflow-hidden transition-all duration-500 ease-in-out ${
-                isSignup ? 'max-h-[420px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-4 pointer-events-none'
+                isSignup ? 'max-h-[160px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-4 pointer-events-none'
               }`}
               inert={!isSignup}
               aria-hidden={!isSignup}
             >
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
                     FIRST NAME
@@ -270,20 +294,7 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     placeholder="First Name"
-                    className={fieldClass}
-                  />
-                </div>
-
-                <div>
-                  <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
-                    MIDDLE INIT
-                  </label>
-                  <input
-                    type="text"
-                    value={middleInitial}
-                    onChange={(e) => setMiddleInitial(e.target.value.slice(0, 2))}
-                    placeholder="M.I."
-                    maxLength={2}
+                    required={isSignup}
                     className={fieldClass}
                   />
                 </div>
@@ -297,53 +308,11 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     placeholder="Last Name"
+                    required={isSignup}
                     className={fieldClass}
                   />
                 </div>
               </div>
-
-              <div>
-                <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
-                  USERNAME
-                </label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="yourusername"
-                  className={fieldClass}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
-                    PHONE NUMBER
-                  </label>
-                  <input
-                    type="tel"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="09XXXXXXXXX"
-                    className={fieldClass}
-                  />
-                </div>
-
-                <div>
-                  <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
-                    BIRTHDAY
-                  </label>
-                  <input
-                    type="date"
-                    value={birthday}
-                    onChange={(e) => setBirthday(e.target.value)}
-                    className={fieldClass}
-                  />
-                </div>
-              </div>
-              <p className={`text-[10px] ${softText}`}>
-                Middle initial, username, phone number, and birthday are not saved to your account yet.
-              </p>
 
             </div>
 
@@ -355,11 +324,19 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (isSignup) setActiveValidationField('email');
+                }}
+                onFocus={() => isSignup && setActiveValidationField('email')}
+                onBlur={() => setActiveValidationField('')}
                 placeholder="you@example.com"
                 required
+                aria-invalid={isSignup && activeValidationField === 'email' && Boolean(fieldErrors.email)}
+                aria-describedby={isSignup ? 'email-error' : undefined}
                 className={fieldClass}
               />
+              {renderFieldError('email')}
             </div>
 
             {/* Password Field */}
@@ -367,15 +344,34 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
               <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
                 PASSWORD
               </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter Your Password"
-                autoComplete={isSignup ? 'new-password' : 'current-password'}
-                required
-                className={fieldClass}
-              />
+              <div className="relative mt-1.5">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (isSignup) setActiveValidationField('password');
+                  }}
+                  onFocus={() => isSignup && setActiveValidationField('password')}
+                  onBlur={() => setActiveValidationField('')}
+                  placeholder="Enter Your Password"
+                  autoComplete={isSignup ? 'new-password' : 'current-password'}
+                  required
+                  aria-invalid={isSignup && activeValidationField === 'password' && Boolean(fieldErrors.password)}
+                  aria-describedby={isSignup ? 'password-error' : undefined}
+                  className={`${fieldClass} mt-0 pr-12`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 ${softText}`}
+                >
+                  {showPassword ? <EyeOff aria-hidden="true" size={16} /> : <Eye aria-hidden="true" size={16} />}
+                </button>
+              </div>
+              {renderFieldError('password')}
             </div>
 
             {/* Re-type Password Field (Smooth Collapse) */}
@@ -383,19 +379,40 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
               className={`overflow-hidden transition-all duration-500 ease-in-out ${
                 isSignup ? 'max-h-[96px] opacity-100 translate-y-0 mt-3' : 'max-h-0 opacity-0 -translate-y-2 pointer-events-none'
               }`}
+              inert={!isSignup}
+              aria-hidden={!isSignup}
             >
               <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
                 RE-TYPE PASSWORD
               </label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm Your Password"
-                autoComplete="new-password"
-                required={isSignup}
-                className={fieldClass}
-              />
+              <div className="relative mt-1.5">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    setActiveValidationField('confirmPassword');
+                  }}
+                  onFocus={() => setActiveValidationField('confirmPassword')}
+                  onBlur={() => setActiveValidationField('')}
+                  placeholder="Confirm Your Password"
+                  autoComplete="new-password"
+                  required={isSignup}
+                  aria-invalid={activeValidationField === 'confirmPassword' && Boolean(fieldErrors.confirmPassword)}
+                  aria-describedby="confirmPassword-error"
+                  className={`${fieldClass} mt-0 pr-12`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((visible) => !visible)}
+                  aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'}
+                  aria-pressed={showConfirmPassword}
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 ${softText}`}
+                >
+                  {showConfirmPassword ? <EyeOff aria-hidden="true" size={16} /> : <Eye aria-hidden="true" size={16} />}
+                </button>
+              </div>
+              {renderFieldError('confirmPassword')}
             </div>
 
             {/* Submit Button */}
@@ -436,7 +453,7 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
               <div
                 role="group"
                 aria-label="Six-digit email verification code"
-                aria-describedby="otp-verification-note"
+                aria-describedby="otp-demo-note"
                 className="grid grid-cols-6 gap-2 sm:gap-3"
               >
                 {Array.from({ length: 6 }, (_, index) => (
@@ -453,7 +470,7 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
                     onKeyDown={(e) => handleOtpKeyDown(index, e)}
                     aria-label={`Digit ${index + 1} of 6`}
                     required
-                    disabled={isSubmitting}
+                    disabled={isOtpVerified}
                     className={`h-14 min-w-0 rounded-2xl border text-center text-xl font-medium outline-none transition-colors focus:border-[#A36C32] focus:ring-2 focus:ring-[#A36C32]/20 disabled:opacity-70 ${
                       isDarkMode
                         ? 'border-[#3B3B3B] bg-[#1A1A1A] text-[#F5F1EA]'
@@ -463,8 +480,8 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
                 ))}
               </div>
 
-              <p id="otp-verification-note" className={`text-[11px] ${softText}`}>
-                Enter the six-digit code sent to your email address.
+              <p id="otp-demo-note" className={`text-[11px] ${softText}`}>
+                Demo only: no email was sent. Test code: <strong>{DEMO_OTP}</strong>
               </p>
 
               {formMessage.text && (
@@ -488,14 +505,29 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
                 </p>
               )}
 
-              <button
-                type="submit"
-                aria-label="Verify code"
-                disabled={isSubmitting}
-                className="mx-auto flex h-12 w-14 items-center justify-center rounded-lg border-2 border-[#9B6B39] text-[#78450C] transition-all hover:bg-[#9B6B39] hover:text-white focus:outline-none focus:ring-2 focus:ring-[#9B6B39]/30 active:scale-95 disabled:opacity-50"
-              >
-                <ArrowRight aria-hidden="true" className="h-8 w-8" strokeWidth={2} />
-              </button>
+              {!isOtpVerified && (
+                <button
+                  type="submit"
+                  aria-label="Verify code"
+                  className="mx-auto flex h-12 w-14 items-center justify-center rounded-lg border-2 border-[#9B6B39] text-[#78450C] transition-all hover:bg-[#9B6B39] hover:text-white focus:outline-none focus:ring-2 focus:ring-[#9B6B39]/30 active:scale-95"
+                >
+                  <ArrowRight aria-hidden="true" className="h-8 w-8" strokeWidth={2} />
+                </button>
+              )}
+
+              {isOtpVerified && (
+                <button
+                  type="button"
+                  onClick={() => handlePreviewDashboard({
+                    firstName,
+                    lastName,
+                    email: email.trim(),
+                  })}
+                  className="w-full rounded-md bg-[#C5A059] py-3 text-xs font-semibold uppercase tracking-[0.16em] text-white transition-colors hover:bg-[#D8B775]"
+                >
+                  Preview Member Dashboard
+                </button>
+              )}
 
               <div className="flex justify-between text-xs">
                 <button
@@ -505,6 +537,15 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
                 >
                   Back to registration
                 </button>
+                {!isOtpVerified && (
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    className="font-semibold text-[#C5A059] hover:underline"
+                  >
+                    Resend code
+                  </button>
+                )}
               </div>
             </form>
           )}
