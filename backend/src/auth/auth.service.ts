@@ -57,7 +57,7 @@ async register(registerDto: RegisterDto) {
     passwordHash,
     firstName,
     lastName,
-    role: 'STAFF',
+    role: 'CUSTOMER',
     isActive: true,
     emailVerified: false,
     otpHash,

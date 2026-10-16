@@ -34,6 +34,14 @@ export default function App() {
     setMemberUser({ ...user, isDemo: true });
     setActivePage('home');
   };
+  const enterMemberDashboard = (user) => {
+    setMemberUser({
+      ...user,
+      name: `${user.firstName} ${user.lastName}`.trim(),
+      isDemo: false,
+    });
+    setActivePage('home');
+  };
   const handleLogout = () => {
     setMemberUser(null);
     setActivePage('home');
@@ -120,6 +128,7 @@ export default function App() {
             setMode={setAuthMode}
             onBackToSalon={() => setActivePage('home')}
             onPreviewDashboard={enterDemoDashboard}
+            onAuthenticated={enterMemberDashboard}
             isDarkMode={isDarkMode}
             setIsDarkMode={setIsDarkMode}
           />
