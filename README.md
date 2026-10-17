@@ -36,8 +36,6 @@ centyzz/
 └── README.md
 ```
 
-> The `frontend` directory is reserved for the React frontend and will be populated as frontend development progresses.
-
 ---
 
 # 🛠️ Technology Stack
@@ -57,11 +55,37 @@ centyzz/
 ## Frontend
 
 - React
-- TypeScript
+- JavaScript
 - Vite
 - Tailwind CSS
 
 The frontend and backend are maintained as separate applications inside the same repository.
+
+## Run the frontend and backend together
+
+The Vite development server proxies `/api` requests to the NestJS server at
+`http://localhost:3000`. Start each app in a separate terminal:
+
+```powershell
+# Terminal 1
+Set-Location backend
+npm install
+Copy-Item .env.example .env
+# Edit .env with your database URL, unique JWT/OTP secrets, and working SMTP credentials.
+npm run start:dev
+```
+
+```powershell
+# Terminal 2
+Set-Location frontend
+npm install
+npm run dev
+```
+
+Open the Vite URL (normally `http://localhost:5173`). The database must be
+available and contain active service categories and services. Registration
+requires a working SMTP account because verification codes are sent by email.
+Appointment requests are saved as pending; online payment is not integrated.
 
 ---
 
@@ -227,6 +251,8 @@ The backend uses environment variables for:
 
 - Neon database connection
 - JWT authentication
+- Email verification OTP hashing
+- SMTP email delivery
 - Object storage configuration
 
 The repository contains:
@@ -269,6 +295,12 @@ Example:
 DATABASE_URL="YOUR_NEON_DATABASE_URL"
 
 JWT_SECRET="YOUR_LOCAL_JWT_SECRET"
+OTP_SECRET="A_DIFFERENT_LOCAL_RANDOM_SECRET"
+
+SMTP_HOST="YOUR_SMTP_HOST"
+SMTP_PORT="465"
+SMTP_USER="YOUR_SENDER_EMAIL"
+SMTP_APP_PASSWORD="YOUR_SMTP_APP_PASSWORD"
 ```
 
 If object storage is required for the current development setup, also configure:
@@ -1038,8 +1070,12 @@ Current backend implementation includes:
 - JWT access tokens
 - DTO validation
 - Global validation pipe
+- Service catalog and appointment availability endpoints
+- Appointment request creation
 
-Additional system modules will be implemented during development.
+The React frontend calls the backend for authentication, services, appointment
+availability, and appointment requests. Some member-dashboard and promotion
+content remains presentation/demo data.
 
 ---
 
@@ -1057,6 +1093,7 @@ Use this checklist when setting up Centyzz on a new computer:
 [ ] Create .env from .env.example
 [ ] Configure DATABASE_URL
 [ ] Configure JWT_SECRET
+[ ] Configure OTP_SECRET and SMTP settings
 [ ] Configure storage variables if required
 [ ] Verify Neon database access
 [ ] Run npx prisma migration status

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { readJsonResponse } from '../api/client.js';
 import { 
   X, 
   ChevronLeft, 
@@ -161,7 +162,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
         }),
       });
 
-      const data = await response.json();
+      const data = await readJsonResponse(response);
 
       if (data.checkoutUrl) {
         window.location.href = data.checkoutUrl;
@@ -424,7 +425,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                     type="submit" 
                     className={`w-full mt-2 py-3.5 rounded-2xl ${primaryButton} font-serif font-bold text-xs tracking-widest uppercase transition-all shadow-md flex items-center justify-center gap-2 group`}
                   >
-                    <span>Proceed</span>
+                    <span>Proceed to 50% Deposit</span>
                     <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
                   </button>
                 </div>
