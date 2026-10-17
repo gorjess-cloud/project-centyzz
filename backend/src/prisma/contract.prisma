@@ -1,20 +1,22 @@
 // use prisma-8
 
 model User {
-  id             Int               @id @default(autoincrement())
-  email          String            @unique
-  passwordHash   String
-  firstName      String
-  lastName       String
-  role           String            @default("STAFF")
-  isActive       Boolean           @default(true)
-  emailVerified  Boolean           @default(false)
-  otpHash        String?
-  otpExpiresAt   TimestamptzString?
-  otpAttempts    Int               @default(0)
-  createdAt      TimestamptzString @default(now())
-  updatedAt      temporal.updatedAtString()
-  appointments Appointment[]
+  id                   Int                @id @default(autoincrement())
+  email                String             @unique
+  passwordHash         String
+  firstName            String
+  lastName             String
+  role                 String             @default("STAFF")
+  isActive             Boolean            @default(true)
+  emailVerified        Boolean            @default(false)
+  otpHash              String?
+  otpExpiresAt         TimestamptzString?
+  otpAttempts          Int                @default(0)
+  resetPasswordToken   String?            // ADD THIS
+  resetPasswordExpires TimestamptzString? // ADD THIS
+  createdAt            TimestamptzString  @default(now())
+  updatedAt            temporal.updatedAtString()
+  appointments         Appointment[]
 }
 
 model Role {
