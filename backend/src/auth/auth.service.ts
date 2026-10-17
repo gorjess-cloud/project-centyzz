@@ -1,9 +1,10 @@
-import { createHmac, randomInt } from 'node:crypto';
+import { createHmac, randomInt, randomBytes } from 'node:crypto';
 import {
   ConflictException,
   ForbiddenException,
   Injectable,
   UnauthorizedException,
+  BadRequestException
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { EmailService } from '../email/email.service.js';
@@ -32,6 +33,86 @@ export class AuthService {
     .digest('hex');
 }
 
+async forgotPassword(email: string) {
+    const user = await db.orm.public.User.where({
+      email: email.toLowerCase().trim(),
+    }).first();
+
+    if (!user) {
+      return {
+        success: true,
+        message: 'If that email is registered, an OTP has been sent.',
+      };
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Hash OTP
+    const otpHash = createHmac('sha256', process.env.OTP_SECRET || 'fallback_secret')
+      .update(otp)
+      .digest('hex');
+
+    const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+    await db.orm.public.User.where({
+      id: user.id,
+    }).update({
+      otpHash: otpHash,
+      otpExpiresAt: otpExpiresAt,
+    });
+
+  // Send the password reset OTP email!
+    await this.emailService.sendPasswordResetOtpEmail(email, otp);
+
+    return {
+      success: true,
+      message: 'If that email is registered, an OTP has been sent.',
+      debugOtp: otp, // Keeping this handy for testing right now
+    };
+  }
+
+
+  async resetPassword(email: string, otp: string, newPassword: string) {
+    const user = await db.orm.public.User.where({
+      email: email.toLowerCase().trim(),
+    }).first();
+
+    if (!user || !user.otpHash || !user.otpExpiresAt) {
+      throw new BadRequestException('Invalid or expired OTP');
+    }
+
+    // Check expiration
+    if (new Date(user.otpExpiresAt) < new Date()) {
+      throw new BadRequestException('OTP has expired');
+    }
+
+    // Verify OTP hash
+    const hashedOtp = createHmac('sha256', process.env.OTP_SECRET || 'fallback_secret')
+      .update(otp)
+      .digest('hex');
+
+    if (hashedOtp !== user.otpHash) {
+      throw new BadRequestException('Invalid or expired OTP');
+    }
+
+    // Hash new password
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    // Update user password and clear OTP
+    await db.orm.public.User.where({
+      id: user.id,
+    }).update({
+      passwordHash,
+      otpHash: null,
+      otpExpiresAt: null,
+    });
+
+    return {
+      success: true,
+      message: 'Password has been successfully reset. You can now log in.',
+    };
+  }
   
 async register(registerDto: RegisterDto) {
   const { firstName, lastName, email, password } = registerDto;
