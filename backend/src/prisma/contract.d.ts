@@ -34,7 +34,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'7eb0639ccbe9c117123d313d383948becee1f0120940543b8e3c37a3613cfa4a'>;
+  StorageHashBase<'dab0129e1f14d10c4dabc9e99911c734fa454041ac6887bd119e2aba003c155a'>;
 export type ExecutionHash =
   ExecutionHashBase<'a499031370d1fd1891ca11072d3f7e11be752b686057f7c6d0900ee0159f4ed0'>;
 export type ProfileHash =
@@ -307,6 +307,8 @@ export type FieldOutputTypes = {
       readonly otpHash: CodecTypes['pg/text@1']['output'] | null;
       readonly otpExpiresAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly otpAttempts: CodecTypes['pg/int4@1']['output'];
+      readonly resetPasswordToken: CodecTypes['pg/text@1']['output'] | null;
+      readonly resetPasswordExpires: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
@@ -379,6 +381,8 @@ export type FieldInputTypes = {
       readonly otpHash: CodecTypes['pg/text@1']['input'] | null;
       readonly otpExpiresAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly otpAttempts: CodecTypes['pg/int4@1']['input'];
+      readonly resetPasswordToken: CodecTypes['pg/text@1']['input'] | null;
+      readonly resetPasswordExpires: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
@@ -451,6 +455,8 @@ export type StorageColumnTypes = {
       readonly otpExpiresAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly otpHash: CodecTypes['pg/text@1']['output'] | null;
       readonly passwordHash: CodecTypes['pg/text@1']['output'];
+      readonly resetPasswordExpires: CodecTypes['pg/timestamptz-string@1']['output'] | null;
+      readonly resetPasswordToken: CodecTypes['pg/text@1']['output'] | null;
       readonly role: CodecTypes['pg/text@1']['output'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     };
@@ -523,6 +529,8 @@ export type StorageColumnInputTypes = {
       readonly otpExpiresAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly otpHash: CodecTypes['pg/text@1']['input'] | null;
       readonly passwordHash: CodecTypes['pg/text@1']['input'];
+      readonly resetPasswordExpires: CodecTypes['pg/timestamptz-string@1']['input'] | null;
+      readonly resetPasswordToken: CodecTypes['pg/text@1']['input'] | null;
       readonly role: CodecTypes['pg/text@1']['input'];
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
     };
@@ -542,6 +550,8 @@ export namespace Models {
     otpHash: CodecTypes['pg/text@1']['output'] | null;
     otpExpiresAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
     otpAttempts: CodecTypes['pg/int4@1']['output'];
+    resetPasswordToken: CodecTypes['pg/text@1']['output'] | null;
+    resetPasswordExpires: CodecTypes['pg/timestamptz-string@1']['output'] | null;
     createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
     updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     appointments: public_Appointment[];
@@ -1092,6 +1102,16 @@ type ContractBase = Omit<
                     readonly value: DefaultLiteralValue<'pg/int4@1', 0>;
                   };
                 };
+                readonly resetPasswordToken: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly resetPasswordExpires: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                  readonly nullable: true;
+                };
                 readonly createdAt: {
                   readonly nativeType: 'timestamptz';
                   readonly codecId: 'pg/timestamptz-string@1';
@@ -1580,6 +1600,17 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
               };
+              readonly resetPasswordToken: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly resetPasswordExpires: {
+                readonly nullable: true;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                };
+              };
               readonly createdAt: {
                 readonly nullable: false;
                 readonly type: {
@@ -1623,6 +1654,8 @@ type ContractBase = Omit<
                 readonly otpHash: { readonly column: 'otpHash' };
                 readonly otpExpiresAt: { readonly column: 'otpExpiresAt' };
                 readonly otpAttempts: { readonly column: 'otpAttempts' };
+                readonly resetPasswordToken: { readonly column: 'resetPasswordToken' };
+                readonly resetPasswordExpires: { readonly column: 'resetPasswordExpires' };
                 readonly createdAt: { readonly column: 'createdAt' };
                 readonly updatedAt: { readonly column: 'updatedAt' };
               };
