@@ -1,4 +1,3 @@
-
 import {
   Body,
   Controller,
@@ -9,17 +8,31 @@ import {
   ParseIntPipe,
   Post,
   Query,
+  Req,
   Res,
   StreamableFile,
+  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import type { AuthenticatedRequest } from '../auth/jwt-auth.guard.js';
 import { AppointmentsService } from './appointments.service.js';
+import { CreateAppointmentDto } from './dto/create-appointment.dto.js';
 
 @Controller('api/appointments')
 export class AppointmentsController {
   constructor(
     private readonly appointmentsService: AppointmentsService,
   ) {}
+
+  @Get('mine')
+  @UseGuards(JwtAuthGuard)
+  getMine(@Req() request: AuthenticatedRequest) {
+    return this.appointmentsService.findMine(
+      request.user.sub,
+      request.user.email,
+    );
+  }
 
   @Get('available-slots')
   getAvailableSlots(
@@ -32,21 +45,25 @@ export class AppointmentsController {
     );
   }
 
+  @Post('mine')
+  @UseGuards(JwtAuthGuard)
+  createMine(
+    @Body() appointment: CreateAppointmentDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.appointmentsService.createForUser(
+      appointment,
+      request.user.sub,
+      request.user.email,
+    );
+  }
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  createAppointment(
-    @Body()
-    body: {
-      serviceId?: number;
-      appointmentDate?: string;
-      startTime?: string;
-      userId?: number | null;
-      customerName?: string;
-      customerEmail?: string;
-      notes?: string | null;
-    },
+  create(
+    @Body() appointment: CreateAppointmentDto,
   ) {
-    return this.appointmentsService.createAppointment(body);
+    return this.appointmentsService.create(appointment);
   }
 
   @Get(':id/calendar')

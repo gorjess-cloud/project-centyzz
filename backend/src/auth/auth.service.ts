@@ -138,7 +138,7 @@ async register(registerDto: RegisterDto) {
     passwordHash,
     firstName,
     lastName,
-    role: 'STAFF',
+    role: 'CUSTOMER',
     isActive: true,
     emailVerified: false,
     otpHash,
@@ -146,12 +146,7 @@ async register(registerDto: RegisterDto) {
     otpAttempts: 0,
   });
 
-  try {
-    await this.emailService.sendOtpEmail(normalizedEmail, otp);
-  } catch (error) {
-    // this is where the email will be kept if failed so the user can retry sending OTP
-    throw error;
-  }
+  await this.emailService.sendOtpEmail(normalizedEmail, otp);
 
   return {
     success: true,
