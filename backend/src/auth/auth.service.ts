@@ -13,9 +13,13 @@ import { db } from '../prisma/db.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
+import { OAuth2Client } from 'google-auth-library';
 
 @Injectable()
 export class AuthService {
+  private readonly googleClient = new OAuth2Client(
+  process.env.GOOGLE_CLIENT_ID,
+);
   constructor(
   private readonly jwtService: JwtService,
   private readonly emailService: EmailService,
@@ -280,4 +284,120 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
       },
     };
   }
+  
+  async googleLogin(idToken: string) {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+
+    if (!clientId) {
+      throw new Error('GOOGLE_CLIENT_ID is not configured');
+    }
+
+    let payload;
+
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: clientId,
+      });
+
+      payload = ticket.getPayload();
+    } catch {
+      throw new UnauthorizedException('Invalid Google ID token');
+    }
+
+    if (
+      !payload ||
+      !payload.sub ||
+      !payload.email ||
+      payload.email_verified !== true
+    ) {
+      throw new UnauthorizedException(
+        'Google account email must be verified',
+      );
+    }
+
+    const normalizedEmail = payload.email.toLowerCase().trim();
+
+    let user = await db.orm.public.User.where({
+      email: normalizedEmail,
+    }).first();
+
+    if (user && !user.isActive) {
+      throw new UnauthorizedException('Account is inactive');
+    }
+
+    if (user) {
+      // A verified Google email proves control of this email address.
+      // Preserve the existing role and password.
+      if (!user.emailVerified) {
+        await db.orm.public.User.where({
+          id: user.id,
+        }).update({
+          emailVerified: true,
+          otpHash: null,
+          otpExpiresAt: null,
+          otpAttempts: 0,
+        });
+
+        user = await db.orm.public.User.where({
+          id: user.id,
+        }).first();
+      }
+    } else {
+      const nameParts = (payload.name ?? '').trim().split(/\s+/);
+      const firstName =
+        payload.given_name || nameParts[0] || 'Google';
+      const lastName =
+        payload.family_name ||
+        nameParts.slice(1).join(' ') ||
+        'User';
+
+      // Google-only accounts receive a random password hash.
+      // The random password itself is never returned or stored.
+      const randomPassword = randomBytes(32).toString('hex');
+      const passwordHash = await bcrypt.hash(randomPassword, 12);
+
+      user = await db.orm.public.User.create({
+        email: normalizedEmail,
+        passwordHash,
+        firstName,
+        lastName,
+        role: 'CUSTOMER',
+        isActive: true,
+        emailVerified: true,
+        otpHash: null,
+        otpExpiresAt: null,
+        otpAttempts: 0,
+      });
+    }
+
+    if (!user) {
+      throw new UnauthorizedException(
+        'Unable to retrieve the user account',
+      );
+    }
+
+    const accessToken = await this.jwtService.signAsync({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    return {
+      success: true,
+      message: 'Google login successful',
+      data: {
+        accessToken,
+        user: {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role,
+          isActive: user.isActive,
+        },
+      },
+    };
+  }
+
 }
