@@ -49,6 +49,9 @@ async function get(path, token) {
 
 export const api = {
   login: (credentials) => post('/api/auth/login', credentials),
+
+  googleLogin: (idToken) => post('/api/auth/google', { idToken }),
+  
   register: (user) => post('/api/auth/register', user),
   verifyEmail: (verification) => post('/api/auth/verify-email', verification),
   getMyAppointments: (token) => get('/api/appointments/mine', token),
