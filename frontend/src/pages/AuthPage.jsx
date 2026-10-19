@@ -2,7 +2,6 @@ import { useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Eye, EyeOff, KeyRound, Moon, Sun } from 'lucide-react';
 import { api } from '../api/client.js';
 
-const DEMO_OTP = '123456';
 
 export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPreviewDashboard, onAuthenticated, isDarkMode, setIsDarkMode }) {
   const isSignup = mode === 'signup';
@@ -78,11 +77,6 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
         return;
       }
 
-      setOtp(Array(6).fill(''));
-      setIsOtpVerified(false);
-      setIsOtpStep(true);
-      setFormMessage({ type: 'info', text: `Demo only: no email was sent. Enter ${DEMO_OTP} to test verification.` });
-      return;
     }
 
     if (!normalizedEmail || !password) {
@@ -97,6 +91,20 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
 
     setIsSubmitting(true);
     try {
+      if (isSignup) {
+        await api.register({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: normalizedEmail,
+          password,
+        });
+        setOtp(Array(6).fill(''));
+        setIsOtpVerified(false);
+        setIsOtpStep(true);
+        setFormMessage({ type: 'info', text: 'Registration successful. Check your email for the verification code.' });
+        return;
+      }
+
       const result = await api.login({ email: normalizedEmail, password });
       onAuthenticated?.(result.data.user, result.data.accessToken);
     } catch (error) {
@@ -106,23 +114,27 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
     }
   };
 
-  const handleVerifyOtp = (e) => {
+  const handleVerifyOtp = async (e) => {
     e.preventDefault();
+    const verificationCode = otp.join('');
 
-    const enteredCode = otp.join('');
-    if (enteredCode.length !== 6) {
-      setFormMessage({ type: 'error', text: 'Please enter all six digits of the demo code.' });
+    if (verificationCode.length !== 6) {
+      setFormMessage({ type: 'error', text: 'Enter the six-digit verification code.' });
       return;
     }
 
-    if (enteredCode !== DEMO_OTP) {
-      setFormMessage({ type: 'error', text: 'That demo code is incorrect. Please try again.' });
-      return;
+    setIsSubmitting(true);
+    try {
+      await api.verifyEmail({ email: email.trim(), otp: verificationCode });
+      setIsOtpVerified(true);
+      setFormMessage({ type: 'success', text: 'Email verified successfully.' });
+    } catch (error) {
+      setFormMessage({ type: 'error', text: error.message });
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setIsOtpVerified(true);
-    setFormMessage({ type: 'success', text: 'Demo email verification complete. No account was created; authentication is not set up.' });
   };
+
 
   const handleOtpChange = (index, value) => {
     const digits = value.replace(/\D/g, '');
@@ -154,10 +166,6 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
     }
   };
 
-  const handleResendOtp = () => {
-    setOtp(Array(6).fill(''));
-    setFormMessage({ type: 'info', text: `Demo only: no email was sent. The test code is still ${DEMO_OTP}.` });
-  };
 
   const handleBackToRegistration = () => {
     setOtp(Array(6).fill(''));
@@ -450,40 +458,6 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
             <form onSubmit={handleVerifyOtp} className="mt-8 space-y-5 text-center">
               <KeyRound aria-hidden="true" className={`mx-auto h-14 w-14 ${isDarkMode ? 'text-[#C5A059]' : 'text-[#78450C]'}`} strokeWidth={2.5} />
 
-              <div
-                role="group"
-                aria-label="Six-digit email verification code"
-                aria-describedby="otp-demo-note"
-                className="grid grid-cols-6 gap-2 sm:gap-3"
-              >
-                {Array.from({ length: 6 }, (_, index) => (
-                  <input
-                    key={index}
-                    ref={(element) => { otpInputRefs.current[index] = element; }}
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete={index === 0 ? 'one-time-code' : 'off'}
-                    pattern="[0-9]"
-                    maxLength={6}
-                    value={otp[index] || ''}
-                    onChange={(e) => handleOtpChange(index, e.target.value)}
-                    onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                    aria-label={`Digit ${index + 1} of 6`}
-                    required
-                    disabled={isOtpVerified}
-                    className={`h-14 min-w-0 rounded-2xl border text-center text-xl font-medium outline-none transition-colors focus:border-[#A36C32] focus:ring-2 focus:ring-[#A36C32]/20 disabled:opacity-70 ${
-                      isDarkMode
-                        ? 'border-[#3B3B3B] bg-[#1A1A1A] text-[#F5F1EA]'
-                        : 'border-[#E2E0DC] bg-transparent text-[#2A201C]'
-                    }`}
-                  />
-                ))}
-              </div>
-
-              <p id="otp-demo-note" className={`text-[11px] ${softText}`}>
-                Demo only: no email was sent. Test code: <strong>{DEMO_OTP}</strong>
-              </p>
-
               {formMessage.text && (
                 <p
                   role={formMessage.type === 'error' ? 'alert' : 'status'}
@@ -506,9 +480,30 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
               )}
 
               {!isOtpVerified && (
+                <div className="flex justify-center gap-2" aria-label="Six-digit verification code">
+                  {otp.map((digit, index) => (
+                    <input
+                      key={index}
+                      ref={(element) => { otpInputRefs.current[index] = element; }}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                      maxLength={6}
+                      value={digit}
+                      onChange={(event) => handleOtpChange(index, event.target.value)}
+                      onKeyDown={(event) => handleOtpKeyDown(index, event)}
+                      aria-label={`Digit ${index + 1} of 6`}
+                      className={`h-12 w-10 rounded-md border text-center text-lg font-semibold outline-none focus:border-[#C5A059] focus:ring-2 focus:ring-[#9E7B3B]/30 ${isDarkMode ? 'border-[#3B3B3B] bg-[#1A1A1A] text-[#F5F1EA]' : 'border-[#E8DFD1] bg-white text-[#121212]'}`}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {!isOtpVerified && (
                 <button
                   type="submit"
                   aria-label="Verify code"
+                  disabled={isSubmitting}
                   className="mx-auto flex h-12 w-14 items-center justify-center rounded-lg border-2 border-[#9B6B39] text-[#78450C] transition-all hover:bg-[#9B6B39] hover:text-white focus:outline-none focus:ring-2 focus:ring-[#9B6B39]/30 active:scale-95"
                 >
                   <ArrowRight aria-hidden="true" className="h-8 w-8" strokeWidth={2} />
@@ -537,15 +532,6 @@ export default function AuthPage({ mode = 'login', setMode, onBackToSalon, onPre
                 >
                   Back to registration
                 </button>
-                {!isOtpVerified && (
-                  <button
-                    type="button"
-                    onClick={handleResendOtp}
-                    className="font-semibold text-[#C5A059] hover:underline"
-                  >
-                    Resend code
-                  </button>
-                )}
               </div>
             </form>
           )}
