@@ -45,7 +45,7 @@ export default function HomePage({ setActivePage, setServiceFilter, onOpenBookin
             backgroundImage: `url('https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=1920')`
           }}
         >
-          <div className="absolute inset-0 bg-gradient-to-r from-[#121110]/90 via-[#121110]/70 to-[#121110]/20" />
+          <div className="absolute inset-0 bg-linear-to-r from-[#121110]/90 via-[#121110]/70 to-[#121110]/20" />
         </div>
 
         <div className="relative z-10 max-w-[720px] space-y-7 pt-10">
@@ -59,7 +59,7 @@ export default function HomePage({ setActivePage, setServiceFilter, onOpenBookin
             <span className="italic font-normal text-[#D4AF37]">Our Passion</span>
           </h1>
 
-          <p className="max-w-[700px] text-[1.05rem] sm:text-[1.15rem] text-[#f0ece8] leading-relaxed font-light">
+          <p className="max-w-175 text-[1.05rem] sm:text-[1.15rem] text-[#f0ece8] leading-relaxed font-light">
             Welcome to Centy’zz Hair and Beauty Salon, where expert styling meets personalized care. From fresh cuts to luxurious treatments, we're here to help you look and feel your absolute best. Book your appointment today and let us bring your vision to life.
           </p>
 

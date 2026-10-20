@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import BookingModal from './components/BookingModal';
-import { api } from './api/client.js';
+import AdminLayout from './components/AdminLayout';
+import { api } from './api/client.js'; // 👈 Fixed import path
 
 import HomePage from './pages/HomePage';
 import ServicesPage from './pages/ServicesPage';
@@ -75,28 +76,44 @@ export default function App() {
   };
 
   const isAuthPage = activePage === 'auth';
+  const isAdminDashboard = activePage === 'admin';
   const isMemberDashboard = Boolean(memberUser)
     && ['home', 'member-services', 'member-bookings', 'member-book', 'member-account'].includes(activePage);
+
   const enterDemoDashboard = (user) => {
     setMemberAppointments([]);
     setAppointmentsError('');
     setIsLoadingAppointments(false);
-    setMemberUser({ ...user, isDemo: true });
-    setActivePage('home');
+
+    const role = (user?.role || 'CLIENT').toUpperCase();
+    const isEmployee = ['ADMIN', 'SUPERADMIN', 'STAFF'].includes(role);
+
+    const userData = { ...user, role: isEmployee ? role : 'CLIENT', isDemo: true };
+    setMemberUser(userData);
+    setActivePage(isEmployee ? 'admin' : 'home');
   };
+
   const enterMemberDashboard = (user, accessToken) => {
     setIsBookingOpen(false);
     setMemberAppointments([]);
     setAppointmentsError('');
     setIsLoadingAppointments(true);
-    setMemberUser({
+
+    const role = (user?.role || 'CLIENT').toUpperCase();
+    const isEmployee = ['ADMIN', 'SUPERADMIN', 'STAFF'].includes(role);
+
+    const userData = {
       ...user,
       accessToken,
-      name: `${user.firstName} ${user.lastName}`.trim(),
+      name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.name || 'User',
+      role: isEmployee ? role : 'CLIENT',
       isDemo: false,
-    });
-    setActivePage('home');
+    };
+
+    setMemberUser(userData);
+    setActivePage(isEmployee ? 'admin' : 'home');
   };
+
   const handleLogout = () => {
     setMemberUser(null);
     setMemberAppointments([]);
@@ -107,7 +124,8 @@ export default function App() {
 
   return (
     <div className={`min-h-screen flex flex-col justify-between ${isDarkMode ? 'bg-[#111111] text-[#F5F1EA]' : 'bg-[#FDFBF7] text-[#3A2E2B]'}`}>
-      {!isAuthPage && !isMemberDashboard && (
+      
+      {!isAuthPage && !isMemberDashboard && !isAdminDashboard && (
         <Navbar 
           activePage={activePage} 
           setActivePage={setActivePage} 
@@ -122,7 +140,14 @@ export default function App() {
       )}
 
       <main className="flex-1">
-        {activePage === 'home' && (
+        {isAdminDashboard && (
+          <AdminLayout 
+            currentUser={memberUser || { firstName: 'Millicent', lastName: 'Campillos', email: 'MillicentCampillos@example.com', role: 'ADMIN' }} 
+            onLogout={handleLogout} 
+          />
+        )}
+
+        {!isAdminDashboard && activePage === 'home' && (
           memberUser ? (
             <MemberHomePage
               user={memberUser}
@@ -144,7 +169,7 @@ export default function App() {
             />
           )
         )}
-        {activePage === 'member-account' && memberUser && (
+        {!isAdminDashboard && activePage === 'member-account' && memberUser && (
           <MemberHomePage
             user={memberUser}
             isDarkMode={isDarkMode}
@@ -158,7 +183,7 @@ export default function App() {
             appointmentsError={appointmentsError}
           />
         )}
-        {activePage === 'member-services' && memberUser && (
+        {!isAdminDashboard && activePage === 'member-services' && memberUser && (
           <MemberServicesPage
             user={memberUser}
             isDarkMode={isDarkMode}
@@ -170,7 +195,7 @@ export default function App() {
             appointmentsError={appointmentsError}
           />
         )}
-        {activePage === 'member-book' && memberUser && (
+        {!isAdminDashboard && activePage === 'member-book' && memberUser && (
           <MemberBook
             user={memberUser}
             isDarkMode={isDarkMode}
@@ -181,7 +206,7 @@ export default function App() {
             onAppointmentCreated={handleAppointmentCreated}
           />
         )}
-        {activePage === 'member-bookings' && memberUser && (
+        {!isAdminDashboard && activePage === 'member-bookings' && memberUser && (
           <MemberBookingsPage
             user={memberUser}
             isDarkMode={isDarkMode}
@@ -191,7 +216,7 @@ export default function App() {
             onLogout={handleLogout}
           />
         )}
-        {activePage === 'services' && (
+        {!isAdminDashboard && activePage === 'services' && (
           <ServicesPage 
             serviceFilter={serviceFilter}
             setServiceFilter={setServiceFilter}
@@ -199,7 +224,7 @@ export default function App() {
             isDarkMode={isDarkMode}
           />
         )}
-        {activePage === 'promos' && (
+        {!isAdminDashboard && activePage === 'promos' && (
           <PromosPage
             onOpenBooking={handleOpenBooking}
             setActivePage={setActivePage}
@@ -207,10 +232,10 @@ export default function App() {
             isDarkMode={isDarkMode}
           />
         )}
-        {activePage === 'about' && (
+        {!isAdminDashboard && activePage === 'about' && (
           <AboutPage isDarkMode={isDarkMode} />
         )}
-        {activePage === 'auth' && (
+        {!isAdminDashboard && activePage === 'auth' && (
           <AuthPage
             mode={authMode}
             setMode={setAuthMode}
@@ -223,11 +248,11 @@ export default function App() {
         )}
       </main>
 
-      {!isAuthPage && !isMemberDashboard && (
+      {!isAuthPage && !isMemberDashboard && !isAdminDashboard && (
         <Footer setActivePage={setActivePage} setServiceFilter={setServiceFilter} isDarkMode={isDarkMode} />
       )}
 
-      {!memberUser && (
+      {!memberUser && !isAdminDashboard && (
         <BookingModal
           key={bookingSessionId}
           isOpen={isBookingOpen}
