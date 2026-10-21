@@ -14,7 +14,9 @@ import {
   Archive,
   RotateCcw,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Moon,
+  Bell
 } from 'lucide-react';
 
 export default function UserManagementView({ currentUser }) {
@@ -237,11 +239,27 @@ export default function UserManagementView({ currentUser }) {
         </div>
       )}
 
-      {/* Header matching dashboard format with original text */}
-      <div>
-        <h1 className="text-xl font-bold text-[#2A1E1B]">User Management</h1>
-        <p className="text-xs text-[#8A8174]">Manage system admin & staff access, roles, and active credentials</p>
-      </div>
+      {/* Header Bar */}
+      <header className="mb-6 flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-[#2A1E1B]">User Management</h1>
+          <p className="text-xs text-[#8A8174]">Manage system admin & staff access, roles, and active credentials</p>
+        </div>
+
+        {/* Group 2: System Quick Actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button className="p-2.5 rounded-full border border-[#E7DFD4] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6] transition-colors">
+            <Moon size={16} />
+          </button>
+          <button className="p-2.5 rounded-full border border-[#E7DFD4] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6] transition-colors">
+            <Search size={16} />
+          </button>
+          <button className="relative p-2.5 rounded-full border border-[#E7DFD4] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6] transition-colors">
+            <Bell size={16} />
+            <span className="absolute top-1 right-1 w-2 h-2 bg-[#C5A059] rounded-full ring-2 ring-white"></span>
+          </button>
+        </div>
+      </header>
 
       {/* Main Workspace Card */}
       <div className="bg-white rounded-2xl border border-[#E9E4D8] shadow-sm p-6 sm:p-8 space-y-6">
@@ -317,7 +335,7 @@ export default function UserManagementView({ currentUser }) {
           </div>
         </div>
 
-        {/* User Table with overflow-visible to prevent clipping */}
+        {/* User Table */}
         <div className="overflow-x-auto overflow-y-visible rounded-xl border border-[#E9E4D8]">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -563,7 +581,7 @@ export default function UserManagementView({ currentUser }) {
           </table>
         </div>
 
-        {/* Pagination / Switch Footer */}
+        {/* Pagination Footer */}
         <div className="flex flex-col sm:flex-row items-center justify-between text-xs text-[#8A8174] pt-1 gap-3">
           <span>Showing {paginatedUsers.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to {Math.min(currentPage * itemsPerPage, filteredUsers.length)} of {filteredUsers.length} items</span>
           

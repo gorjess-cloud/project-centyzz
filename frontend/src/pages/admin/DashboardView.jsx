@@ -12,7 +12,6 @@ import {
 export default function DashboardView({ currentUser }) {
   const today = new Date();
   const name = currentUser?.firstName || "Millicent";
-  const mutedText = "text-[#8A8174]";
 
   const appointments = [
     { id: '1', time: '08:30 AM', client: 'Alicent Hightower', service: 'Haircut and Hair color', stylist: 'Peter Parker', status: 'Confirmed' },
@@ -24,10 +23,10 @@ export default function DashboardView({ currentUser }) {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       
-      {/* Header */}
+      {/* Header — Matched strictly with User Management header typography */}
       <header className="mb-6 flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-lg font-bold truncate">
+          <h1 className="text-xl font-bold text-[#2A1E1B] truncate">
             Good{" "}
             {today.getHours() < 12
               ? "Morning"
@@ -36,7 +35,7 @@ export default function DashboardView({ currentUser }) {
                 : "Evening"}
             , {name}!
           </h1>
-          <p className={`mt-0.5 text-[11px] ${mutedText} truncate`}>
+          <p className="mt-0.5 text-xs text-[#8A8174] truncate">
             Today is{" "}
             {today.toLocaleDateString("en-US", {
               weekday: "long",
@@ -126,7 +125,7 @@ export default function DashboardView({ currentUser }) {
         <div className="p-5 border-b border-[#E7DFD4] flex items-center justify-between bg-[#FDFBF7]">
           <div>
             <h2 className="text-base font-bold text-[#2A1E1B]">Today's schedule</h2>
-            <p className="text-xs text-gray-500">Stylist assignments and appointment queue</p>
+            <p className="text-xs text-[#8A8174]">Stylist assignments and appointment queue</p>
           </div>
           <span className="text-xs text-gray-400 font-mono">August 17, 2026</span>
         </div>

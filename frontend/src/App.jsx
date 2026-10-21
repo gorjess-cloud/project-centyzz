@@ -15,6 +15,7 @@ import MemberServicesPage from './pages/MemberServicesPage';
 import MemberBookingsPage from './pages/MemberBookingsPage';
 import MemberBook from './pages/MemberBook';
 
+
 export default function App() {
   const [activePage, setActivePage] = useState('home');
   const [serviceFilter, setServiceFilter] = useState('all');

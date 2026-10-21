@@ -16,7 +16,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar as CalendarIcon,
-  ArrowRight
+  ArrowRight,
+  Moon,
+  Bell
 } from 'lucide-react';
 
 const SERVICES_BY_CATEGORY = {
@@ -698,10 +700,26 @@ export default function ClientManagementView() {
       )}
 
       {/* Header Bar */}
-      <div>
-        <h1 className="text-xl font-bold text-[#2A1E1B]">Client Management</h1>
-        <p className="text-xs text-[#8A8174]">Manage customer registry, booking history, lifetime spend, and loyalty tiers</p>
-      </div>
+      <header className="mb-6 flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-[#2A1E1B]">Client Management</h1>
+          <p className="text-xs text-[#8A8174]">Manage customer registry, booking history, lifetime spend, and loyalty tiers</p>
+        </div>
+
+        {/* Group 2: System Quick Actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button className="p-2.5 rounded-full border border-[#E7DFD4] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6] transition-colors">
+            <Moon size={16} />
+          </button>
+          <button className="p-2.5 rounded-full border border-[#E7DFD4] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6] transition-colors">
+            <Search size={16} />
+          </button>
+          <button className="relative p-2.5 rounded-full border border-[#E7DFD4] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6] transition-colors">
+            <Bell size={16} />
+            <span className="absolute top-1 right-1 w-2 h-2 bg-[#C5A059] rounded-full ring-2 ring-white"></span>
+          </button>
+        </div>
+      </header>
 
       {/* Main Workspace Card */}
       <div className="bg-white rounded-2xl border border-[#E9E4D8] shadow-sm p-6 sm:p-8 space-y-6">
@@ -1346,7 +1364,7 @@ export default function ClientManagementView() {
                       </h3>
                     </div>
 
-                    <div className="space-y-2 max-h-[290px] overflow-y-auto pr-1 custom-scrollbar">
+                    <div className="space-y-2 overflow-y-auto pr-1 custom-scrollbar" style={{ maxHeight: '290px' }}>
                       {timeSlots.map((slot) => {
                         const isSelected = selectedTime === slot;
 
