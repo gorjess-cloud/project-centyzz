@@ -20,8 +20,6 @@ export default function AdminSidebar({
 }) {
   const [isExpanded, setIsExpanded] = useState(true);
 
-  // Exact 9 navigation items matching your reference image order:
-  // 1. Dashboard, 2. Users, 3. Services, 4. Clients, 5. Reports, 6. Logs, 7. Inventory, 8. Schedule, 9. Settings
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'users', label: 'Users', icon: Users },
@@ -34,7 +32,7 @@ export default function AdminSidebar({
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
-  const fullName = currentUser?.fullName || currentUser?.name || [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(" ") || "Admin";
+  const fullName = currentUser?.fullName || currentUser?.name || [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(" ") || "Millicent Campillos";
   const initials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 
   const sidebarSurface = "border-[#E7DFD4] bg-[#FFFDF8]";
@@ -58,17 +56,22 @@ export default function AdminSidebar({
         </span>
       </button>
 
-      {/* Logo Section */}
+      {/* Brand Logo Section (Clickable -> Redirects to Dashboard) */}
       <div className="flex flex-col items-center pt-6 pb-4 border-b border-[#E7DFD4]">
-        <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setActivePage('dashboard')}
+          className="flex items-center gap-3 group cursor-pointer focus:outline-none transition-transform active:scale-95 px-2 py-1 rounded-xl hover:bg-[#F6F0E6]/50"
+          title="Go to Dashboard"
+        >
           <img 
             src="/logo.png" 
             alt="Centy'zz Salon Logo" 
-            className="h-10 w-10 object-contain" 
+            className="h-10 w-10 object-contain transition-transform group-hover:scale-105" 
           />
           {isExpanded && (
-            <div className="leading-none flex flex-col justify-center">
-              <span className="text-[1.2rem] font-bold block uppercase text-[#2A1E1B]">
+            <div className="leading-none flex flex-col justify-center text-left">
+              <span className="text-[1.2rem] font-bold block uppercase text-[#2A1E1B] group-hover:text-[#8B5E3C] transition-colors">
                 Centy'zz
               </span>
               <span className="text-[8px] tracking-[0.25em] text-[#C5A059] block uppercase font-medium pt-0.5">
@@ -76,37 +79,46 @@ export default function AdminSidebar({
               </span>
             </div>
           )}
-        </div>
+        </button>
       </div>
 
-      {/* Profile Section */}
+      {/* Profile Section (Clickable -> Redirects to Account Management) */}
       <div className="flex flex-col items-center py-4 border-b border-[#E7DFD4]">
-        <div className="relative">
-          <div className="w-12 h-12 rounded-full bg-[#4A3928] text-[#C5A059] font-bold text-sm border-2 border-[#C5A059] flex items-center justify-center shadow-sm overflow-hidden">
-            {currentUser?.avatarUrl ? (
-              <img src={currentUser.avatarUrl} alt="Profile" className="w-full h-full object-cover" />
-            ) : (
-              <span>{initials || "A"}</span>
+        <button
+          type="button"
+          onClick={() => setActivePage('account')}
+          className={`flex flex-col items-center w-full focus:outline-none group cursor-pointer transition-all active:scale-95 px-2 py-1 rounded-2xl ${
+            activePage === 'account' ? 'bg-[#F6F0E6] shadow-xs' : 'hover:bg-[#F6F0E6]/60'
+          }`}
+          title="Open Account Settings"
+        >
+          <div className="relative">
+            <div className="w-12 h-12 rounded-full bg-[#4A3928] text-[#C5A059] font-bold text-sm border-2 border-[#C5A059] flex items-center justify-center shadow-sm overflow-hidden group-hover:border-[#8B5E3C] group-hover:shadow-md transition-all">
+              {currentUser?.avatarUrl ? (
+                <img src={currentUser.avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <span>{initials || "MC"}</span>
+              )}
+            </div>
+            
+            {isExpanded && (
+              <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-[#EBDBC8] text-[#8C6D3B] text-[9px] font-extrabold px-2.5 py-0.5 rounded-full border border-[#D8C2A0] whitespace-nowrap shadow-2xs group-hover:bg-[#E8C27B] group-hover:text-[#5A3810] transition-colors">
+                {currentUser?.role || 'ADMIN'}
+              </span>
             )}
           </div>
           
           {isExpanded && (
-            <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-[#EBDBC8] text-[#8C6D3B] text-[9px] font-bold px-2.5 py-0.5 rounded-full border border-[#D8C2A0] whitespace-nowrap shadow-xs">
-              {currentUser?.role || 'Admin'}
-            </span>
+            <div className="text-center mt-3 px-2 w-full">
+              <h2 className="text-xs font-bold text-[#2A1E1B] truncate group-hover:text-[#8B5E3C] transition-colors">
+                {fullName}
+              </h2>
+              <p className={`text-[9px] truncate ${mutedText} group-hover:text-[#443523]`}>
+                {currentUser?.email || 'MillicentCampillos@example.com'}
+              </p>
+            </div>
           )}
-        </div>
-        
-        {isExpanded && (
-          <div className="text-center mt-3 px-2">
-            <h2 className="text-xs font-bold text-[#2A1E1B] truncate">
-              {fullName}
-            </h2>
-            <p className={`text-[9px] truncate ${mutedText}`}>
-              {currentUser?.email || 'admin@example.com'}
-            </p>
-          </div>
-        )}
+        </button>
       </div>
 
       {/* Navigation Menu Links */}

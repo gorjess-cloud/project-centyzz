@@ -3,401 +3,163 @@ import {
   Search, 
   Filter, 
   Plus, 
+  Tag, 
   MoreHorizontal, 
   Edit3, 
+  UserX, 
+  UserCheck, 
   X, 
   CheckCircle2, 
   Archive,
   RotateCcw,
-  User,
-  Calendar,
   Sparkles,
-  Clock,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Moon,
+  Bell
 } from 'lucide-react';
 
-export default function ClientManagementView() {
-  // 20 Mock Clients Data
-  const [clients, setClients] = useState([
+const formatPromoDate = (date) => {
+  if (!date) return '';
+  const [year, month, day] = date.split('-').map(Number);
+  if (!year || !month || !day) return date;
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
+};
+
+export default function ServiceManagementView() {
+  // Active Promo Banner State
+  const [activePromo, setActivePromo] = useState({
+    title: 'Nail Bar Weekday Special',
+    appliesTo: 'Classic Gel Manicure',
+    discountText: '₱200 off',
+    startDate: '2026-08-15',
+    endDate: '2026-08-31',
+    status: 'ACTIVE'
+  });
+
+  // Services Data
+  const [services, setServices] = useState([
     {
-      id: 'clt_1',
-      fullName: 'Natasha Romanoff',
-      email: 'blackwidow@gmail.com',
-      contactNumber: '09952347123',
-      gender: 'Female',
-      tier: 'VIP',
-      lastVisit: 'Aug 15, 2026',
-      totalVisits: 8,
-      totalSpend: '₱12,450.00',
+      id: 'srv_1',
+      category: 'HAIR',
+      name: 'Signature Cut & Blowout',
+      duration: '1 hr',
+      price: '₱1,800.00',
       status: 'ACTIVE',
       isArchived: false,
-      notes: 'Allergic to certain hair dye ammonia. Prefers organic scalp treatments.',
-      avatarColor: 'bg-[#4A3928]',
-      bookingHistory: [
-        { id: 'b1', service: 'Keratin Smoothing Treatment', date: 'Aug 15, 2026', amount: '₱4,000.00' },
-        { id: 'b2', service: 'Signature Cut & Blowout', date: 'Jul 10, 2026', amount: '₱1,800.00' }
-      ],
-      favoriteService: 'Keratin Smoothing Treatment'
+      description: 'Professional haircut styling and premium blowout.',
+      dateCreated: 'Aug 16, 2026'
     },
     {
-      id: 'clt_2',
-      fullName: 'Ava Silva',
-      email: 'warriornun@gmail.com',
-      contactNumber: '099523847123',
-      gender: 'Female',
-      tier: 'VIP',
-      lastVisit: 'Aug 03, 2026',
-      totalVisits: 10,
-      totalSpend: '₱18,200.00',
+      id: 'srv_2',
+      category: 'HAIR',
+      name: 'Root Touch-Up (Single Process)',
+      duration: '1 hr 30 mins',
+      price: '₱2,800.00',
       status: 'ACTIVE',
       isArchived: false,
-      notes: 'Likes extra hot towel service during hair treatments.',
-      avatarColor: 'bg-[#9B6B39]',
-      bookingHistory: [
-        { id: 'b3', service: 'Root Touch-Up (Single Process)', date: 'Aug 03, 2026', amount: '₱2,800.00' }
-      ],
-      favoriteService: 'Root Touch-Up (Single Process)'
+      description: 'Single process hair root touch-up treatment.',
+      dateCreated: 'Aug 16, 2026'
     },
     {
-      id: 'clt_3',
-      fullName: 'Mike Wheeler',
-      email: 'thepaladin@gmail.com',
-      contactNumber: '09912347123',
-      gender: 'Male',
-      tier: 'Regular',
-      lastVisit: 'Aug 03, 2026',
-      totalVisits: 1,
-      totalSpend: '₱900.00',
-      status: 'NEW',
+      id: 'srv_3',
+      category: 'HAIR',
+      name: 'Keratin Smoothing Treatment',
+      duration: '2 hrs 30 mins',
+      price: '₱4,000.00',
+      status: 'ACTIVE',
       isArchived: false,
-      notes: 'First time visitor. Interested in styling recommendations.',
-      avatarColor: 'bg-[#2E4A39]',
-      bookingHistory: [
-        { id: 'b4', service: 'Classic Gel Manicure', date: 'Aug 03, 2026', amount: '₱900.00' }
-      ],
-      favoriteService: 'Classic Gel Manicure'
+      description: 'Long-lasting frizz reduction and hair smoothing.',
+      dateCreated: 'Aug 16, 2026'
     },
     {
-      id: 'clt_4',
-      fullName: 'Sansa Stark',
-      email: 'redwolf@gmail.com',
-      contactNumber: '099155847123',
-      gender: 'Female',
-      tier: 'Regular',
-      lastVisit: 'Jun 07, 2026',
-      totalVisits: 3,
-      totalSpend: '₱3,600.00',
+      id: 'srv_4',
+      category: 'NAILS',
+      name: 'Classic Gel Manicure',
+      duration: '45 mins',
+      price: '₱900.00',
+      status: 'ACTIVE',
+      isArchived: false,
+      description: 'Standard gel manicure with cuticle care and polishing.',
+      dateCreated: 'Aug 16, 2026'
+    },
+    {
+      id: 'srv_5',
+      category: 'NAILS',
+      name: 'Luxury Spa Pedicure',
+      duration: '1 hr',
+      price: '₱1,200.00',
+      status: 'ACTIVE',
+      isArchived: false,
+      description: 'Exfoliating foot scrub, massage, and pedicure.',
+      dateCreated: 'Aug 16, 2026'
+    },
+    {
+      id: 'srv_6',
+      category: 'SKIN',
+      name: 'Hydrating Facial Treatment',
+      duration: '1 hr 15 mins',
+      price: '₱2,500.00',
       status: 'INACTIVE',
       isArchived: false,
-      notes: 'Prefers quiet sessions without background chatter.',
-      avatarColor: 'bg-[#5C4033]',
-      bookingHistory: [
-        { id: 'b5', service: 'Luxury Spa Pedicure', date: 'Jun 07, 2026', amount: '₱1,200.00' }
-      ],
-      favoriteService: 'Luxury Spa Pedicure'
-    },
-    {
-      id: 'clt_5',
-      fullName: 'Bea Alonzo',
-      email: 'bea.alonzo@example.com',
-      contactNumber: '0944556677',
-      gender: 'Female',
-      tier: 'VIP',
-      lastVisit: 'Sep 02, 2026',
-      totalVisits: 14,
-      totalSpend: '₱25,400.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      notes: 'Loyal client for hair rebonding and facial treatments.',
-      avatarColor: 'bg-[#3A342B]',
-      bookingHistory: [{ id: 'b6', service: 'Hydrating Facial', date: 'Sep 02, 2026', amount: '₱2,500.00' }],
-      favoriteService: 'Hydrating Facial Treatment'
-    },
-    {
-      id: 'clt_6',
-      fullName: 'John Lloyd Cruz',
-      email: 'johnlloyd@example.com',
-      contactNumber: '0955667788',
-      gender: 'Male',
-      tier: 'Regular',
-      lastVisit: 'Aug 20, 2026',
-      totalVisits: 5,
-      totalSpend: '₱6,500.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      notes: 'Always books morning appointments.',
-      avatarColor: 'bg-[#4A3928]',
-      bookingHistory: [{ id: 'b7', service: 'Signature Cut & Blowout', date: 'Aug 20, 2026', amount: '₱1,800.00' }],
-      favoriteService: 'Signature Cut & Blowout'
-    },
-    {
-      id: 'clt_7',
-      fullName: 'Sarah Geronimo',
-      email: 'sarahg@example.com',
-      contactNumber: '0966778899',
-      gender: 'Female',
-      tier: 'VIP',
-      lastVisit: 'Sep 05, 2026',
-      totalVisits: 19,
-      totalSpend: '₱38,900.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      notes: 'Very particular with hair layering.',
-      avatarColor: 'bg-[#9B6B39]',
-      bookingHistory: [{ id: 'b8', service: 'Keratin Smoothing', date: 'Sep 05, 2026', amount: '₱4,000.00' }],
-      favoriteService: 'Keratin Smoothing Treatment'
-    },
-    {
-      id: 'clt_8',
-      fullName: 'Vice Ganda',
-      email: 'viceganda@example.com',
-      contactNumber: '0977889900',
-      gender: 'LGBTQ+',
-      tier: 'VIP',
-      lastVisit: 'Sep 10, 2026',
-      totalVisits: 22,
-      totalSpend: '₱45,000.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      notes: 'Loves experimental hair coloring and nail art.',
-      avatarColor: 'bg-[#2E4A39]',
-      bookingHistory: [{ id: 'b9', service: 'Classic Gel Manicure', date: 'Sep 10, 2026', amount: '₱900.00' }],
-      favoriteService: 'Classic Gel Manicure'
-    },
-    {
-      id: 'clt_9',
-      fullName: 'Anne Curtis',
-      email: 'annecurtis@example.com',
-      contactNumber: '0988990011',
-      gender: 'Female',
-      tier: 'VIP',
-      lastVisit: 'Aug 12, 2026',
-      totalVisits: 12,
-      totalSpend: '₱21,000.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      notes: 'Prefers organic shampoos only.',
-      avatarColor: 'bg-[#5C4033]',
-      bookingHistory: [{ id: 'b10', service: 'Signature Cut', date: 'Aug 12, 2026', amount: '₱1,800.00' }],
-      favoriteService: 'Signature Cut & Blowout'
-    },
-    {
-      id: 'clt_10',
-      fullName: 'Kathryn Bernardo',
-      email: 'kathryn@example.com',
-      contactNumber: '0999001122',
-      gender: 'Female',
-      tier: 'VIP',
-      lastVisit: 'Sep 12, 2026',
-      totalVisits: 16,
-      totalSpend: '₱29,800.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      notes: 'VIP guest. Provide complimentary beverages.',
-      avatarColor: 'bg-[#3A342B]',
-      bookingHistory: [{ id: 'b11', service: 'Luxury Spa Pedicure', date: 'Sep 12, 2026', amount: '₱1,200.00' }],
-      favoriteService: 'Luxury Spa Pedicure'
-    },
-    {
-      id: 'clt_11',
-      fullName: 'Daniel Padilla',
-      email: 'daniel@example.com',
-      contactNumber: '0911223355',
-      gender: 'Male',
-      tier: 'Regular',
-      lastVisit: 'Jul 22, 2026',
-      totalVisits: 4,
-      totalSpend: '₱5,200.00',
-      status: 'INACTIVE',
-      isArchived: false,
-      notes: 'Standard men haircut.',
-      avatarColor: 'bg-[#4A3928]',
-      bookingHistory: [{ id: 'b12', service: 'Signature Cut', date: 'Jul 22, 2026', amount: '₱1,800.00' }],
-      favoriteService: 'Signature Cut & Blowout'
-    },
-    {
-      id: 'clt_12',
-      fullName: 'Liza Soberano',
-      email: 'liza@example.com',
-      contactNumber: '0922334466',
-      gender: 'Female',
-      tier: 'VIP',
-      lastVisit: 'Sep 14, 2026',
-      totalVisits: 15,
-      totalSpend: '₱31,000.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      notes: 'Prefers private VIP booth.',
-      avatarColor: 'bg-[#9B6B39]',
-      bookingHistory: [{ id: 'b13', service: 'Hydrating Facial', date: 'Sep 14, 2026', amount: '₱2,500.00' }],
-      favoriteService: 'Hydrating Facial Treatment'
-    },
-    {
-      id: 'clt_13',
-      fullName: 'Enrique Gil',
-      email: 'enrique@example.com',
-      contactNumber: '0933445577',
-      gender: 'Male',
-      tier: 'Regular',
-      lastVisit: 'Aug 25, 2026',
-      totalVisits: 6,
-      totalSpend: '₱7,800.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      notes: 'Prefers afternoon scheduling.',
-      avatarColor: 'bg-[#2E4A39]',
-      bookingHistory: [{ id: 'b14', service: 'Root Touch-Up', date: 'Aug 25, 2026', amount: '₱2,800.00' }],
-      favoriteService: 'Root Touch-Up (Single Process)'
-    },
-    {
-      id: 'clt_14',
-      fullName: 'Nadine Lustre',
-      email: 'nadine@example.com',
-      contactNumber: '0944556688',
-      gender: 'Female',
-      tier: 'VIP',
-      lastVisit: 'Sep 01, 2026',
-      totalVisits: 11,
-      totalSpend: '₱19,500.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      notes: 'Loves edgy nail designs and dark tones.',
-      avatarColor: 'bg-[#5C4033]',
-      bookingHistory: [{ id: 'b15', service: 'Classic Gel Manicure', date: 'Sep 01, 2026', amount: '₱900.00' }],
-      favoriteService: 'Classic Gel Manicure'
-    },
-    {
-      id: 'clt_15',
-      fullName: 'James Reid',
-      email: 'james@example.com',
-      contactNumber: '0955667799',
-      gender: 'Male',
-      tier: 'Regular',
-      lastVisit: 'Jun 15, 2026',
-      totalVisits: 2,
-      totalSpend: '₱2,400.00',
-      status: 'INACTIVE',
-      isArchived: false,
-      notes: 'Infrequent visitor.',
-      avatarColor: 'bg-[#3A342B]',
-      bookingHistory: [{ id: 'b16', service: 'Signature Cut', date: 'Jun 15, 2026', amount: '₱1,200.00' }],
-      favoriteService: 'Signature Cut & Blowout'
-    },
-    {
-      id: 'clt_16',
-      fullName: 'Alden Richards',
-      email: 'alden@example.com',
-      contactNumber: '0966778800',
-      gender: 'Male',
-      tier: 'VIP',
-      lastVisit: 'Sep 16, 2026',
-      totalVisits: 13,
-      totalSpend: '₱23,000.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      notes: 'Very polite. Regular weekend guest.',
-      avatarColor: 'bg-[#4A3928]',
-      bookingHistory: [{ id: 'b17', service: 'Root Touch-Up', date: 'Sep 16, 2026', amount: '₱2,800.00' }],
-      favoriteService: 'Root Touch-Up (Single Process)'
-    },
-    {
-      id: 'clt_17',
-      fullName: 'Maine Mendoza',
-      email: 'maine@example.com',
-      contactNumber: '0977889911',
-      gender: 'Female',
-      tier: 'Regular',
-      lastVisit: 'Sep 11, 2026',
-      totalVisits: 7,
-      totalSpend: '₱8,900.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      notes: 'Prefers natural hair styling.',
-      avatarColor: 'bg-[#9B6B39]',
-      bookingHistory: [{ id: 'b18', service: 'Classic Gel Manicure', date: 'Sep 11, 2026', amount: '₱900.00' }],
-      favoriteService: 'Classic Gel Manicure'
-    },
-    {
-      id: 'clt_18',
-      fullName: 'Dingdong Dantes',
-      email: 'dingdong@example.com',
-      contactNumber: '0988990022',
-      gender: 'Male',
-      tier: 'VIP',
-      lastVisit: 'May 20, 2026',
-      totalVisits: 9,
-      totalSpend: '₱14,200.00',
-      status: 'INACTIVE',
-      isArchived: true,
-      notes: 'Moved out of town temporarily.',
-      avatarColor: 'bg-[#2E4A39]',
-      bookingHistory: [{ id: 'b19', service: 'Signature Cut', date: 'May 20, 2026', amount: '₱1,800.00' }],
-      favoriteService: 'Signature Cut & Blowout'
-    },
-    {
-      id: 'clt_19',
-      fullName: 'Marian Rivera',
-      email: 'marian@example.com',
-      contactNumber: '0999001133',
-      gender: 'Female',
-      tier: 'VIP',
-      lastVisit: 'May 18, 2026',
-      totalVisits: 20,
-      totalSpend: '₱42,000.00',
-      status: 'INACTIVE',
-      isArchived: true,
-      notes: 'Archived due to prolonged inactivity.',
-      avatarColor: 'bg-[#5C4033]',
-      bookingHistory: [{ id: 'b20', service: 'Keratin Smoothing', date: 'May 18, 2026', amount: '₱4,000.00' }],
-      favoriteService: 'Keratin Smoothing Treatment'
-    },
-    {
-      id: 'clt_20',
-      fullName: 'Rocco Nacino',
-      email: 'rocco@example.com',
-      contactNumber: '0912334455',
-      gender: 'Male',
-      tier: 'Regular',
-      lastVisit: 'Sep 18, 2026',
-      totalVisits: 2,
-      totalSpend: '₱1,800.00',
-      status: 'NEW',
-      isArchived: false,
-      notes: 'New client referred by Bea Alonzo.',
-      avatarColor: 'bg-[#3A342B]',
-      bookingHistory: [{ id: 'b21', service: 'Signature Cut', date: 'Sep 18, 2026', amount: '₱1,800.00' }],
-      favoriteService: 'Signature Cut & Blowout'
+      description: 'Deep pore cleansing and ultra-hydrating facial mask.',
+      dateCreated: 'Aug 18, 2026'
     }
   ]);
 
   const [activeTab, setActiveTab] = useState('ACTIVE'); // 'ACTIVE' or 'ARCHIVED'
   const [searchQuery, setSearchQuery] = useState('');
-  const [tierFilter, setTierFilter] = useState('ALL');
-  const [selectedClientIds, setSelectedClientIds] = useState([]);
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [selectedServiceIds, setSelectedServiceIds] = useState([]);
   const [activeMenuId, setActiveMenuId] = useState(null);
 
-  // Pagination - Updated to 8 items per page
+  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
+  const itemsPerPage = 6;
 
   // Modals
-  const [isAddClientOpen, setIsAddClientOpen] = useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [selectedClientProfile, setSelectedClientProfile] = useState(null);
-  const [editingClient, setEditingClient] = useState(null);
+  const [isAddServiceOpen, setIsAddServiceOpen] = useState(false);
+  const [isEditPromoOpen, setIsEditPromoOpen] = useState(false);
+  const [editingService, setEditingService] = useState(null);
 
   const [toastMessage, setToastMessage] = useState('');
 
   // Form States
-  const [clientForm, setClientForm] = useState({
-    fullName: '',
-    email: '',
-    contactNumber: '',
-    gender: 'Female',
-    tier: 'Regular',
-    notes: ''
+  const [serviceForm, setServiceForm] = useState({
+    name: '',
+    category: 'HAIR',
+    price: '',
+    durationHours: '1',
+    durationMins: '0',
+    description: ''
   });
+
+  const [promoForm, setPromoForm] = useState({
+    title: activePromo.title,
+    appliesTo: activePromo.appliesTo,
+    discountType: '% Off',
+    value: '20',
+    startDate: activePromo.startDate,
+    endDate: activePromo.endDate
+  });
+
+  const openPromoEditor = () => {
+    const isPercentage = activePromo.discountText.includes('%');
+    const discountValue = activePromo.discountText.match(/[\d,.]+/)?.[0] || '';
+    setPromoForm({
+      title: activePromo.title,
+      appliesTo: activePromo.appliesTo,
+      discountType: isPercentage ? '% Off' : '₱ Off',
+      value: discountValue.replace(/,/g, ''),
+      startDate: activePromo.startDate,
+      endDate: activePromo.endDate
+    });
+    setIsEditPromoOpen(true);
+  };
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -405,130 +167,113 @@ export default function ClientManagementView() {
   };
 
   // Filter logic
-  const tabFilteredClients = clients.filter((c) => {
-    if (activeTab === 'ACTIVE') return !c.isArchived;
-    return c.isArchived;
+  const tabFilteredServices = services.filter((s) => {
+    if (activeTab === 'ACTIVE') return !s.isArchived;
+    return s.isArchived;
   });
 
-  const filteredClients = tabFilteredClients.filter((c) => {
+  const filteredServices = tabFilteredServices.filter((s) => {
     const matchesSearch = 
-      c.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.contactNumber.includes(searchQuery);
+      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.category.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesTier = tierFilter === 'ALL' || c.tier === tierFilter;
+    const matchesCategory = categoryFilter === 'ALL' || s.category === categoryFilter;
 
-    return matchesSearch && matchesTier;
+    return matchesSearch && matchesCategory;
   });
 
-  const totalPages = Math.ceil(filteredClients.length / itemsPerPage) || 1;
-  const paginatedClients = filteredClients.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPages = Math.ceil(filteredServices.length / itemsPerPage) || 1;
+  const paginatedServices = filteredServices.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedClientIds(paginatedClients.map((c) => c.id));
+      setSelectedServiceIds(paginatedServices.map((s) => s.id));
     } else {
-      setSelectedClientIds([]);
+      setSelectedServiceIds([]);
     }
   };
 
-  const handleSelectClient = (id) => {
-    setSelectedClientIds((prev) =>
+  const handleSelectService = (id) => {
+    setSelectedServiceIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
 
-  const handleAddClientSubmit = (e) => {
+  const handleAddServiceSubmit = (e) => {
     e.preventDefault();
-    if (!clientForm.fullName || !clientForm.email) return;
+    if (!serviceForm.name || !serviceForm.price) return;
 
-    if (editingClient) {
-      setClients(clients.map(c => c.id === editingClient.id ? {
-        ...c,
-        fullName: clientForm.fullName,
-        email: clientForm.email,
-        contactNumber: clientForm.contactNumber,
-        gender: clientForm.gender,
-        tier: clientForm.tier,
-        notes: clientForm.notes
-      } : c));
-      setEditingClient(null);
-      showToast(`Successfully updated client "${clientForm.fullName}"`);
+    const durStr = `${serviceForm.durationHours !== '0' ? serviceForm.durationHours + ' hr ' : ''}${serviceForm.durationMins !== '0' ? serviceForm.durationMins + ' mins' : ''}`.trim() || '1 hr';
+    const formattedPrice = serviceForm.price.includes('₱') ? serviceForm.price : `₱${Number(serviceForm.price).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+
+    if (editingService) {
+      setServices(services.map(s => s.id === editingService.id ? {
+        ...s,
+        name: serviceForm.name,
+        category: serviceForm.category,
+        price: formattedPrice,
+        duration: durStr,
+        description: serviceForm.description
+      } : s));
+      setEditingService(null);
+      showToast(`Successfully updated service "${serviceForm.name}"`);
     } else {
-      const newClient = {
-        id: `clt_${Date.now()}`,
-        fullName: clientForm.fullName,
-        email: clientForm.email,
-        contactNumber: clientForm.contactNumber || '09000000000',
-        gender: clientForm.gender,
-        tier: clientForm.tier,
-        lastVisit: 'N/A (New)',
-        totalVisits: 0,
-        totalSpend: '₱0.00',
-        status: 'NEW',
+      const newSrv = {
+        id: `srv_${Date.now()}`,
+        category: serviceForm.category,
+        name: serviceForm.name,
+        duration: durStr,
+        price: formattedPrice,
+        status: 'ACTIVE',
         isArchived: false,
-        notes: clientForm.notes || 'No special notes provided.',
-        avatarColor: 'bg-[#4A3928]',
-        bookingHistory: [],
-        favoriteService: 'None yet'
+        description: serviceForm.description,
+        dateCreated: 'Oct 21, 2026'
       };
-      setClients([newClient, ...clients]);
-      showToast(`Successfully added new client "${clientForm.fullName}"`);
+      setServices([newSrv, ...services]);
+      showToast(`Successfully added new service "${serviceForm.name}"`);
     }
 
-    setIsAddClientOpen(false);
-    setClientForm({ fullName: '', email: '', contactNumber: '', gender: 'Female', tier: 'Regular', notes: '' });
+    setIsAddServiceOpen(false);
+    setServiceForm({ name: '', category: 'HAIR', price: '', durationHours: '1', durationMins: '0', description: '' });
   };
 
-  const handleToggleArchive = (targetClient) => {
-    setClients(clients.map(c => c.id === targetClient.id ? {
-      ...c,
-      isArchived: !c.isArchived
-    } : c));
+  const handleToggleStatus = (targetService) => {
+    setServices(services.map(s => s.id === targetService.id ? {
+      ...s,
+      status: s.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+    } : s));
     setActiveMenuId(null);
-    showToast(targetClient.isArchived ? `Restored client ${targetClient.fullName}` : `Archived client ${targetClient.fullName}`);
+    showToast(`Updated status for ${targetService.name}`);
   };
 
-  const renderStatusBadge = (status, isArchived) => {
-    if (isArchived) {
+  const handleToggleArchive = (targetService) => {
+    setServices(services.map(s => s.id === targetService.id ? {
+      ...s,
+      isArchived: !s.isArchived
+    } : s));
+    setActiveMenuId(null);
+    showToast(targetService.isArchived ? `Restored ${targetService.name}` : `Archived ${targetService.name}`);
+  };
+
+  const renderCategoryBadge = (category) => {
+    const cat = category.toUpperCase();
+    if (cat === 'HAIR') {
       return (
-        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-3.5 py-1 rounded-full bg-[#EFECE6] text-[#6E6359] border border-[#DFD5C0]">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#6E6359]" /> ARCHIVED
+        <span className="inline-flex items-center gap-1.5 bg-[#FDEBB6] text-[#8C6D23] text-[10px] font-bold tracking-wider px-3 py-1 rounded-full border border-[#F3DE9F]">
+          <Sparkles className="h-3 w-3" /> HAIR
         </span>
       );
     }
-    if (status === 'ACTIVE') {
+    if (cat === 'NAILS') {
       return (
-        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-3.5 py-1 rounded-full bg-[#E6F4EA] text-[#137333] border border-[#CEEAD6]">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#137333]" /> ACTIVE
-        </span>
-      );
-    }
-    if (status === 'NEW') {
-      return (
-        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-3.5 py-1 rounded-full bg-[#E1F5FE] text-[#0288D1] border border-[#B3E5FC]">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#0288D1]" /> NEW
+        <span className="inline-flex items-center gap-1.5 bg-[#E1F5FE] text-[#0288D1] text-[10px] font-bold tracking-wider px-3 py-1 rounded-full border border-[#B3E5FC]">
+          <Tag className="h-3 w-3" /> NAILS
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-3.5 py-1 rounded-full bg-[#FCE8E6] text-[#C5221F] border border-[#FAD2CF]">
-        <span className="w-1.5 h-1.5 rounded-full bg-[#C5221F]" /> INACTIVE
-      </span>
-    );
-  };
-
-  const renderTierBadge = (tier) => {
-    if (tier === 'VIP') {
-      return (
-        <span className="ml-2 inline-block bg-[#E8C27B] text-[#5A3810] text-[9px] font-extrabold tracking-wider uppercase px-2 py-0.5 rounded-full border border-[#D8B066] shadow-2xs">
-          VIP
-        </span>
-      );
-    }
-    return (
-      <span className="ml-2 inline-block bg-[#F6F4EF] text-[#8A8174] text-[9px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full border border-[#E9E4D8]">
-        Regular
+      <span className="inline-flex items-center gap-1.5 bg-[#FCE4EC] text-[#C2185B] text-[10px] font-bold tracking-wider px-3 py-1 rounded-full border border-[#F8BBD0]">
+        <Tag className="h-3 w-3" /> SKIN
       </span>
     );
   };
@@ -545,10 +290,26 @@ export default function ClientManagementView() {
       )}
 
       {/* Header Bar */}
-      <div>
-        <h1 className="text-xl font-bold text-[#2A1E1B]">Client Management</h1>
-        <p className="text-xs text-[#8A8174]">Manage customer registry, booking history, lifetime spend, and loyalty tiers</p>
-      </div>
+      <header className="mb-6 flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-[#2A1E1B]">Service Management</h1>
+          <p className="text-xs text-[#8A8174]">Manage salon treatment catalog, pricing, durations, and active promo discounts</p>
+        </div>
+
+        {/* Group 2: System Quick Actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button className="p-2.5 rounded-full border border-[#E7DFD4] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6] transition-colors">
+            <Moon size={16} />
+          </button>
+          <button className="p-2.5 rounded-full border border-[#E7DFD4] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6] transition-colors">
+            <Search size={16} />
+          </button>
+          <button className="relative p-2.5 rounded-full border border-[#E7DFD4] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6] transition-colors">
+            <Bell size={16} />
+            <span className="absolute top-1 right-1 w-2 h-2 bg-[#C5A059] rounded-full ring-2 ring-white"></span>
+          </button>
+        </div>
+      </header>
 
       {/* Main Workspace Card */}
       <div className="bg-white rounded-2xl border border-[#E9E4D8] shadow-sm p-6 sm:p-8 space-y-6">
@@ -558,43 +319,43 @@ export default function ClientManagementView() {
           
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-[#2A1E1B]">All clients</h2>
+              <h2 className="text-lg font-bold text-[#2A1E1B]">All Services</h2>
               <span className="bg-[#3A342B] text-[#F5F1EA] text-xs font-bold px-3 py-1 rounded-full shadow-xs">
-                {tabFilteredClients.length}
+                {tabFilteredServices.length}
               </span>
             </div>
 
             {/* Active vs Archived Tabs */}
             <div className="flex items-center bg-[#F6F4EF] p-1 rounded-xl border border-[#E9E4D8] ml-2">
               <button
-                onClick={() => { setActiveTab('ACTIVE'); setCurrentPage(1); setSelectedClientIds([]); setActiveMenuId(null); }}
+                onClick={() => { setActiveTab('ACTIVE'); setCurrentPage(1); setSelectedServiceIds([]); setActiveMenuId(null); }}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   activeTab === 'ACTIVE' 
                     ? 'bg-[#3A342B] text-[#F5F1EA] shadow-xs' 
                     : 'text-[#8A8174] hover:text-[#2A1E1B]'
                 }`}
               >
-                Active Clients
+                Active Services
               </button>
               <button
-                onClick={() => { setActiveTab('ARCHIVED'); setCurrentPage(1); setSelectedClientIds([]); setActiveMenuId(null); }}
+                onClick={() => { setActiveTab('ARCHIVED'); setCurrentPage(1); setSelectedServiceIds([]); setActiveMenuId(null); }}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   activeTab === 'ARCHIVED' 
                     ? 'bg-[#3A342B] text-[#F5F1EA] shadow-xs' 
                     : 'text-[#8A8174] hover:text-[#2A1E1B]'
                 }`}
               >
-                Archived Clients
+                Archived Services
               </button>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 sm:w-64">
+            <div className="relative flex-1 sm:w-56">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8A8174]" />
               <input
                 type="text"
-                placeholder="Search client name, email, or phone..."
+                placeholder="Search Here..."
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs text-[#2A1E1B] placeholder-[#8A8174] outline-none focus:border-[#C5A059] transition-all"
@@ -603,32 +364,66 @@ export default function ClientManagementView() {
 
             <div className="relative">
               <select
-                value={tierFilter}
-                onChange={(e) => { setTierFilter(e.target.value); setCurrentPage(1); }}
+                value={categoryFilter}
+                onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
                 className="appearance-none pl-9 pr-8 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs font-semibold text-[#443523] outline-none cursor-pointer focus:border-[#C5A059]"
               >
-                <option value="ALL">All Tiers</option>
-                <option value="VIP">VIP</option>
-                <option value="Regular">Regular</option>
+                <option value="ALL">All Categories</option>
+                <option value="HAIR">Hair</option>
+                <option value="NAILS">Nails</option>
+                <option value="SKIN">Skin</option>
               </select>
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8A8174] pointer-events-none" />
             </div>
 
             <button
               onClick={() => {
-                setEditingClient(null);
-                setClientForm({ fullName: '', email: '', contactNumber: '', gender: 'Female', tier: 'Regular', notes: '' });
-                setIsAddClientOpen(true);
+                setEditingService(null);
+                setServiceForm({ name: '', category: 'HAIR', price: '', durationHours: '1', durationMins: '0', description: '' });
+                setIsAddServiceOpen(true);
               }}
               className="flex items-center gap-2 bg-[#8B5E3C] hover:bg-[#724B2F] text-white px-4 py-2.5 rounded-xl text-xs font-semibold shadow-sm transition-all active:scale-95 border border-[#C5A059]/40"
             >
               <Plus className="h-4 w-4 text-[#F5F1EA]" />
-              <span>Add New Client</span>
+              <span>Add New Service</span>
+            </button>
+
+            <button
+              onClick={openPromoEditor}
+              className="flex items-center gap-2 bg-white hover:bg-[#FFFDF8] text-[#8B5E3C] px-4 py-2.5 rounded-xl text-xs font-semibold shadow-sm transition-all border border-[#8B5E3C]/30"
+            >
+              <Tag className="h-4 w-4 text-[#8B5E3C]" />
+              <span>Create promo / discount</span>
             </button>
           </div>
         </div>
 
-        {/* Clients Data Table */}
+        {/* Promo Banner Alert */}
+        {activeTab === 'ACTIVE' && (
+          <div className="bg-[#F7F4EF] border border-[#E8DDCF] rounded-2xl p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 bg-[#EFE4D4] text-[#8B5E3C] rounded-xl border border-[#DFCBB5] shrink-0">
+                <Tag className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-[#2A1E1B]">{activePromo.title}</h3>
+                <p className="text-[11px] text-[#8A8174] mt-0.5">
+                  <span className="font-semibold text-[#443523]">{activePromo.appliesTo}</span> &bull; <span className="text-[#8B5E3C] font-bold">{activePromo.discountText}</span> &bull; {formatPromoDate(activePromo.startDate)} – {formatPromoDate(activePromo.endDate)}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={openPromoEditor}
+              className="flex items-center gap-2 bg-[#8B5E3C] hover:bg-[#724B2F] text-white px-4 py-2.5 rounded-xl text-xs font-semibold transition-all shadow-xs self-start sm:self-auto border border-[#C5A059]/30"
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+              Edit Current Promo
+            </button>
+          </div>
+        )}
+
+        {/* Services Data Table */}
         <div className="overflow-x-auto overflow-y-visible rounded-xl border border-[#E9E4D8]">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -637,92 +432,79 @@ export default function ClientManagementView() {
                   <input
                     type="checkbox"
                     onChange={handleSelectAll}
-                    checked={selectedClientIds.length === paginatedClients.length && paginatedClients.length > 0}
+                    checked={selectedServiceIds.length === paginatedServices.length && paginatedServices.length > 0}
                     className="rounded border-[#E9E4D8] text-[#3A342B] focus:ring-0 cursor-pointer"
                   />
                 </th>
-                <th className="p-4">Client</th>
-                <th className="p-4">Contact</th>
-                <th className="p-4">Last Visit</th>
-                <th className="p-4">Total Visits</th>
-                <th className="p-4">Total Spend</th>
+                <th className="p-4">Category</th>
+                <th className="p-4">Service Name</th>
+                <th className="p-4">Duration</th>
+                <th className="p-4">Price</th>
                 <th className="p-4">Status</th>
                 <th className="p-4 text-right pr-6">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E9E4D8] text-xs">
-              {paginatedClients.length === 0 ? (
+              {paginatedServices.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="p-8 text-center text-[#8A8174]">
-                    No {activeTab.toLowerCase()} clients found.
+                  <td colSpan="7" className="p-8 text-center text-[#8A8174]">
+                    No {activeTab.toLowerCase()} services found.
                   </td>
                 </tr>
               ) : (
-                paginatedClients.map((c, index) => {
-                  const isSelected = selectedClientIds.includes(c.id);
-                  const isBottomRow = index >= paginatedClients.length - 2;
-                  const initials = c.fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                paginatedServices.map((s, index) => {
+                  const isSelected = selectedServiceIds.includes(s.id);
+                  const isBottomRow = index >= paginatedServices.length - 2;
 
                   return (
                     <tr 
-                      key={c.id} 
+                      key={s.id} 
                       className={`hover:bg-[#C5A059]/5 transition-colors ${isSelected ? 'bg-[#FFFDF0]' : ''}`}
                     >
                       <td className="p-4 pl-5">
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={() => handleSelectClient(c.id)}
+                          onChange={() => handleSelectService(s.id)}
                           className="rounded border-[#E9E4D8] text-[#3A342B] focus:ring-0 cursor-pointer"
                         />
                       </td>
 
                       <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-full ${c.avatarColor} text-white font-bold flex items-center justify-center text-xs shrink-0 border border-white shadow-xs`}>
-                            {initials}
-                          </div>
-                          <div>
-                            <div className="flex items-center">
-                              <span 
-                                onClick={() => { setSelectedClientProfile(c); setIsProfileModalOpen(true); }}
-                                className="font-bold text-[#2A1E1B] hover:text-[#8B5E3C] cursor-pointer"
-                              >
-                                {c.fullName}
-                              </span>
-                              {renderTierBadge(c.tier)}
-                            </div>
-                            <p className="text-[11px] text-[#8A8174]">{c.gender}</p>
-                          </div>
+                        {renderCategoryBadge(s.category)}
+                      </td>
+
+                      <td className="p-4">
+                        <div>
+                          <p className="font-bold text-[#2A1E1B]">{s.name}</p>
+                          <p className="text-[11px] text-[#8A8174] truncate max-w-xs">{s.description}</p>
                         </div>
                       </td>
 
-                      <td className="p-4">
-                        <p className="font-semibold text-[#2A1E1B]">{c.email}</p>
-                        <p className="text-[11px] text-[#8A8174]">{c.contactNumber}</p>
-                      </td>
-
                       <td className="p-4 text-[#443523] font-medium">
-                        {c.lastVisit}
-                      </td>
-
-                      <td className="p-4">
-                        <span className="bg-[#F6F4EF] text-[#443523] font-bold px-2.5 py-1 rounded-md border border-[#E9E4D8]">
-                          {c.totalVisits}
-                        </span>
+                        {s.duration}
                       </td>
 
                       <td className="p-4 text-[#2A1E1B] font-bold">
-                        {c.totalSpend}
+                        {s.price}
                       </td>
 
                       <td className="p-4">
-                        {renderStatusBadge(c.status, c.isArchived)}
+                        <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-3.5 py-1 rounded-full ${
+                          s.isArchived 
+                            ? 'bg-[#EFECE6] text-[#6E6359] border border-[#DFD5C0]' 
+                            : s.status === 'ACTIVE' 
+                              ? 'bg-[#E6F4EA] text-[#137333] border border-[#CEEAD6]' 
+                              : 'bg-[#FCE8E6] text-[#C5221F] border border-[#FAD2CF]'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${s.isArchived ? 'bg-[#6E6359]' : s.status === 'ACTIVE' ? 'bg-[#137333]' : 'bg-[#C5221F]'}`} />
+                          {s.isArchived ? 'ARCHIVED' : s.status}
+                        </span>
                       </td>
 
                       <td className="p-4 text-right pr-6 relative">
                         <button
-                          onClick={() => setActiveMenuId(activeMenuId === c.id ? null : c.id)}
+                          onClick={() => setActiveMenuId(activeMenuId === s.id ? null : s.id)}
                           className="p-2 rounded-lg hover:bg-[#E9E4D8]/50 text-[#8A8174] hover:text-[#2A1E1B] transition-colors"
                           title="Actions"
                         >
@@ -730,83 +512,67 @@ export default function ClientManagementView() {
                         </button>
 
                         {/* Dropdown Menu */}
-                        {activeMenuId === c.id && (
+                        {activeMenuId === s.id && (
                           <div className={`absolute right-6 w-52 bg-white rounded-xl shadow-xl border border-[#E9E4D8] py-1.5 z-40 text-left animate-fadeIn ${
                             isBottomRow ? 'bottom-12' : 'top-12'
                           }`}>
                             
-                            {!c.isArchived ? (
+                            {!s.isArchived ? (
                               <>
                                 <button
                                   onClick={() => {
-                                    setSelectedClientProfile(c);
-                                    setIsProfileModalOpen(true);
+                                    setEditingService(s);
+                                    setServiceForm({
+                                      name: s.name,
+                                      category: s.category,
+                                      price: s.price.replace('₱', '').replace(',', ''),
+                                      durationHours: s.duration.includes('hr') ? s.duration.split('hr')[0].trim() : '0',
+                                      durationMins: s.duration.includes('mins') ? s.duration.split('hr')[1]?.replace('mins', '').trim() || '30' : '0',
+                                      description: s.description
+                                    });
                                     setActiveMenuId(null);
+                                    setIsAddServiceOpen(true);
                                   }}
                                   className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium"
                                 >
-                                  <User className="h-3.5 w-3.5 text-[#8A8174]" />
-                                  View Profile
-                                </button>
-
-                                <button
-                                  onClick={() => {
-                                    setEditingClient(c);
-                                    setClientForm({
-                                      fullName: c.fullName,
-                                      email: c.email,
-                                      contactNumber: c.contactNumber,
-                                      gender: c.gender || 'Female',
-                                      tier: c.tier || 'Regular',
-                                      notes: c.notes || ''
-                                    });
-                                    setActiveMenuId(null);
-                                    setIsAddClientOpen(true);
-                                  }}
-                                  className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium border-t border-[#E9E4D8]"
-                                >
                                   <Edit3 className="h-3.5 w-3.5 text-[#8A8174]" />
-                                  Edit Details
+                                  Edit Service
                                 </button>
 
                                 <button
-                                  onClick={() => {
-                                    alert(`Redirecting to Booking Desk for ${c.fullName}...`);
-                                    setActiveMenuId(null);
-                                  }}
+                                  onClick={() => handleToggleStatus(s)}
                                   className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium border-t border-[#E9E4D8]"
                                 >
-                                  <Calendar className="h-3.5 w-3.5 text-[#8B5E3C]" />
-                                  Book Appointment
+                                  {s.status === 'ACTIVE' ? <UserX className="h-3.5 w-3.5 text-red-500" /> : <UserCheck className="h-3.5 w-3.5 text-emerald-600" />}
+                                  {s.status === 'ACTIVE' ? 'Set Inactive' : 'Set Active'}
                                 </button>
 
                                 <button
-                                  onClick={() => handleToggleArchive(c)}
+                                  onClick={() => handleToggleArchive(s)}
                                   className="w-full px-3.5 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 font-semibold border-t border-[#E9E4D8]"
                                 >
                                   <Archive className="h-3.5 w-3.5" />
-                                  Archive Client
+                                  Archive Service
                                 </button>
                               </>
                             ) : (
                               <>
                                 <button
-                                  onClick={() => handleToggleArchive(c)}
+                                  onClick={() => handleToggleArchive(s)}
                                   className="w-full px-3.5 py-2 text-xs text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 font-semibold"
                                 >
                                   <RotateCcw className="h-3.5 w-3.5" />
-                                  Restore Client
+                                  Restore Service
                                 </button>
                                 <button
                                   onClick={() => {
-                                    setSelectedClientProfile(c);
-                                    setIsProfileModalOpen(true);
+                                    alert(`Service Details:\nName: ${s.name}\nCategory: ${s.category}\nPrice: ${s.price}\nDuration: ${s.duration}\nDescription: ${s.description}`);
                                     setActiveMenuId(null);
                                   }}
                                   className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium border-t border-[#E9E4D8]"
                                 >
-                                  <Clock className="h-3.5 w-3.5 text-[#8A8174]" />
-                                  View History
+                                  <Search className="h-3.5 w-3.5 text-[#8A8174]" />
+                                  View Details
                                 </button>
                               </>
                             )}
@@ -825,7 +591,7 @@ export default function ClientManagementView() {
 
         {/* Pagination Footer */}
         <div className="flex flex-col sm:flex-row items-center justify-between text-xs text-[#8A8174] pt-1 gap-3">
-          <span>Showing {paginatedClients.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to {Math.min(currentPage * itemsPerPage, filteredClients.length)} of {filteredClients.length} items</span>
+          <span>Showing {paginatedServices.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to {Math.min(currentPage * itemsPerPage, filteredServices.length)} of {filteredServices.length} items</span>
           
           <div className="flex items-center gap-2">
             <button
@@ -850,55 +616,57 @@ export default function ClientManagementView() {
 
       </div>
 
-      {/* ================= MODAL 1: ADD / EDIT CLIENT ================= */}
-      {isAddClientOpen && (
+      {/* ================= MODAL 1: ADD / EDIT SERVICE ================= */}
+      {isAddServiceOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className="bg-white rounded-3xl border border-[#E9E4D8] shadow-2xl w-full max-w-lg p-6 sm:p-8 space-y-5">
             <div className="flex items-center justify-between border-b border-[#E9E4D8] pb-3">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-[#F6F4EF] text-[#8B5E3C] rounded-xl border border-[#E9E4D8]">
-                  <User className="h-4 w-4" />
+                  <Sparkles className="h-4 w-4" />
                 </div>
-                <h3 className="text-base font-bold text-[#2A1E1B]">{editingClient ? 'Edit Client Details' : 'Add New Client'}</h3>
+                <h3 className="text-base font-bold text-[#2A1E1B]">{editingService ? 'Edit Service' : 'Add New Service'}</h3>
               </div>
-              <button onClick={() => setIsAddClientOpen(false)} className="text-[#8A8174] hover:text-[#2A1E1B]">
+              <button onClick={() => setIsAddServiceOpen(false)} className="text-[#8A8174] hover:text-[#2A1E1B]">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddClientSubmit} className="space-y-4">
+            <form onSubmit={handleAddServiceSubmit} className="space-y-4">
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Full Name</label>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Service Name</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Natasha Romanoff"
-                  value={clientForm.fullName}
-                  onChange={(e) => setClientForm({ ...clientForm, fullName: e.target.value })}
+                  placeholder="e.g. Signature Rebonding"
+                  value={serviceForm.name}
+                  onChange={(e) => setServiceForm({ ...serviceForm, name: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="client@gmail.com"
-                    value={clientForm.email}
-                    onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059]"
-                  />
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Category</label>
+                  <select
+                    value={serviceForm.category}
+                    onChange={(e) => setServiceForm({ ...serviceForm, category: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs font-semibold text-[#443523] outline-none focus:border-[#C5A059]"
+                  >
+                    <option value="HAIR">Hair</option>
+                    <option value="NAILS">Nails</option>
+                    <option value="SKIN">Skin</option>
+                  </select>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Mobile Number</label>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Price (₱)</label>
                   <input
                     type="text"
-                    placeholder="09952347123"
-                    value={clientForm.contactNumber}
-                    onChange={(e) => setClientForm({ ...clientForm, contactNumber: e.target.value })}
+                    required
+                    placeholder="1,500"
+                    value={serviceForm.price}
+                    onChange={(e) => setServiceForm({ ...serviceForm, price: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059]"
                   />
                 </div>
@@ -906,39 +674,41 @@ export default function ClientManagementView() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Gender</label>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Duration (Hours)</label>
                   <select
-                    value={clientForm.gender}
-                    onChange={(e) => setClientForm({ ...clientForm, gender: e.target.value })}
+                    value={serviceForm.durationHours}
+                    onChange={(e) => setServiceForm({ ...serviceForm, durationHours: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs font-semibold text-[#443523] outline-none focus:border-[#C5A059]"
                   >
-                    <option value="Female">Female</option>
-                    <option value="Male">Male</option>
-                    <option value="LGBTQ+">LGBTQ+</option>
-                    <option value="Other">Other</option>
+                    <option value="0">0 hrs</option>
+                    <option value="1">1 hr</option>
+                    <option value="2">2 hrs</option>
+                    <option value="3">3 hrs</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Loyalty Tier</label>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Duration (Minutes)</label>
                   <select
-                    value={clientForm.tier}
-                    onChange={(e) => setClientForm({ ...clientForm, tier: e.target.value })}
+                    value={serviceForm.durationMins}
+                    onChange={(e) => setServiceForm({ ...serviceForm, durationMins: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs font-semibold text-[#443523] outline-none focus:border-[#C5A059]"
                   >
-                    <option value="Regular">Regular</option>
-                    <option value="VIP">VIP</option>
+                    <option value="0">0 mins</option>
+                    <option value="15">15 mins</option>
+                    <option value="30">30 mins</option>
+                    <option value="45">45 mins</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Notes & Preferences</label>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Description</label>
                 <textarea
                   rows={3}
-                  placeholder="e.g. Allergic to ammonia, prefers warm water..."
-                  value={clientForm.notes}
-                  onChange={(e) => setClientForm({ ...clientForm, notes: e.target.value })}
+                  placeholder="Enter brief description of the service..."
+                  value={serviceForm.description}
+                  onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059] resize-none"
                 />
               </div>
@@ -946,7 +716,7 @@ export default function ClientManagementView() {
               <div className="pt-3 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsAddClientOpen(false)}
+                  onClick={() => setIsAddServiceOpen(false)}
                   className="px-4 py-2.5 rounded-xl text-xs font-semibold text-[#8A8174] hover:bg-[#F6F4EF]"
                 >
                   Cancel
@@ -955,7 +725,7 @@ export default function ClientManagementView() {
                   type="submit"
                   className="px-6 py-2.5 rounded-xl bg-[#8B5E3C] hover:bg-[#724B2F] text-white text-xs font-bold shadow-md transition-all active:scale-95"
                 >
-                  {editingClient ? 'Save Changes' : 'Add Client'}
+                  {editingService ? 'Save Changes' : 'Add Service'}
                 </button>
               </div>
             </form>
@@ -963,87 +733,128 @@ export default function ClientManagementView() {
         </div>
       )}
 
-      {/* ================= MODAL 2: CLIENT PROFILE DRAWER / MODAL ================= */}
-      {isProfileModalOpen && selectedClientProfile && (
+      {/* ================= MODAL 2: CREATE / EDIT PROMO ================= */}
+      {isEditPromoOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white rounded-3xl border border-[#E9E4D8] shadow-2xl w-full max-w-2xl p-6 sm:p-8 space-y-6 max-h-[90vh] overflow-y-auto">
-            
-            {/* Header info */}
-            <div className="flex items-center justify-between border-b border-[#E9E4D8] pb-4">
-              <div className="flex items-center gap-3.5">
-                <div className={`w-12 h-12 rounded-full ${selectedClientProfile.avatarColor} text-white font-bold flex items-center justify-center text-sm border-2 border-[#C5A059] shadow-sm`}>
-                  {selectedClientProfile.fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+          <div className="bg-white rounded-3xl border border-[#E9E4D8] shadow-2xl w-full max-w-lg p-6 sm:p-8 space-y-5">
+            <div className="flex items-center justify-between border-b border-[#E9E4D8] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-[#F6F4EF] text-[#8B5E3C] rounded-xl border border-[#E9E4D8]">
+                  <Tag className="h-4 w-4" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-[#2A1E1B]">{selectedClientProfile.fullName}</h3>
-                    {renderTierBadge(selectedClientProfile.tier)}
-                  </div>
-                  <p className="text-xs text-[#8A8174]">{selectedClientProfile.email} &bull; {selectedClientProfile.contactNumber}</p>
-                </div>
+                <h3 className="text-base font-bold text-[#2A1E1B]">Create / Edit Promo</h3>
               </div>
-              <button onClick={() => setIsProfileModalOpen(false)} className="text-[#8A8174] hover:text-[#2A1E1B]">
+              <button onClick={() => setIsEditPromoOpen(false)} className="text-[#8A8174] hover:text-[#2A1E1B]">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Quick Metrics Grid */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-[#F7F4EF] p-4 rounded-2xl border border-[#E9E4D8] text-center">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8174]">Total Lifetime Spend</p>
-                <p className="text-base font-bold text-[#2A1E1B] mt-1">{selectedClientProfile.totalSpend}</p>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              setActivePromo({
+                title: promoForm.title,
+                appliesTo: promoForm.appliesTo,
+                discountText: promoForm.discountType === '% Off' ? `${promoForm.value}% off` : `₱${promoForm.value} off`,
+                startDate: promoForm.startDate,
+                endDate: promoForm.endDate,
+                status: 'ACTIVE'
+              });
+              setIsEditPromoOpen(false);
+              showToast(`Successfully updated promotional campaign!`);
+            }} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Promo Title</label>
+                <input
+                  type="text"
+                  required
+                  value={promoForm.title}
+                  onChange={(e) => setPromoForm({ ...promoForm, title: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059]"
+                />
               </div>
-              <div className="bg-[#F7F4EF] p-4 rounded-2xl border border-[#E9E4D8] text-center">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8174]">Total Visits</p>
-                <p className="text-base font-bold text-[#2A1E1B] mt-1">{selectedClientProfile.totalVisits}</p>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Applies to Service</label>
+                <input
+                  type="text"
+                  required
+                  value={promoForm.appliesTo}
+                  onChange={(e) => setPromoForm({ ...promoForm, appliesTo: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059]"
+                />
               </div>
-              <div className="bg-[#F7F4EF] p-4 rounded-2xl border border-[#E9E4D8] text-center">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8174]">Favorite Service</p>
-                <p className="text-xs font-bold text-[#8B5E3C] mt-1.5 truncate">{selectedClientProfile.favoriteService}</p>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Discount Type</label>
+                  <div className="grid grid-cols-2 gap-1 bg-[#F6F4EF] p-1 rounded-xl border border-[#E9E4D8]">
+                    {['% Off', '₱ Off'].map((type) => (
+                      <button
+                        type="button"
+                        key={type}
+                        onClick={() => setPromoForm({ ...promoForm, discountType: type })}
+                        className={`py-1.5 rounded-lg text-xs font-bold transition-all ${
+                          promoForm.discountType === type ? 'bg-[#8B5E3C] text-white shadow-xs' : 'text-[#8A8174]'
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Discount Value</label>
+                  <input
+                    type="text"
+                    required
+                    value={promoForm.value}
+                    onChange={(e) => setPromoForm({ ...promoForm, value: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059]"
+                  />
+                </div>
               </div>
-            </div>
 
-            {/* Notes / Preferences */}
-            <div className="bg-[#FFFDF3] border border-[#E9DCB3] p-4 rounded-2xl space-y-1">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[#B4833F]">Allergies & Special Notes</p>
-              <p className="text-xs text-[#443523] leading-relaxed">{selectedClientProfile.notes}</p>
-            </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={promoForm.startDate}
+                    onChange={(e) => setPromoForm({ ...promoForm, startDate: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059]"
+                  />
+                </div>
 
-            {/* Past Booking History */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-[#8A8174]">Recent Booking History</h4>
-              
-              <div className="space-y-2">
-                {selectedClientProfile.bookingHistory && selectedClientProfile.bookingHistory.length > 0 ? (
-                  selectedClientProfile.bookingHistory.map((b) => (
-                    <div key={b.id} className="flex items-center justify-between p-3.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8]">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-[#F6F4EF] text-[#8B5E3C] rounded-lg border border-[#E9E4D8]">
-                          <Sparkles className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-[#2A1E1B]">{b.service}</p>
-                          <p className="text-[10px] text-[#8A8174]">Completed on {b.date}</p>
-                        </div>
-                      </div>
-                      <span className="text-xs font-bold text-[#2A1E1B]">{b.amount}</span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-[#8A8174] text-center py-4">No past bookings recorded yet.</p>
-                )}
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">End Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={promoForm.endDate}
+                    onChange={(e) => setPromoForm({ ...promoForm, endDate: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059]"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="pt-2 flex justify-end">
-              <button
-                onClick={() => setIsProfileModalOpen(false)}
-                className="px-6 py-2.5 rounded-xl bg-[#8B5E3C] hover:bg-[#724B2F] text-white text-xs font-bold shadow-md transition-all"
-              >
-                Close Profile
-              </button>
-            </div>
-
+              <div className="pt-3 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditPromoOpen(false)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-[#8A8174] hover:bg-[#F6F4EF]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-[#8B5E3C] hover:bg-[#724B2F] text-white text-xs font-bold shadow-md transition-all active:scale-95"
+                >
+                  Save Promo
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
