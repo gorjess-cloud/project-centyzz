@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useWorkspaceTheme, WorkspaceNavigationContext } from './workspace/WorkspaceContext';
+import { workspacePages } from './workspace/navigation';
 import SuperAdminLayout from './superadmin/SuperAdminLayout';
 import AdminSidebar from './AdminSidebar';
 import DashboardView from '../pages/admin/DashboardView';
@@ -14,13 +16,15 @@ import AccountManagementView from '../pages/admin/AccountManagementView'; // Fix
 
 export default function AdminLayout({ currentUser, onLogout }) {
   const [activePage, setActivePage] = useState('dashboard');
+  const { theme } = useWorkspaceTheme();
 
   if (currentUser?.role?.toUpperCase() === 'SUPERADMIN') {
     return <SuperAdminLayout currentUser={currentUser} onLogout={onLogout} />;
   }
 
   return (
-    <div className="flex h-screen w-screen bg-[#F6F4EF] text-[#443523] overflow-hidden transition-colors duration-300">
+    <WorkspaceNavigationContext.Provider value={{ items: workspacePages, navigate: setActivePage }}>
+    <div data-theme={theme} className="workspace-theme flex h-screen w-screen bg-[#F6F4EF] text-[#443523] overflow-hidden transition-colors duration-300">
       {/* 1. Perfect 1:1 Matched Sidebar */}
       <AdminSidebar 
         activePage={activePage} 
@@ -33,7 +37,7 @@ export default function AdminLayout({ currentUser, onLogout }) {
       <main className="min-w-0 flex-1 h-full overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl">
           {activePage === 'dashboard' && (
-            <DashboardView />
+            <DashboardView currentUser={currentUser} />
           )}
 
           {/* USER MANAGEMENT ROUTE */}
@@ -72,5 +76,6 @@ export default function AdminLayout({ currentUser, onLogout }) {
         </div>
       </main>
     </div>
+    </WorkspaceNavigationContext.Provider>
   );
 }

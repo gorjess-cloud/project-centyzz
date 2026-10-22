@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { Menu, ShieldCheck, ShieldUser, X } from 'lucide-react';
 import AdminSidebar from '../AdminSidebar';
+import HeaderActions from '../workspace/HeaderActions';
+import { useWorkspaceTheme, WorkspaceNavigationContext } from '../workspace/WorkspaceContext';
+import { workspacePages } from '../workspace/navigation';
 import Overview, { AuditTable } from './Overview';
 import RolePermissions from './RolePermissions';
 import UserManagementView from '../../pages/admin/UserManagementView';
@@ -26,6 +29,7 @@ const demoUser = {
 export default function SuperAdminLayout({ currentUser = demoUser, onLogout = () => { window.location.href = '/'; } }) {
   const [activePage, setActivePage] = useState('dashboard');
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { theme } = useWorkspaceTheme();
   const name = currentUser.fullName || currentUser.name
     || [currentUser.firstName, currentUser.lastName].filter(Boolean).join(' ') || 'Super Admin';
 
@@ -35,21 +39,22 @@ export default function SuperAdminLayout({ currentUser = demoUser, onLogout = ()
   }
 
   const views = {
-    users: <UserManagementView showHeaderActions={false} currentUser={currentUser} />,
-    services: <ServiceManagementView showHeaderActions={false} />,
-    clients: <ClientManagementView showHeaderActions={false} currentUser={currentUser} />,
-    reports: <POSReportsView showHeaderActions={false} />,
-    logs: <OperationalLogsView showHeaderActions={false} />,
-    inventory: <InventoryManagementView showHeaderActions={false} />,
-    schedule: <ScheduleManagementView showHeaderActions={false} />,
-    settings: <SettingsView showHeaderActions={false} />,
-    account: <AccountManagementView showHeaderActions={false} currentUser={currentUser} />,
+    users: <UserManagementView currentUser={currentUser} />,
+    services: <ServiceManagementView />,
+    clients: <ClientManagementView currentUser={currentUser} />,
+    reports: <POSReportsView />,
+    logs: <OperationalLogsView />,
+    inventory: <InventoryManagementView />,
+    schedule: <ScheduleManagementView />,
+    settings: <SettingsView />,
+    account: <AccountManagementView currentUser={currentUser} />,
     roles: <RolePermissions />,
     audit: <AuditTable full />,
   };
 
   return (
-    <div className="sa-app">
+    <WorkspaceNavigationContext.Provider value={{ items: [...workspacePages, ...extraItems], navigate }}>
+    <div className="sa-app workspace-theme" data-theme={theme}>
       {mobileOpen && (
         <button className="sa-mobile-backdrop" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />
       )}
@@ -71,9 +76,11 @@ export default function SuperAdminLayout({ currentUser = demoUser, onLogout = ()
           <Menu size={21} />
         </button>
         <main className="sa-content" key={activePage}>
+          {['roles', 'audit'].includes(activePage) && <div className="workspace-toolbar"><HeaderActions /></div>}
           {activePage === 'dashboard' ? <Overview name={name} onNavigate={navigate} /> : views[activePage]}
         </main>
       </div>
     </div>
+    </WorkspaceNavigationContext.Provider>
   );
 }
