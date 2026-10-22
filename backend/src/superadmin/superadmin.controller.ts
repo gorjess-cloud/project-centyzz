@@ -25,6 +25,8 @@ import { UpdateUserRoleDto } from './dto/update-user-role.dto.js';
 import { UseInterceptors } from '@nestjs/common';
 import { AuditInterceptor } from '../audit/audit.interceptor.js';
 import { AuditAction } from '../audit/audit-action.decorator.js';
+import { ArchiveUserDto } from './dto/archive-user.dto.js';
+import { UpdateServicePriceDto } from './dto/update-service-price.dto.js';
 
 @Controller('api/superadmin')
 @UseGuards(JwtAuthGuard, SuperadminGuard)
@@ -39,9 +41,6 @@ export class SuperadminController {
     return this.superadminService.getAllUsers();
   }
 
-  // PATCH /api/superadmin/users/:id/role
-  
-  // PATCH /api/superadmin/users/:id/role
   @Patch('users/:id/role')
   @AuditAction('USER_ROLE_CHANGED', 'USER')
   @UseInterceptors(AuditInterceptor)
@@ -80,4 +79,31 @@ export class SuperadminController {
       limit,
     );
   }
+  
+  @Patch('users/:id/archive')
+  archiveUser(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: ArchiveUserDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.superadminService.archiveUser(
+      id,
+      request.user.sub,
+      body.reason,
+    );
+  }
+  
+  @Patch('services/:id/price')
+  updateServicePrice(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: UpdateServicePriceDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.superadminService.updateServicePrice(
+      id,
+      body.price,
+      request.user.sub,
+    );
+  }
+
 }
