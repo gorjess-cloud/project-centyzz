@@ -16,7 +16,7 @@ import {
   UserPlus
 } from 'lucide-react';
 
-export default function ScheduleManagementView() {
+export default function ScheduleManagementView({ showHeaderActions = true }) {
   const [toastMessage, setToastMessage] = useState('');
 
   // Main Tab State: 'active' vs 'archived'
@@ -268,7 +268,7 @@ export default function ScheduleManagementView() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        {showHeaderActions && (<div className="flex items-center gap-2 shrink-0">
           <button className="p-2.5 rounded-full border border-[#E7DFD4] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6] transition-colors">
             <Moon size={16} />
           </button>
@@ -279,7 +279,7 @@ export default function ScheduleManagementView() {
             <Bell size={16} />
             <span className="absolute top-1 right-1 w-2 h-2 bg-[#C5A059] rounded-full ring-2 ring-white"></span>
           </button>
-        </div>
+        </div>)}
       </header>
 
       {/* Top Metric Cards (Placed directly above the main container) */}

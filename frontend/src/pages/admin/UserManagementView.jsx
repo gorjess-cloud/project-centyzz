@@ -19,7 +19,7 @@ import {
   Bell
 } from 'lucide-react';
 
-export default function UserManagementView({ currentUser }) {
+export default function UserManagementView({ currentUser, showHeaderActions = true }) {
   const loggedInRole = (currentUser?.role || 'ADMIN').toUpperCase();
   const loggedInEmail = currentUser?.email || 'MillicentCampillos@example.com';
 
@@ -247,7 +247,7 @@ export default function UserManagementView({ currentUser }) {
         </div>
 
         {/* Group 2: System Quick Actions */}
-        <div className="flex items-center gap-2 shrink-0">
+        {showHeaderActions && (<div className="flex items-center gap-2 shrink-0">
           <button className="p-2.5 rounded-full border border-[#E7DFD4] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6] transition-colors">
             <Moon size={16} />
           </button>
@@ -258,7 +258,7 @@ export default function UserManagementView({ currentUser }) {
             <Bell size={16} />
             <span className="absolute top-1 right-1 w-2 h-2 bg-[#C5A059] rounded-full ring-2 ring-white"></span>
           </button>
-        </div>
+        </div>)}
       </header>
 
       {/* Main Workspace Card */}
