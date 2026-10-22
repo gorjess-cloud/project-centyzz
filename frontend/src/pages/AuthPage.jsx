@@ -18,12 +18,13 @@ export default function AuthPage({
   mode = 'login', 
   setMode, 
   onBackToSalon, 
-  onPreviewDashboard, 
   onAuthenticated, 
   isDarkMode, 
   setIsDarkMode 
 }) {
   const isSignup = mode === 'signup';
+  const isForgotPassword = mode === 'forgot-password';
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -34,6 +35,11 @@ export default function AuthPage({
   const [activeValidationField, setActiveValidationField] = useState('');
   const [formMessage, setFormMessage] = useState({ type: '', text: '' });
   
+  // Forgot Password / Reset Password State
+  const [isResetOtpStep, setIsResetOtpStep] = useState(false);
+  const [resetOtp, setResetOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+
   // Client OTP State
   const [isOtpStep, setIsOtpStep] = useState(false);
   const [otp, setOtp] = useState(() => Array(6).fill(''));
@@ -104,7 +110,7 @@ export default function AuthPage({
       }
     }
 
-    if (!normalizedEmail || !password) {
+    if (!isForgotPassword && (!normalizedEmail || !password)) {
       setFormMessage({ type: 'error', text: 'Please enter your email address and password.' });
       return;
     }
@@ -116,6 +122,7 @@ export default function AuthPage({
 
     setIsSubmitting(true);
     try {
+      // 1. SIGNUP FLOW
       if (isSignup) {
         await api.register({
           firstName: firstName.trim(),
@@ -130,28 +137,38 @@ export default function AuthPage({
         return;
       }
 
-      // 1. Try real backend API call first
-      let user, accessToken;
-      try {
-        const result = await api.login({ email: normalizedEmail, password });
-        user = result.data?.user;
-        accessToken = result.data?.accessToken;
-      } catch {
-        // 2. Fallback to mock login if NestJS backend is offline
-        console.warn('Backend server offline. Falling back to frontend mock authentication.');
-        const isClient = normalizedEmail.includes('client');
-        user = {
-          id: 'usr_admin_123',
-          firstName: 'Millicent',
-          lastName: 'Campillos',
-          email: normalizedEmail,
-          role: isClient ? 'CLIENT' : 'ADMIN',
-        };
-        accessToken = 'mock_dev_access_token';
+      // 2. FORGOT PASSWORD FLOW - REQUEST OTP
+      if (isForgotPassword && !isResetOtpStep) {
+        await api.forgotPassword({ email: normalizedEmail });
+        setIsResetOtpStep(true);
+        setFormMessage({ type: 'info', text: 'If that email is registered, an OTP code has been sent to reset your password.' });
+        return;
       }
 
-      // Check role routing
-      const userRole = user?.role?.toUpperCase();
+      // 3. RESET PASSWORD FLOW - SUBMIT NEW PASSWORD + OTP
+      if (isForgotPassword && isResetOtpStep) {
+        await api.resetPassword({
+          email: normalizedEmail,
+          otp: resetOtp.trim(),
+          newPassword,
+        });
+        setFormMessage({ type: 'success', text: 'Password reset successfully! You can now log in.' });
+        setIsResetOtpStep(false);
+        setMode?.('login');
+        return;
+      }
+
+      // 4. REAL BACKEND LOGIN FLOW (PURE DATABASE DATA)
+      const result = await api.login({ email: normalizedEmail, password });
+      const user = result.data?.user;
+      const accessToken = result.data?.accessToken;
+
+      if (!user || !accessToken) {
+        throw new Error('Authentication failed. Server returned an invalid payload.');
+      }
+
+      // Dynamic Role Evaluation from DB response
+      const userRole = (user?.role || '').toUpperCase();
       const isEmployee = ['ADMIN', 'SUPERADMIN', 'STAFF'].includes(userRole);
 
       if (isEmployee) {
@@ -183,11 +200,17 @@ export default function AuthPage({
 
     try {
       const result = await api.googleLogin(idToken);
-      const user = result.data.user;
-      const accessToken = result.data.accessToken;
-      const userRole = user?.role?.toUpperCase();
+      const user = result.data?.user;
+      const accessToken = result.data?.accessToken;
 
-      if (['ADMIN', 'SUPERADMIN', 'STAFF'].includes(userRole)) {
+      if (!user || !accessToken) {
+        throw new Error('Google sign-in failed. Invalid payload returned from backend.');
+      }
+
+      const userRole = (user?.role || '').toUpperCase();
+      const isEmployee = ['ADMIN', 'SUPERADMIN', 'STAFF'].includes(userRole);
+
+      if (isEmployee) {
         setPendingUser(user);
         setPendingAccessToken(accessToken);
         setPin(Array(6).fill(''));
@@ -256,7 +279,6 @@ export default function AuthPage({
 
     setIsSubmitting(true);
     try {
-      // Complete authentication flow and proceed to dashboard
       onAuthenticated?.(pendingUser, pendingAccessToken);
     } catch (error) {
       setFormMessage({ type: 'error', text: error?.message || 'PIN verification failed. Please try again.' });
@@ -299,23 +321,10 @@ export default function AuthPage({
     setIsOtpVerified(false);
     setIsOtpStep(false);
     setIsPinStep(false);
+    setIsResetOtpStep(false);
+    setPendingUser(null);
+    setPendingAccessToken('');
     setFormMessage({ type: '', text: '' });
-  };
-
-  const handlePreviewDashboard = (profile = {}) => {
-    const submittedName = profile.firstName || email.trim().split('@')[0].replace(/[._-]+/g, ' ');
-    const displayName = submittedName
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ') || 'Jennie';
-
-    onPreviewDashboard?.({
-      ...profile,
-      name: displayName,
-      email: profile.email || email.trim() || 'jennie@example.com',
-      role: 'CLIENT', // 👈 Explicitly set as CLIENT for member dashboard preview
-    });
   };
 
   const panelBase = isDarkMode ? 'bg-[#111111] text-[#F5F1EA]' : 'bg-[#F4EFE6] text-[#2A201C]';
@@ -396,16 +405,26 @@ export default function AuthPage({
           {/* Dynamic Header */}
           <div className="transition-all duration-300 ease-in-out transform">
             <h2 className={`font-serif text-3xl ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#121212]'}`}>
-              {isPinStep ? 'Employee Log In' : isOtpStep ? 'Enter the Code' : isSignup ? 'Create an Account' : 'Welcome Back'}
+              {isPinStep 
+                ? 'Employee Log In' 
+                : isOtpStep 
+                  ? 'Enter the Code' 
+                  : isForgotPassword 
+                    ? 'Reset Password' 
+                    : isSignup 
+                      ? 'Create an Account' 
+                      : 'Welcome Back'}
             </h2>
             <p className={`mt-2 text-xs ${softText}`}>
               {isPinStep 
-                ? 'Choose an account to start your shift' 
+                ? 'Verify shift PIN to continue' 
                 : isOtpStep 
                   ? `Enter the six-digit code from your email${email.trim() ? ` (${email.trim()})` : ''}.` 
-                  : isSignup 
-                    ? 'Register to manage your bookings & profile' 
-                    : 'Sign in to access your bookings & profile'}
+                  : isForgotPassword 
+                    ? isResetOtpStep ? 'Enter your OTP code and new password' : 'Enter your email to receive a password reset code'
+                    : isSignup 
+                      ? 'Register to manage your bookings & profile' 
+                      : 'Sign in to access your bookings & profile'}
             </p>
           </div>
 
@@ -431,7 +450,7 @@ export default function AuthPage({
             </p>
           )}
 
-          {/* VIEW 1: STANDARD LOGIN & REGISTRATION FORM */}
+          {/* VIEW 1: STANDARD LOGIN, REGISTRATION & FORGOT PASSWORD FORM */}
           {!isOtpStep && !isPinStep && (
             <form onSubmit={handleSubmit} className="mt-8 space-y-4 text-left">
               
@@ -496,36 +515,87 @@ export default function AuthPage({
               </div>
 
               {/* Password */}
-              <div>
-                <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
-                  PASSWORD
-                </label>
-                <div className="relative mt-1.5">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      if (isSignup) setActiveValidationField('password');
-                    }}
-                    onFocus={() => isSignup && setActiveValidationField('password')}
-                    onBlur={() => setActiveValidationField('')}
-                    placeholder="Enter Your Password"
-                    required
-                    className={`${fieldClass} mt-0 pr-12`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((visible) => !visible)}
-                    className={`absolute right-3 top-1/2 -translate-y-1/2 ${softText}`}
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-                {renderFieldError('password')}
-              </div>
+              {!isForgotPassword && (
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
+                      PASSWORD
+                    </label>
+                    
+                    {!isSignup && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormMessage({ type: '', text: '' });
+                          setMode?.('forgot-password');
+                        }}
+                        className="text-[10px] text-[#C5A059] hover:underline font-semibold"
+                      >
+                        Forgot password?
+                      </button>
+                    )}
+                  </div>
 
-              {/* Confirm Password */}
+                  <div className="relative mt-1.5">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (isSignup) setActiveValidationField('password');
+                      }}
+                      onFocus={() => isSignup && setActiveValidationField('password')}
+                      onBlur={() => setActiveValidationField('')}
+                      placeholder="Enter Your Password"
+                      required={!isForgotPassword}
+                      className={`${fieldClass} mt-0 pr-12`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((visible) => !visible)}
+                      className={`absolute right-3 top-1/2 -translate-y-1/2 ${softText}`}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {renderFieldError('password')}
+                </div>
+              )}
+
+              {/* FORGOT PASSWORD STEP 2 */}
+              {isForgotPassword && isResetOtpStep && (
+                <div className="space-y-4 pt-1">
+                  <div>
+                    <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
+                      6-DIGIT OTP CODE
+                    </label>
+                    <input
+                      type="text"
+                      value={resetOtp}
+                      onChange={(e) => setResetOtp(e.target.value)}
+                      placeholder="Enter 6-digit OTP code"
+                      required
+                      className={fieldClass}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
+                      NEW PASSWORD
+                    </label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter your new password"
+                      required
+                      className={fieldClass}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Confirm Password (Signup Only) */}
               <div 
                 className={`overflow-hidden transition-all duration-500 ease-in-out ${
                   isSignup ? 'max-h-24 opacity-100 translate-y-0 mt-3' : 'max-h-0 opacity-0 -translate-y-2 pointer-events-none'
@@ -565,36 +635,42 @@ export default function AuthPage({
                 disabled={isSubmitting}
                 className="mt-4 w-full rounded-md bg-[#C5A059] py-3 text-xs font-semibold uppercase tracking-[0.2em] text-white shadow-sm transition-all duration-300 hover:bg-[#D8B775] active:scale-[0.99]"
               >
-                {isSubmitting ? 'Please wait…' : isSignup ? 'Register Now' : 'Log In'}
+                {isSubmitting 
+                  ? 'Please wait…' 
+                  : isForgotPassword 
+                    ? isResetOtpStep ? 'Save New Password' : 'Send Reset Code'
+                    : isSignup 
+                      ? 'Register Now' 
+                      : 'Log In'}
               </button>
             </form>
           )}
 
-          {/* VIEW 2: EMPLOYEE / ADMIN 2FA PIN KEYPAD VERIFICATION */}
+          {/* VIEW 2: EMPLOYEE / ADMIN 2FA PIN VERIFICATION (PURE DYNAMIC DB DATA) */}
           {isPinStep && (
             <div className="space-y-5 animate-fadeIn">
               
-              {/* Employee Account Profile Card */}
+              {/* Dynamic Employee Account Card derived entirely from DB user payload */}
               <div className="bg-[#3A342B] text-white p-4 rounded-2xl shadow-md flex items-center justify-between border border-[#C5A059]/40 text-left">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-full bg-[#2A1E1B] border-2 border-[#C5A059] overflow-hidden flex items-center justify-center font-bold text-lg text-[#C5A059]">
-                    {pendingUser?.firstName?.charAt(0) || 'A'}
+                    {pendingUser?.firstName?.charAt(0) || pendingUser?.email?.charAt(0)?.toUpperCase() || 'U'}
                   </div>
                   <div>
                     <h3 className="font-bold text-sm text-[#F5F1EA]">
-                      {pendingUser?.firstName || 'Millicent'} {pendingUser?.lastName || 'Campillos'}
+                      {pendingUser?.firstName ? `${pendingUser.firstName} ${pendingUser.lastName || ''}`.trim() : 'Authenticated Employee'}
                     </h3>
                     <p className="text-[10px] text-gray-300 font-mono">
-                      {pendingUser?.email || email}
+                      {pendingUser?.email}
                     </p>
                   </div>
                 </div>
                 <span className="bg-[#C5A059] text-[#1F1A17] text-[10px] font-extrabold uppercase px-3 py-1 rounded-full tracking-wider shadow-sm">
-                  {pendingUser?.role || 'ADMIN'}
+                  {pendingUser?.role || 'STAFF'}
                 </span>
               </div>
 
-              {/* PIN Display Circle Indicators */}
+              {/* PIN Inputs */}
               <div className="text-center space-y-3">
                 <p className="text-xs font-medium text-gray-500">
                   Please input your PIN to validate yourself
@@ -622,7 +698,7 @@ export default function AuthPage({
                 </button>
               </div>
 
-              {/* Re-themed Luxury Numpad */}
+              {/* Numpad */}
               <div className="grid grid-cols-3 gap-2.5 max-w-xs mx-auto pt-1">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
                   <button
@@ -639,7 +715,6 @@ export default function AuthPage({
                   </button>
                 ))}
 
-                {/* Direct Action Key */}
                 <button
                   type="button"
                   onClick={handleVerifyPin}
@@ -649,7 +724,6 @@ export default function AuthPage({
                   <LogIn size={18} />
                 </button>
 
-                {/* Zero Key */}
                 <button
                   type="button"
                   onClick={() => handlePinNumpadClick(0)}
@@ -662,7 +736,6 @@ export default function AuthPage({
                   0
                 </button>
 
-                {/* Backspace Key */}
                 <button
                   type="button"
                   onClick={handlePinBackspace}
@@ -673,7 +746,7 @@ export default function AuthPage({
                 </button>
               </div>
 
-              {/* Start Shift Main CTA Button */}
+              {/* CTA */}
               <button
                 type="button"
                 onClick={handleVerifyPin}
@@ -729,20 +802,6 @@ export default function AuthPage({
                 </button>
               )}
 
-              {isOtpVerified && (
-                <button
-                  type="button"
-                  onClick={() => handlePreviewDashboard({
-                    firstName,
-                    lastName,
-                    email: email.trim(),
-                  })}
-                  className="w-full rounded-md bg-[#C5A059] py-3 text-xs font-semibold uppercase tracking-[0.16em] text-white transition-colors hover:bg-[#D8B775]"
-                >
-                  Preview Member Dashboard
-                </button>
-              )}
-
               <div className="flex justify-between text-xs pt-2">
                 <button
                   type="button"
@@ -758,43 +817,7 @@ export default function AuthPage({
           {/* Social Logins and Switcher Footer */}
          {!isOtpStep && !isPinStep && (
             <>
-              <div className="space-y-2 pt-2 text-center">
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => handlePreviewDashboard()}
-                    className={`text-[11px] underline underline-offset-2 ${softText} hover:text-[#C5A059]`}
-                  >
-                    Preview signed-in member dashboard
-                  </button>
-                </div>
-                
-                {/* 👈 Added Employee 2FA Preview Button */}
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPendingUser({
-                        firstName: 'Millicent',
-                        lastName: 'Campillos',
-                        email: 'MillicentCampillos@example.com',
-                        role: 'ADMIN',
-                      });
-                      setIsPinStep(true);
-                      setFormMessage({ 
-                        type: 'info', 
-                        text: 'Employee credentials verified. Please enter your 6-digit shift PIN.' 
-                      });
-                    }}
-                    className="text-[11px] text-[#C5A059] hover:underline font-bold tracking-wide"
-                  >
-                    Preview Employee / Admin 2FA Flow →
-                  </button>
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="relative my-4">
+              <div className="relative my-4 pt-2">
                 <div className="absolute inset-0 flex items-center">
                   <div className={`w-full border-t ${divider}`} />
                 </div>
@@ -803,7 +826,7 @@ export default function AuthPage({
                 </div>
               </div>
 
-              {!isSignup && (
+              {!isSignup && !isForgotPassword && (
                 <div className="flex justify-center">
                   <GoogleLogin
                     onSuccess={handleGoogleSuccess}
@@ -824,7 +847,22 @@ export default function AuthPage({
               )}
 
               <div className="pt-2 text-xs">
-                {isSignup ? (
+                {isForgotPassword ? (
+                  <p className={softText}>
+                    Remembered your password?{' '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormMessage({ type: '', text: '' });
+                        setIsResetOtpStep(false);
+                        setMode?.('login');
+                      }}
+                      className="font-semibold text-[#C5A059] hover:underline uppercase transition-colors"
+                    >
+                      SIGN IN HERE
+                    </button>
+                  </p>
+                ) : isSignup ? (
                   <p className={softText}>
                     Already have an account?{' '}
                     <button
