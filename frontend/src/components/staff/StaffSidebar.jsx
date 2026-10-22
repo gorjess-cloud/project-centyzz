@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Receipt, CalendarClock, ClipboardCheck, Settings, LogOut, ChevronLeft } from 'lucide-react';
+import { Receipt, CalendarClock, ClipboardCheck, Settings, LogOut, ChevronLeft, Moon, Sun } from 'lucide-react';
 import { ConfirmModal } from './ui';
+import { useWorkspaceTheme } from '../workspace/WorkspaceContext';
 
 const ITEMS = [
   { id: 'pos', label: 'POS', icon: Receipt },
@@ -12,6 +13,8 @@ const ITEMS = [
 export default function StaffSidebar({ activePage, setActivePage, currentUser, onLogout }) {
   const [open, setOpen] = useState(typeof window === 'undefined' || window.innerWidth >= 1024);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const { theme, toggleTheme } = useWorkspaceTheme();
+  const dark = theme === 'dark';
   const name = currentUser?.fullName || [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(' ') || 'Jessica Palma';
   const initials = name.split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
 
@@ -35,6 +38,14 @@ export default function StaffSidebar({ activePage, setActivePage, currentUser, o
               <span className="block pt-0.5 text-[8px] font-medium uppercase tracking-[0.25em] text-[#C5A059]">Hair & Beauty</span>
             </div>
           )}
+        </button>
+      </div>
+
+      <div className="border-b border-[#E7DFD4] px-3 py-3">
+        <button type="button" onClick={toggleTheme} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} aria-pressed={dark} title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+          className={`flex w-full items-center rounded-xl p-3 text-[#443523] transition-all hover:bg-[#C5A059]/15 active:scale-95 ${open ? 'gap-4 pl-5' : 'justify-center'}`}>
+          {dark ? <Sun size={20} /> : <Moon size={20} />}
+          {open && <span className="text-sm font-medium">{dark ? 'Light mode' : 'Dark mode'}</span>}
         </button>
       </div>
 

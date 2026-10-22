@@ -66,5 +66,12 @@
 .workspace-theme[data-theme="dark"] .sa-role-tabs button.active { background: #615039; color: #fff4df; }
 .workspace-theme[data-theme="dark"] .sa-permission-grid label { border-color: var(--workspace-border); }
 .workspace-theme[data-theme="dark"] .sa-page-menu { background: var(--workspace-surface); border-color: var(--workspace-border); color: var(--workspace-text); }
+.workspace-theme[data-theme="dark"].staff-workspace :is([class~="bg-[#FFFDF2]"], [class~="bg-[#FBFAF6]"], [class~="bg-[#FBF8F1]"], [class~="bg-[#FBF7E9]"], [class~="bg-[#F3EDDF]"], [class~="bg-[#EEEEEE]"], [class~="bg-[#EBDBC8]"], [class~="bg-[#E7DFD4]"]) { background-color: var(--workspace-subtle); }
+.workspace-theme[data-theme="dark"].staff-workspace :is([class~="text-[#514633]"], [class~="text-[#5D5549]"], [class~="text-[#716B61]"], [class~="text-[#746342]"], [class~="text-[#756D60]"], [class~="text-[#76664A]"], [class~="text-[#8B7045]"], [class~="text-[#8C6D3B]"], [class~="text-[#8B5E3C]"]) { color: var(--workspace-muted); }
+.workspace-theme[data-theme="dark"].staff-workspace :is([class*="border-[#E5DECF]"], [class*="border-[#E2DDCF]"], [class*="border-[#E4DED2]"], [class*="border-[#E8E0D2]"], [class*="border-[#B9B07A]"]) { border-color: var(--workspace-border); }
+.workspace-theme[data-theme="dark"].staff-workspace :is([class~="bg-rose-50"], [class~="bg-red-50"]) { background-color: #382522; }
+.workspace-theme[data-theme="dark"].staff-workspace :is([class~="text-rose-600"], [class~="text-red-600"]) { color: #f0a99b; }
+.workspace-theme[data-theme="dark"].staff-workspace :is([class~="text-[#2A1E1B]"], [class~="text-[#443523]"], [class~="text-[#4A3928]"]) { color: var(--workspace-text); }
+.workspace-theme[data-theme="dark"].staff-workspace [role="dialog"], .workspace-theme[data-theme="dark"].staff-workspace [role="alertdialog"] { background-color: var(--workspace-surface); color: var(--workspace-text); border-color: var(--workspace-border); }
 @media(max-width:720px) { .sa-overview-tools { align-items: flex-start; width: 100%; } .sa-overview-tools .workspace-actions { align-self: flex-end; } .workspace-theme header { flex-wrap: wrap; } .workspace-theme header>.workspace-actions { margin-left: auto; } .workspace-action { width: 44px; height: 44px; } }
 @media(prefers-reduced-motion:reduce) { .workspace-action { transition: none; } }

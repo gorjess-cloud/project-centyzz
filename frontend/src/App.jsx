@@ -14,6 +14,7 @@ import MemberHomePage from './pages/MemberHomePage';
 import MemberServicesPage from './pages/MemberServicesPage';
 import MemberBookingsPage from './pages/MemberBookingsPage';
 import MemberBook from './pages/MemberBook';
+import { useWorkspaceTheme } from './components/workspace/WorkspaceContext';
 
 
 export default function App() {
@@ -23,7 +24,12 @@ export default function App() {
   const [selectedService, setSelectedService] = useState(null);
   const [bookingSessionId, setBookingSessionId] = useState(0);
   const [authMode, setAuthMode] = useState('login');
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const { theme, toggleTheme } = useWorkspaceTheme();
+  const isDarkMode = theme === 'dark';
+  const setIsDarkMode = (next) => {
+    const resolved = typeof next === 'function' ? next(isDarkMode) : next;
+    if (Boolean(resolved) !== isDarkMode) toggleTheme();
+  };
   const [memberUser, setMemberUser] = useState(null);
   const [memberAppointments, setMemberAppointments] = useState([]);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
