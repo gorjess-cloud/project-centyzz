@@ -5,6 +5,7 @@ import {
   BadRequestException,
   ForbiddenException,
   NotFoundException,
+  ConflictException,
 } from '@nestjs/common';
 
 @Injectable()
@@ -344,4 +345,240 @@ export class SuperadminService {
       },
     };
   }
+  
+  async archiveUser(
+    targetUserId: number,
+    actorUserId: number,
+    reason: string,
+  ) {
+    if (
+      typeof reason !== 'string' ||
+      !reason.trim() ||
+      reason.trim().length > 500
+    ) {
+      throw new BadRequestException(
+        'Archive reason must contain 1 to 500 characters',
+      );
+    }
+
+    if (targetUserId === actorUserId) {
+      throw new ForbiddenException(
+        'You cannot archive your own account',
+      );
+    }
+
+    const targetUser = await db.orm.public.User
+      .where({ id: targetUserId })
+      .first();
+
+    if (!targetUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (targetUser.role === 'SUPERADMIN') {
+      throw new ForbiddenException(
+        'Superadmin accounts cannot be archived',
+      );
+    }
+
+    const archiveReason = reason.trim();
+
+    // Archive the user and record an audit event atomically.
+    const plan = db.raw.sql`
+      WITH archived AS (
+        UPDATE public."user"
+        SET
+          "isActive" = FALSE,
+          "updatedAt" = NOW(),
+          archived_at = NOW(),
+          archived_by = ${actorUserId},
+          archive_reason = ${archiveReason}
+        WHERE id = ${targetUserId}
+          AND id <> ${actorUserId}
+          AND role <> 'SUPERADMIN'
+          AND archived_at IS NULL
+        RETURNING id, email
+      ),
+      logged AS (
+        INSERT INTO public.audit_logs (
+          actor_id,
+          action,
+          entity_type,
+          entity_id,
+          new_values,
+          reason
+        )
+        SELECT
+          ${actorUserId},
+          'USER_ARCHIVED',
+          'USER',
+          archived.id::text,
+          jsonb_build_object(
+            'isActive', false,
+            'archived', true
+          ),
+          ${archiveReason}
+        FROM archived
+        RETURNING id
+      )
+      SELECT
+        archived.id,
+        archived.email::text AS email
+      FROM archived
+      INNER JOIN logged ON TRUE
+    `
+      .returnsRow({
+        id: 'pg/int4@1',
+        email: 'pg/text@1',
+      })
+      .build();
+
+    const results = await db.runtime().query(plan);
+    const archivedUser = results[0];
+
+    if (!archivedUser) {
+      throw new ConflictException(
+        'User is already archived or was modified concurrently',
+      );
+    }
+
+    return {
+      success: true,
+      message: 'User archived successfully',
+      data: {
+        id: archivedUser.id,
+        email: archivedUser.email,
+        isActive: false,
+        isArchived: true,
+        archivedBy: actorUserId,
+      },
+    };
+  }
+  async updateServicePrice(
+    serviceId: number,
+    newPrice: number,
+    actorUserId: number,
+  ) {
+    // Validate price even if ValidationPipe isn't enabled.
+    if (
+      typeof newPrice !== 'number' ||
+      !Number.isFinite(newPrice) ||
+      newPrice <= 0 ||
+      !/^\d+(\.\d{1,2})?$/.test(String(newPrice))
+    ) {
+      throw new BadRequestException(
+        'Price must be greater than zero with at most 2 decimal places',
+      );
+    }
+
+    // Check that the service exists and is not archived.
+    const checkPlan = db.raw.sql`
+      SELECT
+        id,
+        price::text AS price
+      FROM public.services
+      WHERE id = ${serviceId}
+        AND archived_at IS NULL
+    `
+      .returnsRow({
+        id: 'pg/int4@1',
+        price: 'pg/text@1',
+      })
+      .build();
+
+    const [service] = await db.runtime().query(checkPlan);
+
+    if (!service) {
+      throw new NotFoundException(
+        'Service not found or archived',
+      );
+    }
+
+    // Don't record an audit event if nothing changed.
+    if (Number(service.price) === newPrice) {
+      return {
+        success: true,
+        message: 'Service already has this price',
+        data: {
+          id: service.id,
+          price: Number(service.price),
+        },
+      };
+    }
+
+    // Update service and insert audit event atomically.
+    const plan = db.raw.sql`
+      WITH current_service AS (
+        SELECT id, price
+        FROM public.services
+        WHERE id = ${serviceId}
+          AND archived_at IS NULL
+        FOR UPDATE
+      ),
+      changed AS (
+        UPDATE public.services AS s
+        SET
+          price = ${newPrice}::numeric,
+          updated_at = NOW()
+        FROM current_service AS old
+        WHERE s.id = old.id
+          AND old.price IS DISTINCT FROM ${newPrice}::numeric
+        RETURNING
+          s.id,
+          old.price AS old_price,
+          s.price AS new_price
+      ),
+      logged AS (
+        INSERT INTO public.audit_logs (
+          actor_id,
+          action,
+          entity_type,
+          entity_id,
+          old_values,
+          new_values
+        )
+        SELECT
+          ${actorUserId},
+          'PRICE_CHANGED',
+          'SERVICE',
+          changed.id::text,
+          jsonb_build_object('price', changed.old_price),
+          jsonb_build_object('price', changed.new_price)
+        FROM changed
+        RETURNING id
+      )
+      SELECT
+        changed.id,
+        changed.old_price::text AS "oldPrice",
+        changed.new_price::text AS "newPrice"
+      FROM changed
+      INNER JOIN logged ON TRUE
+    `
+      .returnsRow({
+        id: 'pg/int4@1',
+        oldPrice: 'pg/text@1',
+        newPrice: 'pg/text@1',
+      })
+      .build();
+
+    const [updated] = await db.runtime().query(plan);
+
+    if (!updated) {
+      throw new ConflictException(
+        'Service price was not changed or the service was modified concurrently',
+      );
+    }
+
+    return {
+      success: true,
+      message: 'Service price updated successfully',
+      data: {
+        id: updated.id,
+        oldPrice: Number(updated.oldPrice),
+        newPrice: Number(updated.newPrice),
+        updatedBy: actorUserId,
+      },
+    };
+  }
+
 }
