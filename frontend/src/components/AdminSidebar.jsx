@@ -16,7 +16,9 @@ export default function AdminSidebar({
   activePage = 'dashboard', 
   setActivePage, 
   currentUser, 
-  onLogout 
+  onLogout,
+  extraItems = [],
+  className = ''
 }) {
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -30,6 +32,7 @@ export default function AdminSidebar({
     { id: 'inventory', label: 'Inventory', icon: ClipboardList },
     { id: 'schedule', label: 'Schedule', icon: Calendar },
     { id: 'settings', label: 'Settings', icon: Settings },
+    ...extraItems,
   ];
 
   const fullName = currentUser?.fullName || currentUser?.name || [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(" ") || "Millicent Campillos";
@@ -40,7 +43,7 @@ export default function AdminSidebar({
 
   return (
     <aside 
-      className={`relative hidden lg:flex shrink-0 flex-col border-r lg:sticky lg:top-0 lg:h-screen transition-all duration-300 ease-in-out select-none z-50 ${
+      className={`${className} relative hidden lg:flex shrink-0 flex-col border-r lg:sticky lg:top-0 lg:h-screen transition-all duration-300 ease-in-out select-none z-50 ${
         isExpanded ? "w-56" : "w-20"
       } ${sidebarSurface}`}
     >
@@ -137,6 +140,8 @@ export default function AdminSidebar({
                   : 'text-[#443523] hover:bg-[#C5A059]/15 hover:text-[#4A3928]'
               } ${isExpanded ? 'justify-start gap-3' : 'justify-center'}`}
               title={!isExpanded ? item.label : undefined}
+              aria-label={item.label}
+              aria-current={isActive ? 'page' : undefined}
             >
               <Icon size={18} className={isActive ? 'text-white' : 'text-[#443523]'} />
               {isExpanded && <span className="text-xs font-medium truncate">{item.label}</span>}
