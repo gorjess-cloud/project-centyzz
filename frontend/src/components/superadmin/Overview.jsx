@@ -1,3 +1,4 @@
+import HeaderActions from '../workspace/HeaderActions';
 import { ArrowDownToLine, ArrowUpRight, Check, ChevronLeft, ChevronRight, FileText, KeyRound, Search, ShieldCheck, Users } from 'lucide-react';
 import { useState } from 'react';
 import { activity, metrics } from './dashboardData';
@@ -45,7 +46,7 @@ export function AuditTable({ full = false, onViewAll }) {
 }
 
 export default function Overview({ name, onNavigate }) {
-  return <><div className="sa-welcome"><div><div className="sa-eyebrow">YOUR SALON, CONNECTED</div><h1>Welcome back, {name.split(' ')[0]}. <span className="sa-welcome-spark">✦</span></h1><p>Here’s what’s happening across your system today.</p></div><div className="sa-status"><span className="sa-dot" />System overview <span className="sa-status-line" /> Sample data</div></div>
+  return <><div className="sa-welcome"><div><div className="sa-eyebrow">YOUR SALON, CONNECTED</div><h1>Welcome back, {name.split(' ')[0]}. <span className="sa-welcome-spark">✦</span></h1><p>Here’s what’s happening across your system today.</p></div><div className="sa-overview-tools"><HeaderActions /><div className="sa-status"><span className="sa-dot" />System overview <span className="sa-status-line" /> Sample data</div></div></div>
     <div className="sa-metrics">{metrics.map(metric => <MetricCard key={metric.title} metric={metric} />)}</div>
     <div className="sa-security-note"><span className="sa-note-icon"><ShieldCheck size={19} /></span><div><strong>A little oversight goes a long way.</strong><span>Review your security alerts to keep your salon’s data protected.</span></div><button onClick={() => onNavigate('audit')}>Review audit logs <ArrowUpRight size={15} /></button></div>
     <AuditTable onViewAll={() => onNavigate('audit')} />

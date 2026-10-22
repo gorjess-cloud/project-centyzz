@@ -1,3 +1,4 @@
+import HeaderActions from './workspace/HeaderActions';
 import { useState } from 'react';
 import { 
   Search, 
@@ -17,8 +18,6 @@ import {
   ChevronRight,
   Calendar as CalendarIcon,
   ArrowRight,
-  Moon,
-  Bell
 } from 'lucide-react';
 
 const SERVICES_BY_CATEGORY = {
@@ -707,18 +706,7 @@ export default function ClientManagementView({ showHeaderActions = true }) {
         </div>
 
         {/* Group 2: System Quick Actions */}
-        {showHeaderActions && (<div className="flex items-center gap-2 shrink-0">
-          <button className="p-2.5 rounded-full border border-[#E7DFD4] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6] transition-colors">
-            <Moon size={16} />
-          </button>
-          <button className="p-2.5 rounded-full border border-[#E7DFD4] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6] transition-colors">
-            <Search size={16} />
-          </button>
-          <button className="relative p-2.5 rounded-full border border-[#E7DFD4] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6] transition-colors">
-            <Bell size={16} />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-[#C5A059] rounded-full ring-2 ring-white"></span>
-          </button>
-        </div>)}
+        {showHeaderActions && (<HeaderActions />)}
       </header>
 
       {/* Main Workspace Card */}
