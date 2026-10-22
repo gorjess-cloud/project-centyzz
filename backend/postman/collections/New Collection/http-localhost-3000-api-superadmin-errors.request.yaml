@@ -1,0 +1,13 @@
+$kind: http-request
+name: http://localhost:3000/api/superadmin/errors
+description: ""
+url: http://localhost:3000/api/superadmin/errors?page=1&limit=10
+method: GET
+queryParams:
+  page: "1"
+  limit: "10"
+auth:
+  type: bearer
+  credentials:
+    token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjMsImVtYWlsIjoib2ZmcDY5QGdtYWlsLmNvbSIsInJvbGUiOiJTVVBFUkFETUlOIiwiaWF0IjoxNzkyNjY1MjUyLCJleHAiOjE3OTI2Njg4NTJ9.fjTc5ncs2HMGWN7PIxfDs0e7T0bT-V9QfplNp8Yh3aA
+order: 8000

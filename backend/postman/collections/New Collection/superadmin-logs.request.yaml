@@ -1,0 +1,13 @@
+$kind: http-request
+name: superadmin/logs
+description: ""
+url: http://localhost:3000/api/superadmin/logs?page=1&limit=10
+method: GET
+queryParams:
+  page: "1"
+  limit: "10"
+auth:
+  type: bearer
+  credentials:
+    token: "{{json_web_token_19bw}}"
+order: 9000
