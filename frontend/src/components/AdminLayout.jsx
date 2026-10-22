@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import SuperAdminLayout from './superadmin/SuperAdminLayout';
 import AdminSidebar from './AdminSidebar';
 import DashboardView from '../pages/admin/DashboardView';
 import UserManagementView from '../pages/admin/UserManagementView';
@@ -13,6 +14,10 @@ import AccountManagementView from '../pages/admin/AccountManagementView'; // Fix
 
 export default function AdminLayout({ currentUser, onLogout }) {
   const [activePage, setActivePage] = useState('dashboard');
+
+  if (currentUser?.role?.toUpperCase() === 'SUPERADMIN') {
+    return <SuperAdminLayout currentUser={currentUser} onLogout={onLogout} />;
+  }
 
   return (
     <div className="flex h-screen w-screen bg-[#F6F4EF] text-[#443523] overflow-hidden transition-colors duration-300">
