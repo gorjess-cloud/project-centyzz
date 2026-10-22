@@ -488,7 +488,7 @@ export default function AuthPage({
                   }}
                   onFocus={() => isSignup && setActiveValidationField('email')}
                   onBlur={() => setActiveValidationField('')}
-                  placeholder="you@example.com"
+                  placeholder="Enter Your Email"
                   required
                   className={fieldClass}
                 />
@@ -791,6 +791,16 @@ export default function AuthPage({
                     Preview Employee / Admin 2FA Flow →
                   </button>
                 </div>
+                <div className="flex justify-center gap-4">
+                  <button type="button" onClick={() => onPreviewDashboard?.({ firstName: 'Jesse', lastName: 'Staff', email: 'jessestaff@example.com', role: 'STAFF' })} className="text-[11px] text-[#C5A059] hover:underline font-bold tracking-wide">
+                    Preview Staff Dashboard
+                  </button>
+                  <button type="button" onClick={() => onPreviewDashboard?.({ firstName: 'Super', lastName: 'Admin', email: 'superadmin@example.com', role: 'SUPERADMIN' })} className="text-[11px] text-[#C5A059] hover:underline font-bold tracking-wide">
+                    Preview Superadmin Dashboard
+                  </button>
+                </div>
+                
+
               </div>
 
               {/* Divider */}
