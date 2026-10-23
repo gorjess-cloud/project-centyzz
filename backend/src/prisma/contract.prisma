@@ -12,11 +12,16 @@ model User {
   otpHash              String?
   otpExpiresAt         TimestamptzString?
   otpAttempts          Int                @default(0)
-  resetPasswordToken   String?            // ADD THIS
-  resetPasswordExpires TimestamptzString? // ADD THIS
+  resetPasswordToken   String?
+  resetPasswordExpires TimestamptzString?
+  archivedAt           TimestamptzString? @map("archived_at") // 👈 ADD THIS
+  archivedBy           Int?               @map("archived_by") // 👈 ADD THIS
+  archiveReason        String?            @map("archive_reason") // 👈 ADD THIS
   createdAt            TimestamptzString  @default(now())
   updatedAt            temporal.updatedAtString()
   appointments         Appointment[]
+
+  @@map("user")
 }
 
 model Role {
@@ -39,17 +44,17 @@ model ServiceCategory {
 }
 
 model Service {
-  id              Int       @id @default(autoincrement())
-  categoryId      Int       @map("category_id")
-  name            VarChar(150)
-  description     String?
-  price           Decimal
-  durationMinutes Int       @map("duration_minutes")
-  isActive        Boolean   @default(true) @map("is_active")
-  createdAt       TimestamptzString @default(now()) @map("created_at")
-  updatedAt       TimestamptzString @default(now()) @map("updated_at")
-  category        ServiceCategory @relation(fields: [categoryId], references: [id])
-  appointments Appointment[]
+  id          String   @id @default(uuid())
+  category    String   // e.g., HAIR, NAILS, SKIN
+  name        String   @unique
+  duration    String   // e.g., "1 hr", "45 mins"
+  price       String   // e.g., "₱1,800.00"
+  status      String   @default("ACTIVE") // ACTIVE or INACTIVE
+  isArchived  Boolean  @default(false)
+  description String?
+  dateCreated String   // e.g., "Aug 16, 2026"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@map("services")
 }

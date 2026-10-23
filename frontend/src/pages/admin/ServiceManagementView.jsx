@@ -1,5 +1,5 @@
 import HeaderActions from '../../components/workspace/HeaderActions';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Search, 
   Filter, 
@@ -30,6 +30,8 @@ const formatPromoDate = (date) => {
 };
 
 export default function ServiceManagementView({ showHeaderActions = true }) {
+  const getAuthToken = () => localStorage.getItem('token') || localStorage.getItem('accessToken') || '';
+
   // Active Promo Banner State
   const [activePromo, setActivePromo] = useState({
     title: 'Nail Bar Weekday Special',
@@ -40,75 +42,9 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
     status: 'ACTIVE'
   });
 
-  // Services Data
-  const [services, setServices] = useState([
-    {
-      id: 'srv_1',
-      category: 'HAIR',
-      name: 'Signature Cut & Blowout',
-      duration: '1 hr',
-      price: '₱1,800.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      description: 'Professional haircut styling and premium blowout.',
-      dateCreated: 'Aug 16, 2026'
-    },
-    {
-      id: 'srv_2',
-      category: 'HAIR',
-      name: 'Root Touch-Up (Single Process)',
-      duration: '1 hr 30 mins',
-      price: '₱2,800.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      description: 'Single process hair root touch-up treatment.',
-      dateCreated: 'Aug 16, 2026'
-    },
-    {
-      id: 'srv_3',
-      category: 'HAIR',
-      name: 'Keratin Smoothing Treatment',
-      duration: '2 hrs 30 mins',
-      price: '₱4,000.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      description: 'Long-lasting frizz reduction and hair smoothing.',
-      dateCreated: 'Aug 16, 2026'
-    },
-    {
-      id: 'srv_4',
-      category: 'NAILS',
-      name: 'Classic Gel Manicure',
-      duration: '45 mins',
-      price: '₱900.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      description: 'Standard gel manicure with cuticle care and polishing.',
-      dateCreated: 'Aug 16, 2026'
-    },
-    {
-      id: 'srv_5',
-      category: 'NAILS',
-      name: 'Luxury Spa Pedicure',
-      duration: '1 hr',
-      price: '₱1,200.00',
-      status: 'ACTIVE',
-      isArchived: false,
-      description: 'Exfoliating foot scrub, massage, and pedicure.',
-      dateCreated: 'Aug 16, 2026'
-    },
-    {
-      id: 'srv_6',
-      category: 'SKIN',
-      name: 'Hydrating Facial Treatment',
-      duration: '1 hr 15 mins',
-      price: '₱2,500.00',
-      status: 'INACTIVE',
-      isArchived: false,
-      description: 'Deep pore cleansing and ultra-hydrating facial mask.',
-      dateCreated: 'Aug 18, 2026'
-    }
-  ]);
+  // Services Data from DB
+  const [services, setServices] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState('ACTIVE'); // 'ACTIVE' or 'ARCHIVED'
   const [searchQuery, setSearchQuery] = useState('');
@@ -147,15 +83,13 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
   });
 
   const openPromoEditor = () => {
-    const isPercentage = activePromo.discountText.includes('%');
-    const discountValue = activePromo.discountText.match(/[\d,.]+/)?.[0] || '';
     setPromoForm({
-      title: activePromo.title,
-      appliesTo: activePromo.appliesTo,
-      discountType: isPercentage ? '% Off' : '₱ Off',
-      value: discountValue.replace(/,/g, ''),
-      startDate: activePromo.startDate,
-      endDate: activePromo.endDate
+      title: '',
+      appliesTo: '',
+      discountType: '% Off',
+      value: '',
+      startDate: '',
+      endDate: ''
     });
     setIsEditPromoOpen(true);
   };
@@ -165,11 +99,87 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
     setTimeout(() => setToastMessage(''), 4000);
   };
 
+  // -------------------------------------------------------------
+  // API FETCH: Get Promo & Services from Backend & Neon DB
+  // -------------------------------------------------------------
+  useEffect(() => {
+    const loadPromoFromApi = async () => {
+      try {
+        const response = await fetch('http://localhost:3000/api/admin/promos', {
+          headers: { 'Authorization': `Bearer ${getAuthToken()}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data) {
+            setActivePromo(data);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching promo:', err);
+      }
+    };
+    loadPromoFromApi();
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadServicesFromApi = async () => {
+      setLoading(true);
+      try {
+        const isArchivedParam = activeTab === 'ARCHIVED';
+        const token = getAuthToken();
+
+        const response = await fetch(`http://localhost:3000/api/admin/services?archived=${isArchivedParam}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (isMounted && Array.isArray(data)) {
+            setServices(data);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching services:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadServicesFromApi();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeTab]);
+
+  const refreshServices = async () => {
+    try {
+      const isArchivedParam = activeTab === 'ARCHIVED';
+      const token = getAuthToken();
+
+      const response = await fetch(`http://localhost:3000/api/admin/services?archived=${isArchivedParam}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data)) setServices(data);
+      }
+    } catch (err) {
+      console.error('Refresh error:', err);
+    }
+  };
+
   // Filter logic
-  const tabFilteredServices = services.filter((s) => {
-    if (activeTab === 'ACTIVE') return !s.isArchived;
-    return s.isArchived;
-  });
+  const tabFilteredServices = services;
 
   const filteredServices = tabFilteredServices.filter((s) => {
     const matchesSearch = 
@@ -198,64 +208,125 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
     );
   };
 
-  const handleAddServiceSubmit = (e) => {
+  const handleSavePromoSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await fetch('http://localhost:3000/api/admin/promos', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(promoForm),
+      });
+
+      if (response.ok) {
+        setActivePromo({
+          title: promoForm.title,
+          appliesTo: promoForm.appliesTo,
+          discountText: promoForm.discountType === '% Off' ? `${promoForm.value}% off` : `₱${promoForm.value} off`,
+          startDate: promoForm.startDate,
+          endDate: promoForm.endDate,
+          status: 'ACTIVE'
+        });
+        setIsEditPromoOpen(false);
+        showToast('Successfully updated promotional campaign in database!');
+      } else {
+        showToast('Failed to save promo');
+      }
+    } catch (err) {
+      console.error('Error saving promo:', err);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // API ACTION: Add or Update Service
+  // -------------------------------------------------------------
+  const handleAddServiceSubmit = async (e) => {
     e.preventDefault();
     if (!serviceForm.name || !serviceForm.price) return;
 
-    const durStr = `${serviceForm.durationHours !== '0' ? serviceForm.durationHours + ' hr ' : ''}${serviceForm.durationMins !== '0' ? serviceForm.durationMins + ' mins' : ''}`.trim() || '1 hr';
-    const formattedPrice = serviceForm.price.includes('₱') ? serviceForm.price : `₱${Number(serviceForm.price).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+    try {
+      const url = editingService 
+        ? `http://localhost:3000/api/admin/services/${editingService.id}`
+        : 'http://localhost:3000/api/admin/services';
+      
+      const method = editingService ? 'PATCH' : 'POST';
 
-    if (editingService) {
-      setServices(services.map(s => s.id === editingService.id ? {
-        ...s,
-        name: serviceForm.name,
-        category: serviceForm.category,
-        price: formattedPrice,
-        duration: durStr,
-        description: serviceForm.description
-      } : s));
-      setEditingService(null);
-      showToast(`Successfully updated service "${serviceForm.name}"`);
-    } else {
-      const newSrv = {
-        id: `srv_${Date.now()}`,
-        category: serviceForm.category,
-        name: serviceForm.name,
-        duration: durStr,
-        price: formattedPrice,
-        status: 'ACTIVE',
-        isArchived: false,
-        description: serviceForm.description,
-        dateCreated: 'Oct 21, 2026'
-      };
-      setServices([newSrv, ...services]);
-      showToast(`Successfully added new service "${serviceForm.name}"`);
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(serviceForm),
+      });
+
+      if (response.ok) {
+        setIsAddServiceOpen(false);
+        setEditingService(null);
+        setServiceForm({ name: '', category: 'HAIR', price: '', durationHours: '1', durationMins: '0', description: '' });
+        refreshServices();
+        showToast(editingService ? `Successfully updated service` : `Successfully added new service`);
+      } else {
+        const errData = await response.json();
+        showToast(errData.message || 'Failed to save service');
+      }
+    } catch (err) {
+      console.error('Error saving service:', err);
     }
-
-    setIsAddServiceOpen(false);
-    setServiceForm({ name: '', category: 'HAIR', price: '', durationHours: '1', durationMins: '0', description: '' });
   };
 
-  const handleToggleStatus = (targetService) => {
-    setServices(services.map(s => s.id === targetService.id ? {
-      ...s,
-      status: s.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
-    } : s));
-    setActiveMenuId(null);
-    showToast(`Updated status for ${targetService.name}`);
+  // -------------------------------------------------------------
+  // API ACTION: Toggle Status
+  // -------------------------------------------------------------
+  const handleToggleStatus = async (targetService) => {
+    try {
+      const response = await fetch(`http://localhost:3000/api/admin/services/${targetService.id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+      });
+
+      if (response.ok) {
+        setActiveMenuId(null);
+        refreshServices();
+        showToast(`Updated status for ${targetService.name}`);
+      } else {
+        showToast('Failed to toggle status');
+      }
+    } catch (err) {
+      console.error('Error toggling status:', err);
+    }
   };
 
-  const handleToggleArchive = (targetService) => {
-    setServices(services.map(s => s.id === targetService.id ? {
-      ...s,
-      isArchived: !s.isArchived
-    } : s));
-    setActiveMenuId(null);
-    showToast(targetService.isArchived ? `Restored ${targetService.name}` : `Archived ${targetService.name}`);
+  // -------------------------------------------------------------
+  // API ACTION: Toggle Archive
+  // -------------------------------------------------------------
+  const handleToggleArchive = async (targetService) => {
+    try {
+      const response = await fetch(`http://localhost:3000/api/admin/services/${targetService.id}/archive`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+      });
+
+      if (response.ok) {
+        setActiveMenuId(null);
+        refreshServices();
+        showToast(targetService.isArchived ? `Restored ${targetService.name}` : `Archived ${targetService.name}`);
+      } else {
+        showToast('Failed to archive service');
+      }
+    } catch (err) {
+      console.error('Error toggling archive:', err);
+    }
   };
 
   const renderCategoryBadge = (category) => {
-    const cat = category.toUpperCase();
+    const cat = (category || 'HAIR').toUpperCase();
     if (cat === 'HAIR') {
       return (
         <span className="inline-flex items-center gap-1.5 bg-[#FDEBB6] text-[#8C6D23] text-[10px] font-bold tracking-wider px-3 py-1 rounded-full border border-[#F3DE9F]">
@@ -433,7 +504,13 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E9E4D8] text-xs">
-              {paginatedServices.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan="7" className="p-8 text-center text-[#8A8174]">
+                    Loading services from Neon DB...
+                  </td>
+                </tr>
+              ) : paginatedServices.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="p-8 text-center text-[#8A8174]">
                     No {activeTab.toLowerCase()} services found.
@@ -737,19 +814,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
               </button>
             </div>
 
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              setActivePromo({
-                title: promoForm.title,
-                appliesTo: promoForm.appliesTo,
-                discountText: promoForm.discountType === '% Off' ? `${promoForm.value}% off` : `₱${promoForm.value} off`,
-                startDate: promoForm.startDate,
-                endDate: promoForm.endDate,
-                status: 'ACTIVE'
-              });
-              setIsEditPromoOpen(false);
-              showToast(`Successfully updated promotional campaign!`);
-            }} className="space-y-4">
+            <form onSubmit={handleSavePromoSubmit} className="space-y-4">
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Promo Title</label>
                 <input

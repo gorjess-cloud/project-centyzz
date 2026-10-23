@@ -628,6 +628,27 @@
           },
           "User": {
             "fields": {
+              "archiveReason": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "archivedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "archivedBy": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "createdAt": {
                 "nullable": false,
                 "type": {
@@ -753,6 +774,15 @@
             },
             "storage": {
               "fields": {
+                "archiveReason": {
+                  "column": "archive_reason"
+                },
+                "archivedAt": {
+                  "column": "archived_at"
+                },
+                "archivedBy": {
+                  "column": "archived_by"
+                },
                 "createdAt": {
                   "column": "createdAt"
                 },
@@ -1292,6 +1322,21 @@
             },
             "user": {
               "columns": {
+                "archive_reason": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "archived_at": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "archived_by": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
                 "createdAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "default": {
@@ -1413,7 +1458,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "dab0129e1f14d10c4dabc9e99911c734fa454041ac6887bd119e2aba003c155a"
+    "storageHash": "bba06ac4b5289af281a95b1f582152253f5461d56abf92a236303840538031cd"
   },
   "execution": {
     "executionHash": "a499031370d1fd1891ca11072d3f7e11be752b686057f7c6d0900ee0159f4ed0",

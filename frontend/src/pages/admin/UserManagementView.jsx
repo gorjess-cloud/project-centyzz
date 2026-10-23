@@ -1,5 +1,5 @@
 import HeaderActions from '../../components/workspace/HeaderActions';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Search, 
   Filter, 
@@ -20,25 +20,10 @@ import {
 
 export default function UserManagementView({ currentUser, showHeaderActions = true }) {
   const loggedInRole = (currentUser?.role || 'ADMIN').toUpperCase();
-  const loggedInEmail = currentUser?.email || 'MillicentCampillos@example.com';
+  const loggedInEmail = currentUser?.email || 'admin@centyzz.com';
 
-  const [users, setUsers] = useState([
-    { id: 'usr_1', firstName: 'Millicent', lastName: 'Campillo', fullName: 'Millicent Campillo', email: 'milliecentyzz@gmail.com', contactNumber: '0912345678', role: 'ADMIN', status: 'ACTIVE', isArchived: false, dateCreated: 'Aug 16, 2026', avatarColor: 'bg-[#4A3928]' },
-    { id: 'usr_2', firstName: 'Jessica', lastName: 'Palma', fullName: 'Jessica Palma', email: 'palma.jessicamae@gmail.com', contactNumber: '0998765432', role: 'STAFF', status: 'INACTIVE', isArchived: false, dateCreated: 'Aug 16, 2026', avatarColor: 'bg-[#9B6B39]' },
-    { id: 'usr_3', firstName: 'Chashmere', lastName: 'T.', fullName: 'Chashmere T.', email: 'chashmerejoy@gmail.com', contactNumber: '0911223344', role: 'STAFF', status: 'ACTIVE', isArchived: false, dateCreated: 'Aug 16, 2026', avatarColor: 'bg-[#4A3928]' },
-    { id: 'usr_4', firstName: 'Romelle', lastName: 'Navea', fullName: 'Romelle Navea', email: 'romellenavea@gmail.com', contactNumber: '0922334455', role: 'STAFF', status: 'INACTIVE', isArchived: false, dateCreated: 'Aug 16, 2026', avatarColor: 'bg-[#2E4A39]' },
-    { id: 'usr_5', firstName: 'Karl', lastName: 'Aljean', fullName: 'Karl Aljean', email: 'karlaljean@gmail.com', contactNumber: '0933445566', role: 'STAFF', status: 'ACTIVE', isArchived: false, dateCreated: 'Aug 16, 2026', avatarColor: 'bg-[#3A342B]' },
-    { id: 'usr_6', firstName: 'Bea', lastName: 'Alonzo', fullName: 'Bea Alonzo', email: 'bea.alonzo@example.com', contactNumber: '0944556677', role: 'STAFF', status: 'ACTIVE', isArchived: false, dateCreated: 'Aug 18, 2026', avatarColor: 'bg-[#5C4033]' },
-    { id: 'usr_7', firstName: 'John', lastName: 'Lloyd', fullName: 'John Lloyd', email: 'johnlloyd@example.com', contactNumber: '0955667788', role: 'STAFF', status: 'ACTIVE', isArchived: false, dateCreated: 'Aug 19, 2026', avatarColor: 'bg-[#3E2723]' },
-    { id: 'usr_8', firstName: 'Sarah', lastName: 'Geronimo', fullName: 'Sarah Geronimo', email: 'sarahg@example.com', contactNumber: '0966778899', role: 'ADMIN', status: 'ACTIVE', isArchived: false, dateCreated: 'Aug 20, 2026', avatarColor: 'bg-[#4E342E]' },
-    { id: 'usr_9', firstName: 'Vice', lastName: 'Ganda', fullName: 'Vice Ganda', email: 'viceganda@example.com', contactNumber: '0977889900', role: 'STAFF', status: 'ACTIVE', isArchived: false, dateCreated: 'Aug 22, 2026', avatarColor: 'bg-[#5D4037]' },
-    { id: 'usr_10', firstName: 'Anne', lastName: 'Curtis', fullName: 'Anne Curtis', email: 'annecurtis@example.com', contactNumber: '0988990011', role: 'STAFF', status: 'INACTIVE', isArchived: false, dateCreated: 'Aug 25, 2026', avatarColor: 'bg-[#6D4C41]' },
-    { id: 'usr_11', firstName: 'Kathryn', lastName: 'Bernardo', fullName: 'Kathryn Bernardo', email: 'kathryn@example.com', contactNumber: '0999001122', role: 'STAFF', status: 'ACTIVE', isArchived: false, dateCreated: 'Sep 01, 2026', avatarColor: 'bg-[#4A3928]' },
-    { id: 'usr_12', firstName: 'Daniel', lastName: 'Padilla', fullName: 'Daniel Padilla', email: 'daniel@example.com', contactNumber: '0911223355', role: 'STAFF', status: 'ACTIVE', isArchived: false, dateCreated: 'Sep 03, 2026', avatarColor: 'bg-[#3A342B]' },
-    { id: 'usr_13', firstName: 'Liza', lastName: 'Soberano', fullName: 'Liza Soberano', email: 'liza@example.com', contactNumber: '0922334466', role: 'STAFF', status: 'ACTIVE', isArchived: false, dateCreated: 'Sep 05, 2026', avatarColor: 'bg-[#9B6B39]' },
-    { id: 'usr_14', firstName: 'Enrique', lastName: 'Gil', fullName: 'Enrique Gil', email: 'enrique@example.com', contactNumber: '0933445577', role: 'ADMIN', status: 'ACTIVE', isArchived: false, dateCreated: 'Sep 10, 2026', avatarColor: 'bg-[#2E4A39]' },
-    { id: 'usr_15', firstName: 'Nadine', lastName: 'Lustre', fullName: 'Nadine Lustre', email: 'nadine@example.com', contactNumber: '0944556688', role: 'STAFF', status: 'INACTIVE', isArchived: false, dateCreated: 'Sep 12, 2026', avatarColor: 'bg-[#5C4033]' },
-  ]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState('ACTIVE');
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,9 +56,81 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
     tempPassword: '',
   });
 
+  const getAuthToken = () => localStorage.getItem('token') || localStorage.getItem('accessToken') || '';
+
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 4000);
+  };
+
+  // -------------------------------------------------------------
+  // API FETCH: Get Users from NestJS Backend (Neon DB)
+  // -------------------------------------------------------------
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadUsersFromApi = async () => {
+      setLoading(true);
+      try {
+        const isArchivedParam = activeTab === 'ARCHIVED';
+        const token = getAuthToken();
+
+        const response = await fetch(`http://localhost:3000/api/admin/users?archived=${isArchivedParam}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+        });
+
+        console.log('API Response Status:', response.status);
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Frontend received data:', data);
+          if (isMounted) {
+            setUsers(data);
+          }
+        } else {
+          console.error('Backend returned error status:', response.status);
+        }
+      } catch (err) {
+        console.error('Error fetching users from frontend:', err);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadUsersFromApi();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeTab]);
+
+  // Helper function to trigger dynamic table refresh after actions
+  const refreshUsers = async () => {
+    try {
+      const isArchivedParam = activeTab === 'ARCHIVED';
+      const token = getAuthToken();
+
+      const response = await fetch(`http://localhost:3000/api/admin/users?archived=${isArchivedParam}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          setUsers(data);
+        }
+      }
+    } catch (err) {
+      console.error('Refresh error:', err);
+    }
   };
 
   const requestAdminPin = (actionCallback) => {
@@ -97,23 +154,38 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
     }
   };
 
-  const tabFilteredUsers = users.filter((u) => {
-    if (activeTab === 'ACTIVE') return !u.isArchived;
-    return u.isArchived;
-  });
+  // Backend filters Active vs Archived via ?archived=true/false
+  const tabFilteredUsers = users;
 
-  const filteredUsers = tabFilteredUsers.filter((u) => {
-    if (loggedInRole === 'ADMIN' && u.role === 'SUPERADMIN') return false;
+ const filteredUsers = tabFilteredUsers
+    .filter((u) => {
+      // Hide SUPERADMIN accounts from regular Admins
+      if (loggedInRole === 'ADMIN' && u.role === 'SUPERADMIN') return false;
+
+      const matchesSearch = 
+        (u.fullName || `${u.firstName || ''} ${u.lastName || ''}`).toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.email.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
+
+      return matchesSearch && matchesRole;
+    })
+    .sort((a, b) => {
+      // Priority 0: Currently logged-in admin always comes first
+      const isASelf = a.email === loggedInEmail;
+      const isBSelf = b.email === loggedInEmail;
+      if (isASelf && !isBSelf) return -1;
+      if (!isASelf && isBSelf) return 1;
+
+      // Priority 1: Other ADMIN accounts, Priority 2: STAFF
+      const roleOrder = { SUPERADMIN: 1, ADMIN: 2, STAFF: 3 };
+      const orderA = roleOrder[a.role] || 4;
+      const orderB = roleOrder[b.role] || 4;
+
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.fullName || a.email).localeCompare(b.fullName || b.email);
+    });
     
-    const matchesSearch = 
-      u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
-
-    return matchesSearch && matchesRole;
-  });
-
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage) || 1;
   const paginatedUsers = filteredUsers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
@@ -131,41 +203,98 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
     );
   };
 
+  // -------------------------------------------------------------
+  // API ACTION: Add New System User
+  // -------------------------------------------------------------
   const handleAddUserSubmit = (e) => {
     e.preventDefault();
     if (!newUserForm.firstName || !newUserForm.email) return;
 
-    requestAdminPin(() => {
-      const fullName = `${newUserForm.firstName} ${newUserForm.lastName}`.trim();
-      const newUser = {
-        id: `usr_${Date.now()}`,
-        firstName: newUserForm.firstName,
-        lastName: newUserForm.lastName,
-        fullName,
-        email: newUserForm.email,
-        contactNumber: '0900000000',
-        role: newUserForm.role,
-        status: 'ACTIVE',
-        isArchived: false,
-        dateCreated: 'Oct 21, 2026',
-        avatarColor: 'bg-[#4A3928]',
-      };
+    requestAdminPin(async () => {
+      try {
+        const response = await fetch('http://localhost:3000/api/admin/users', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newUserForm),
+        });
 
-      setUsers([newUser, ...users]);
-      setIsAddUserOpen(false);
-      setNewUserForm({ firstName: '', lastName: '', email: '', role: 'STAFF', tempPassword: '' });
-      showToast(`Successfully added user ${fullName} as ${newUser.role}`);
+        if (response.ok) {
+          setIsAddUserOpen(false);
+          setNewUserForm({ firstName: '', lastName: '', email: '', role: 'STAFF', tempPassword: '' });
+          refreshUsers();
+          showToast(`Successfully created account for ${newUserForm.firstName} ${newUserForm.lastName}`);
+        } else {
+          const errData = await response.json();
+          showToast(errData.message || 'Failed to create user account');
+        }
+      } catch (err) {
+        console.error('Error creating user:', err);
+      }
     });
   };
 
+  // -------------------------------------------------------------
+  // API ACTION: Save Edited Profile
+  // -------------------------------------------------------------
+  const handleSaveEditProfile = (u) => {
+    requestAdminPin(async () => {
+      try {
+        const response = await fetch(`http://localhost:3000/api/admin/users/${u.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(editForm),
+        });
+
+        if (response.ok) {
+          setEditingUserId(null);
+          refreshUsers();
+          showToast(`Successfully updated profile for ${editForm.firstName} ${editForm.lastName}`);
+        } else {
+          showToast('Failed to update user profile');
+        }
+      } catch (err) {
+        console.error('Error updating user:', err);
+      }
+    });
+  };
+
+  // -------------------------------------------------------------
+  // API ACTION: Change User Role
+  // -------------------------------------------------------------
   const handleRoleChange = (targetUser, newRole) => {
-    requestAdminPin(() => {
-      setUsers(users.map(u => u.id === targetUser.id ? { ...u, role: newRole } : u));
-      setActiveMenuId(null);
-      showToast(`Successfully changed ${targetUser.fullName}'s role to ${newRole}`);
+    requestAdminPin(async () => {
+      try {
+        const response = await fetch(`http://localhost:3000/api/admin/users/${targetUser.id}/role`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ role: newRole }),
+        });
+
+        if (response.ok) {
+          setActiveMenuId(null);
+          refreshUsers();
+          showToast(`Successfully changed ${targetUser.fullName}'s role to ${newRole}`);
+        } else {
+          showToast('Failed to change user role');
+        }
+      } catch (err) {
+        console.error('Error updating role:', err);
+      }
     });
   };
 
+  // -------------------------------------------------------------
+  // API ACTION: Toggle Active/Inactive Status
+  // -------------------------------------------------------------
   const handleToggleStatus = (targetUser) => {
     if (targetUser.email === loggedInEmail) {
       showToast('Action restricted: You cannot deactivate your own account.');
@@ -179,19 +308,31 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
       return;
     }
 
-    requestAdminPin(() => {
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === targetUser.id
-            ? { ...u, status: u.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }
-            : u
-        )
-      );
-      setActiveMenuId(null);
-      showToast(`Updated ${targetUser.fullName}'s status`);
+    requestAdminPin(async () => {
+      try {
+        const response = await fetch(`http://localhost:3000/api/admin/users/${targetUser.id}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+          },
+        });
+
+        if (response.ok) {
+          setActiveMenuId(null);
+          refreshUsers();
+          showToast(`Updated ${targetUser.fullName}'s status`);
+        } else {
+          showToast('Failed to toggle status');
+        }
+      } catch (err) {
+        console.error('Error toggling status:', err);
+      }
     });
   };
 
+  // -------------------------------------------------------------
+  // API ACTION: Toggle Archive/Restore
+  // -------------------------------------------------------------
   const handleToggleArchive = (targetUser) => {
     if (targetUser.email === loggedInEmail && !targetUser.isArchived) {
       showToast('Action restricted: You cannot archive your own active account.');
@@ -199,21 +340,30 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
       return;
     }
 
-    requestAdminPin(() => {
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === targetUser.id
-            ? { ...u, isArchived: !u.isArchived }
-            : u
-        )
-      );
-      setActiveMenuId(null);
-      showToast(targetUser.isArchived ? `Restored ${targetUser.fullName}` : `Archived ${targetUser.fullName}`);
+    requestAdminPin(async () => {
+      try {
+        const response = await fetch(`http://localhost:3000/api/admin/users/${targetUser.id}/archive`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+          },
+        });
+
+        if (response.ok) {
+          setActiveMenuId(null);
+          refreshUsers();
+          showToast(targetUser.isArchived ? `Restored ${targetUser.fullName}` : `Archived ${targetUser.fullName}`);
+        } else {
+          showToast('Failed to archive user');
+        }
+      } catch (err) {
+        console.error('Error toggling archive:', err);
+      }
     });
   };
 
   const renderRolePill = (role) => {
-    const formattedRole = role.toUpperCase();
+    const formattedRole = (role || '').toUpperCase();
     if (formattedRole === 'ADMIN') {
       return (
         <span className="inline-block bg-[#E8C27B] text-[#5A3810] text-[11px] font-extrabold tracking-wider uppercase px-4 py-1 rounded-full shadow-2xs border border-[#D8B066]">
@@ -245,14 +395,14 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
           <p className="text-xs text-[#8A8174]">Manage system admin & staff access, roles, and active credentials</p>
         </div>
 
-        {/* Group 2: System Quick Actions */}
+        {/* System Quick Actions */}
         {showHeaderActions && (<HeaderActions />)}
       </header>
 
       {/* Main Workspace Card */}
       <div className="bg-white rounded-2xl border border-[#E9E4D8] shadow-sm p-6 sm:p-8 space-y-6">
         
-        {/* Top Controls Bar with Active / Archived Tabs */}
+        {/* Top Controls Bar */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           
           <div className="flex flex-wrap items-center gap-3">
@@ -344,7 +494,13 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E9E4D8] text-xs">
-              {paginatedUsers.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan="6" className="p-8 text-center text-[#8A8174]">
+                    Loading user records from Neon DB...
+                  </td>
+                </tr>
+              ) : paginatedUsers.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="p-8 text-center text-[#8A8174]">
                     No {activeTab.toLowerCase()} users found.
@@ -356,13 +512,17 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
                   const isEditing = editingUserId === u.id;
                   const isBottomRow = index >= paginatedUsers.length - 2;
 
+                  const isTargetAdmin = u.role === 'ADMIN' || u.role === 'SUPERADMIN';
+                  const isSelf = u.email === loggedInEmail;
+                  const isActionRestricted = loggedInRole === 'ADMIN' && isTargetAdmin && !isSelf;
+
                   if (isEditing) {
                     return (
                       <tr key={u.id} className="bg-[#FFFDF5] border-b border-[#E9E4D8]">
                         <td colSpan="6" className="p-5">
                           <div className="space-y-4 max-w-2xl bg-white p-5 rounded-2xl border border-[#E9E4D8] shadow-sm">
                             <div className="flex items-center justify-between border-b border-[#E9E4D8] pb-3">
-                              <h3 className="text-xs font-bold uppercase tracking-wider text-[#3A2E2B]">Edit Profile - {u.role.toLowerCase()}</h3>
+                              <h3 className="text-xs font-bold uppercase tracking-wider text-[#3A2E2B]">Edit Profile - {u.role?.toLowerCase()}</h3>
                               <button onClick={() => setEditingUserId(null)} className="text-[#8A8174] hover:text-[#2A1E1B]">
                                 <X className="h-4 w-4" />
                               </button>
@@ -399,15 +559,6 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
                                   className="w-full px-3 py-2 rounded-xl border border-[#E9E4D8] bg-white text-xs outline-none focus:border-[#C5A059]"
                                 />
                               </div>
-                              <div>
-                                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Contact Number</label>
-                                <input
-                                  type="text"
-                                  value={editForm.contactNumber}
-                                  onChange={(e) => setEditForm({ ...editForm, contactNumber: e.target.value })}
-                                  className="w-full px-3 py-2 rounded-xl border border-[#E9E4D8] bg-white text-xs outline-none focus:border-[#C5A059]"
-                                />
-                              </div>
                             </div>
 
                             <div className="flex justify-end gap-2 pt-2">
@@ -418,14 +569,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
                                 Cancel
                               </button>
                               <button
-                                onClick={() => {
-                                  requestAdminPin(() => {
-                                    const fullName = `${editForm.firstName} ${editForm.lastName}`.trim();
-                                    setUsers(users.map(item => item.id === u.id ? { ...item, ...editForm, fullName } : item));
-                                    setEditingUserId(null);
-                                    showToast(`Successfully updated profile for ${fullName}`);
-                                  });
-                                }}
+                                onClick={() => handleSaveEditProfile(u)}
                                 className="px-5 py-2 rounded-xl bg-[#4A3928] hover:bg-[#3A2E2B] text-white text-xs font-bold shadow-md"
                               >
                                 Save Changes
@@ -453,11 +597,11 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
 
                       <td className="p-4">
                         <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-full ${u.avatarColor} text-white font-bold flex items-center justify-center text-xs shrink-0 border border-white shadow-xs`}>
-                            {u.fullName.charAt(0)}
+                          <div className={`w-9 h-9 rounded-full ${u.avatarColor || 'bg-[#4A3928]'} text-white font-bold flex items-center justify-center text-xs shrink-0 border border-white shadow-xs`}>
+                            {(u.firstName || u.fullName || 'U').charAt(0)}
                           </div>
                           <div className="min-w-0">
-                            <p className="font-bold text-[#2A1E1B] truncate">{u.fullName}</p>
+                            <p className="font-bold text-[#2A1E1B] truncate">{u.fullName || `${u.firstName || ''} ${u.lastName || ''}`}</p>
                             <p className="text-[11px] text-[#8A8174] truncate">{u.email}</p>
                           </div>
                         </div>
@@ -488,74 +632,93 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
                         </button>
 
                         {activeMenuId === u.id && (
-                          <div className={`absolute right-6 w-52 bg-white rounded-xl shadow-xl border border-[#E9E4D8] py-1.5 z-40 text-left animate-fadeIn ${
+                          <div className={`absolute right-6 w-56 bg-white rounded-xl shadow-xl border border-[#E9E4D8] py-1.5 z-40 text-left animate-fadeIn ${
                             isBottomRow ? 'bottom-12' : 'top-12'
                           }`}>
                             
-                            <button
-                              onClick={() => {
-                                setEditingUserId(u.id);
-                                setEditForm({
-                                  firstName: u.firstName || u.fullName.split(' ')[0] || '',
-                                  lastName: u.lastName || u.fullName.split(' ').slice(1).join(' ') || '',
-                                  email: u.email,
-                                  contactNumber: u.contactNumber || '0912345678',
-                                });
-                                setActiveMenuId(null);
-                              }}
-                              className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium"
-                            >
-                              <Edit3 className="h-3.5 w-3.5 text-[#8A8174]" />
-                              Edit Details
-                            </button>
-
-                            <div className="px-3.5 py-1.5">
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Change Role To:</p>
-                              <div className="grid grid-cols-2 gap-1">
-                                {['STAFF', 'ADMIN'].map((r) => (
-                                  u.role !== r && (
-                                    <button
-                                      key={r}
-                                      onClick={() => handleRoleChange(u, r)}
-                                      className="text-[9px] font-bold bg-[#F6F4EF] hover:bg-[#E8D9C2] text-[#443523] py-1 rounded-md text-center transition-colors"
-                                    >
-                                      {r}
-                                    </button>
-                                  )
-                                ))}
+                            {isActionRestricted ? (
+                              <div className="p-3 bg-[#F9F8F6] rounded-lg mx-1.5 border border-[#E9E4D8]">
+                                <div className="flex items-center gap-1.5 text-[#5C524B] font-bold text-xs mb-1">
+                                  <Lock className="h-3.5 w-3.5 text-[#C5A059]" /> 
+                                  <span>Protected Account</span>
+                                </div>
+                                <p className="text-[10px] text-[#8A8174] leading-relaxed">
+                                  Admin profiles are read-only and cannot be modified by peer Admins.
+                                </p>
                               </div>
-                            </div>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setEditingUserId(u.id);
+                                    setEditForm({
+                                      firstName: u.firstName || (u.fullName ? u.fullName.split(' ')[0] : ''),
+                                      lastName: u.lastName || (u.fullName ? u.fullName.split(' ').slice(1).join(' ') : ''),
+                                      email: u.email,
+                                    });
+                                    setActiveMenuId(null);
+                                  }}
+                                  className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium"
+                                >
+                                  <Edit3 className="h-3.5 w-3.5 text-[#8A8174]" />
+                                  Edit Details
+                                </button>
 
-                            <button
-                              onClick={() => {
-                                setActiveMenuId(null);
-                                requestAdminPin(() => {
-                                  showToast(`Password reset link sent to ${u.email}`);
-                                });
-                              }}
-                              className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium border-t border-[#E9E4D8]"
-                            >
-                              <KeyRound className="h-3.5 w-3.5 text-[#B4833F]" />
-                              Reset Password Email
-                            </button>
+                                <div className="px-3.5 py-1.5 border-t border-[#E9E4D8]">
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Change Role To:</p>
+                                  <div className="grid grid-cols-2 gap-1">
+                                    {['STAFF', 'ADMIN'].map((r) => {
+                                      const isCurrentRole = u.role === r;
+                                      return (
+                                        <button
+                                          key={r}
+                                          disabled={isCurrentRole}
+                                          onClick={() => !isCurrentRole && handleRoleChange(u, r)}
+                                          className={`text-[9px] font-bold py-1 rounded-md text-center transition-colors ${
+                                            isCurrentRole 
+                                              ? 'bg-[#EFECE6] text-[#A0988C] cursor-not-allowed opacity-60' 
+                                              : 'bg-[#F6F4EF] hover:bg-[#E8D9C2] text-[#443523]'
+                                          }`}
+                                        >
+                                          {r} {isCurrentRole ? '✓' : ''}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
 
-                            <button
-                              onClick={() => handleToggleStatus(u)}
-                              className={`w-full px-3.5 py-2 text-xs flex items-center gap-2 font-semibold border-t border-[#E9E4D8] ${
-                                u.status === 'ACTIVE' ? 'text-red-600 hover:bg-red-50' : 'text-emerald-700 hover:bg-emerald-50'
-                              }`}
-                            >
-                              {u.status === 'ACTIVE' ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
-                              {u.status === 'ACTIVE' ? 'Deactivate Account' : 'Activate Account'}
-                            </button>
+                                <button
+                                  onClick={() => {
+                                    setActiveMenuId(null);
+                                    requestAdminPin(() => {
+                                      showToast(`Password reset link sent to ${u.email}`);
+                                    });
+                                  }}
+                                  className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium border-t border-[#E9E4D8]"
+                                >
+                                  <KeyRound className="h-3.5 w-3.5 text-[#B4833F]" />
+                                  Reset Password Email
+                                </button>
 
-                            <button
-                              onClick={() => handleToggleArchive(u)}
-                              className="w-full px-3.5 py-2 text-xs text-[#8C6D23] hover:bg-[#FFFDF3] flex items-center gap-2 font-semibold border-t border-[#E9E4D8]"
-                            >
-                              {u.isArchived ? <RotateCcw className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
-                              {u.isArchived ? 'Restore Account' : 'Archive Account'}
-                            </button>
+                                <button
+                                  onClick={() => handleToggleStatus(u)}
+                                  className={`w-full px-3.5 py-2 text-xs flex items-center gap-2 font-semibold border-t border-[#E9E4D8] ${
+                                    u.status === 'ACTIVE' ? 'text-red-600 hover:bg-red-50' : 'text-emerald-700 hover:bg-emerald-50'
+                                  }`}
+                                >
+                                  {u.status === 'ACTIVE' ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
+                                  {u.status === 'ACTIVE' ? 'Deactivate Account' : 'Activate Account'}
+                                </button>
+
+                                <button
+                                  onClick={() => handleToggleArchive(u)}
+                                  className="w-full px-3.5 py-2 text-xs text-[#8C6D23] hover:bg-[#FFFDF3] flex items-center gap-2 font-semibold border-t border-[#E9E4D8]"
+                                >
+                                  {u.isArchived ? <RotateCcw className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+                                  {u.isArchived ? 'Restore Account' : 'Archive Account'}
+                                </button>
+                              </>
+                            )}
 
                           </div>
                         )}
@@ -596,7 +759,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
 
       </div>
 
-      {/* ================= MODAL: ADMIN PIN CONFIRMATION ================= */}
+      {/* MODAL: ADMIN PIN CONFIRMATION */}
       {isPinModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-[60] animate-fadeIn">
           <div className="bg-white rounded-3xl border border-[#E9E4D8] shadow-2xl w-full max-w-sm p-6 space-y-5 text-center">
