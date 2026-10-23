@@ -1,0 +1,15 @@
+$kind: http-request
+name: /api/superadmin/services/:id/price
+description: ""
+url: /api/superadmin/services/:id/price
+method: PATCH
+pathVariables:
+  id: ""
+body:
+  type: json
+  content: "{\r\n  \"price\": 350\r\n}"
+auth:
+  type: bearer
+  credentials:
+    token: "{{json_web_token_19bw}}"
+order: 13000

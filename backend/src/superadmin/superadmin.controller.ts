@@ -105,5 +105,29 @@ export class SuperadminController {
       request.user.sub,
     );
   }
+  
+  @Get('archives')
+  getArchives(
+    @Query('entity') entity: string,
+  ) {
+    return this.superadminService.getArchives(entity);
+  }
+  
+  
+  @Get('archives/purge-check')
+  checkArchivePurge(
+    @Query('entity') entity: string,
+    @Query('id') id: string,
+  ) {
+    return this.superadminService.checkArchivePurgeEligibility(
+      entity,
+      id,
+    );
+  }
+  
+  @Get('settings/db-backups')
+  getBackupJobs() {
+    return this.superadminService.getBackupJobs();
+  }
 
 }
