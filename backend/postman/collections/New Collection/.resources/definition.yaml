@@ -9,3 +9,15 @@ variables:
   - key: json_web_token_19bw
     secret: true
     disabled: false
+  - key: json_web_token_0aaf
+    secret: true
+    disabled: false
+  - key: json_web_token_01xh
+    secret: true
+    disabled: false
+  - key: json_web_token_0jnu
+    secret: true
+    disabled: false
+  - key: json_web_token_0kus
+    secret: true
+    disabled: false

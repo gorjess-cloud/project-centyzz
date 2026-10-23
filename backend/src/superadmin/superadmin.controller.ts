@@ -9,6 +9,7 @@ import {
   Req,
   UseGuards,
   Query,
+  Post,
 } from '@nestjs/common';
 
 import {
@@ -27,12 +28,14 @@ import { AuditInterceptor } from '../audit/audit.interceptor.js';
 import { AuditAction } from '../audit/audit-action.decorator.js';
 import { ArchiveUserDto } from './dto/archive-user.dto.js';
 import { UpdateServicePriceDto } from './dto/update-service-price.dto.js';
+import { BackupService } from '../backup/backup.service.js';
 
 @Controller('api/superadmin')
 @UseGuards(JwtAuthGuard, SuperadminGuard)
 export class SuperadminController {
   constructor(
     private readonly superadminService: SuperadminService,
+    private readonly backupService: BackupService,
   ) {}
 
   // GET /api/superadmin/users
@@ -102,6 +105,39 @@ export class SuperadminController {
     return this.superadminService.updateServicePrice(
       id,
       body.price,
+      request.user.sub,
+    );
+  }
+  
+  @Get('archives')
+  getArchives(
+    @Query('entity') entity: string,
+  ) {
+    return this.superadminService.getArchives(entity);
+  }
+  
+  
+  @Get('archives/purge-check')
+  checkArchivePurge(
+    @Query('entity') entity: string,
+    @Query('id') id: string,
+  ) {
+    return this.superadminService.checkArchivePurgeEligibility(
+      entity,
+      id,
+    );
+  }
+  
+  @Get('settings/db-backups')
+  getBackupJobs() {
+    return this.superadminService.getBackupJobs();
+  }
+  
+  @Post('settings/db-backup')
+  createDatabaseBackup(
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.backupService.createBackup(
       request.user.sub,
     );
   }

@@ -1,4 +1,3 @@
-
 import { Injectable } from '@nestjs/common';
 import { db } from '../prisma/db.js';
 import {
@@ -578,6 +577,489 @@ export class SuperadminService {
         newPrice: Number(updated.newPrice),
         updatedBy: actorUserId,
       },
+    };
+  }
+
+  async getArchives(entity: string) {
+    const allowedEntities = ['users', 'services', 'clients'];
+
+    if (!allowedEntities.includes(entity)) {
+      throw new BadRequestException(
+        'Invalid entity. Allowed values: users, services, clients',
+      );
+    }
+
+    const plan = db.raw.sql`
+      SELECT
+        id,
+        "displayName",
+        email,
+        role,
+        price,
+        "archivedAt",
+        "archivedBy",
+        "archiveReason"
+      FROM (
+        SELECT
+          id::text AS id,
+          CONCAT("firstName", ' ', "lastName")::text
+            AS "displayName",
+          email::text AS email,
+          role::text AS role,
+          NULL::text AS price,
+          archived_at::text AS "archivedAt",
+          archived_by::text AS "archivedBy",
+          archive_reason::text AS "archiveReason"
+        FROM public."user"
+        WHERE archived_at IS NOT NULL
+          AND ${entity} = 'users'
+
+        UNION ALL
+
+        SELECT
+          id::text AS id,
+          name::text AS "displayName",
+          NULL::text AS email,
+          NULL::text AS role,
+          price::text AS price,
+          archived_at::text AS "archivedAt",
+          archived_by::text AS "archivedBy",
+          archive_reason::text AS "archiveReason"
+        FROM public.services
+        WHERE archived_at IS NOT NULL
+          AND ${entity} = 'services'
+
+        UNION ALL
+
+        SELECT
+          id::text AS id,
+          full_name::text AS "displayName",
+          email::text AS email,
+          NULL::text AS role,
+          NULL::text AS price,
+          archived_at::text AS "archivedAt",
+          archived_by::text AS "archivedBy",
+          archive_reason::text AS "archiveReason"
+        FROM public.clients
+        WHERE archived_at IS NOT NULL
+          AND ${entity} = 'clients'
+      ) AS archived_records
+      ORDER BY "archivedAt" DESC, id ASC
+    `
+      .returnsRow({
+        id: 'pg/text@1',
+        displayName: 'pg/text@1',
+        email: {
+          codecId: 'pg/text@1',
+          nullable: true,
+        },
+        role: {
+          codecId: 'pg/text@1',
+          nullable: true,
+        },
+        price: {
+          codecId: 'pg/text@1',
+          nullable: true,
+        },
+        archivedAt: 'pg/text@1',
+        archivedBy: {
+          codecId: 'pg/text@1',
+          nullable: true,
+        },
+        archiveReason: {
+          codecId: 'pg/text@1',
+          nullable: true,
+        },
+      })
+      .build();
+
+    const archives = await db.runtime().query(plan);
+
+    return {
+      success: true,
+      message: 'Archived records retrieved successfully',
+      entity,
+      total: archives.length,
+      data: archives,
+    };
+  }
+  
+  async checkUserPurgeEligibility(
+    entity: string,
+    idInput: string,
+  ) {
+    if (entity !== 'users') {
+      throw new BadRequestException(
+        'Purge check currently supports entity=users only',
+      );
+    }
+
+    const id = Number(idInput);
+
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      throw new BadRequestException(
+        'User ID must be a positive integer',
+      );
+    }
+
+    // Confirm that the target account is archived.
+    const userPlan = db.raw.sql`
+      SELECT
+        id,
+        role::text AS role
+      FROM public."user"
+      WHERE id = ${id}
+        AND archived_at IS NOT NULL
+    `
+      .returnsRow({
+        id: 'pg/int4@1',
+        role: 'pg/text@1',
+      })
+      .build();
+
+    const [user] = await db.runtime().query(userPlan);
+
+    if (!user) {
+      throw new NotFoundException(
+        'Archived user not found',
+      );
+    }
+
+    // Check every user-reference foreign key
+    // identified in the current database schema.
+    const dependencyPlan = db.raw.sql`
+      SELECT reference, total
+      FROM (
+        SELECT 'appointments.archived_by'::text AS reference, COUNT(*) AS total FROM public.appointments WHERE archived_by = ${id}
+        UNION ALL
+        SELECT 'appointments.user_id', COUNT(*) FROM public.appointments WHERE user_id = ${id}
+        UNION ALL
+        SELECT 'audit_logs.actor_id', COUNT(*) FROM public.audit_logs WHERE actor_id = ${id}
+        UNION ALL
+        SELECT 'backup_jobs.requested_by', COUNT(*) FROM public.backup_jobs WHERE requested_by = ${id}
+        UNION ALL
+        SELECT 'clients.archived_by', COUNT(*) FROM public.clients WHERE archived_by = ${id}
+        UNION ALL
+        SELECT 'clients.tier_overridden_by', COUNT(*) FROM public.clients WHERE tier_overridden_by = ${id}
+        UNION ALL
+        SELECT 'clients.user_id', COUNT(*) FROM public.clients WHERE user_id = ${id}
+        UNION ALL
+        SELECT 'inventory_movements.performed_by', COUNT(*) FROM public.inventory_movements WHERE performed_by = ${id}
+        UNION ALL
+        SELECT 'invoices.issued_by', COUNT(*) FROM public.invoices WHERE issued_by = ${id}
+        UNION ALL
+        SELECT 'membership_tiers.archived_by', COUNT(*) FROM public.membership_tiers WHERE archived_by = ${id}
+        UNION ALL
+        SELECT 'payments.received_by', COUNT(*) FROM public.payments WHERE received_by = ${id}
+        UNION ALL
+        SELECT 'products.archived_by', COUNT(*) FROM public.products WHERE archived_by = ${id}
+        UNION ALL
+        SELECT 'promos.archived_by', COUNT(*) FROM public.promos WHERE archived_by = ${id}
+        UNION ALL
+        SELECT 'service_categories.archived_by', COUNT(*) FROM public.service_categories WHERE archived_by = ${id}
+        UNION ALL
+        SELECT 'services.archived_by', COUNT(*) FROM public.services WHERE archived_by = ${id}
+        UNION ALL
+        SELECT 'staff.archived_by', COUNT(*) FROM public.staff WHERE archived_by = ${id}
+        UNION ALL
+        SELECT 'staff.user_id', COUNT(*) FROM public.staff WHERE user_id = ${id}
+        UNION ALL
+        SELECT 'staff_schedules.archived_by', COUNT(*) FROM public.staff_schedules WHERE archived_by = ${id}
+        UNION ALL
+        SELECT 'staff_schedules.assigned_by', COUNT(*) FROM public.staff_schedules WHERE assigned_by = ${id}
+        UNION ALL
+        SELECT 'system_settings.updated_by', COUNT(*) FROM public.system_settings WHERE updated_by = ${id}
+        UNION ALL
+        SELECT 'transaction_discounts.approved_by', COUNT(*) FROM public.transaction_discounts WHERE approved_by = ${id}
+        UNION ALL
+        SELECT 'transaction_discounts.removed_by', COUNT(*) FROM public.transaction_discounts WHERE removed_by = ${id}
+        UNION ALL
+        SELECT 'transaction_items.removed_by', COUNT(*) FROM public.transaction_items WHERE removed_by = ${id}
+        UNION ALL
+        SELECT 'transactions.archived_by', COUNT(*) FROM public.transactions WHERE archived_by = ${id}
+        UNION ALL
+        SELECT 'transactions.cashier_id', COUNT(*) FROM public.transactions WHERE cashier_id = ${id}
+        UNION ALL
+        SELECT 'transactions.voided_by', COUNT(*) FROM public.transactions WHERE voided_by = ${id}
+        UNION ALL
+        SELECT 'user.archived_by', COUNT(*) FROM public."user" WHERE archived_by = ${id}
+        UNION ALL
+        SELECT 'user_permissions.assigned_by', COUNT(*) FROM public.user_permissions WHERE assigned_by = ${id}
+        UNION ALL
+        SELECT 'user_permissions.user_id', COUNT(*) FROM public.user_permissions WHERE user_id = ${id}
+      ) AS dependencies
+      WHERE total > 0
+      ORDER BY reference
+    `
+      .returnsRow({
+        reference: 'pg/text@1',
+        total: 'pg/int8@1',
+      })
+      .build();
+
+    const rows = await db.runtime().query(dependencyPlan);
+
+    const blockingReferences = rows.map((row) => ({
+      reference: row.reference,
+      total: Number(row.total),
+    }));
+
+    const hasBlockingReferences = blockingReferences.length > 0;
+
+    return {
+      success: true,
+      message: 'Purge dependency check completed',
+      data: {
+        entity,
+        id: String(user.id),
+        role: user.role,
+        isArchived: true,
+        hasBlockingReferences,
+        blockingReferences,
+        databaseDependenciesClear: !hasBlockingReferences,
+        readyToPurge: false,
+        note: 'Permanent deletion remains disabled pending backup, retention, authorization, and transaction-time checks.',
+      },
+    };
+  }
+    
+  async checkArchivePurgeEligibility(
+    entity: string,
+    id: string,
+  ) {
+    switch (entity) {
+      case 'users':
+        return this.checkUserPurgeEligibility(entity, id);
+
+      case 'services':
+        return this.checkServicePurgeEligibility(id);
+
+      case 'clients':
+        return this.checkClientPurgeEligibility(id);
+
+      default:
+        throw new BadRequestException(
+          'Invalid entity. Allowed values: users, services, clients',
+        );
+    }
+  }
+  
+  async checkServicePurgeEligibility(idInput: string) {
+    const id = Number(idInput);
+
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      throw new BadRequestException(
+        'Service ID must be a positive integer',
+      );
+    }
+
+    const servicePlan = db.raw.sql`
+      SELECT
+        id,
+        name::text AS name
+      FROM public.services
+      WHERE id = ${id}
+        AND archived_at IS NOT NULL
+    `
+      .returnsRow({
+        id: 'pg/int4@1',
+        name: 'pg/text@1',
+      })
+      .build();
+
+    const [service] = await db.runtime().query(servicePlan);
+
+    if (!service) {
+      throw new NotFoundException(
+        'Archived service not found',
+      );
+    }
+
+    const dependencyPlan = db.raw.sql`
+      SELECT reference, total
+      FROM (
+        SELECT
+          'appointments.service_id'::text AS reference,
+          COUNT(*) AS total
+        FROM public.appointments
+        WHERE service_id = ${id}
+
+        UNION ALL
+
+        SELECT
+          'transaction_items.service_id',
+          COUNT(*)
+        FROM public.transaction_items
+        WHERE service_id = ${id}
+      ) AS dependencies
+      WHERE total > 0
+      ORDER BY reference
+    `
+      .returnsRow({
+        reference: 'pg/text@1',
+        total: 'pg/int8@1',
+      })
+      .build();
+
+    const rows = await db.runtime().query(dependencyPlan);
+
+    const blockingReferences = rows.map((row) => ({
+      reference: row.reference,
+      total: Number(row.total),
+    }));
+
+    return {
+      success: true,
+      message: 'Purge dependency check completed',
+      data: {
+        entity: 'services',
+        id: String(service.id),
+        name: service.name,
+        isArchived: true,
+        hasBlockingReferences: blockingReferences.length > 0,
+        blockingReferences,
+        databaseDependenciesClear:
+          blockingReferences.length === 0,
+        readyToPurge: false,
+        note: 'Permanent deletion remains disabled pending backup, retention, authorization, and transaction-time checks.',
+      },
+    };
+  }
+
+
+  async checkClientPurgeEligibility(idInput: string) {
+    const uuidPattern =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    if (typeof idInput !== 'string' || !uuidPattern.test(idInput)) {
+      throw new BadRequestException(
+        'Client ID must be a valid UUID',
+      );
+    }
+
+    const clientPlan = db.raw.sql`
+      SELECT
+        id::text AS id,
+        full_name::text AS name
+      FROM public.clients
+      WHERE id = ${idInput}::uuid
+        AND archived_at IS NOT NULL
+    `
+      .returnsRow({
+        id: 'pg/text@1',
+        name: 'pg/text@1',
+      })
+      .build();
+
+    const [client] = await db.runtime().query(clientPlan);
+
+    if (!client) {
+      throw new NotFoundException(
+        'Archived client not found',
+      );
+    }
+
+    const dependencyPlan = db.raw.sql`
+      SELECT reference, total
+      FROM (
+        SELECT
+          'appointments.client_id'::text AS reference,
+          COUNT(*) AS total
+        FROM public.appointments
+        WHERE client_id = ${idInput}::uuid
+
+        UNION ALL
+
+        SELECT
+          'transactions.client_id',
+          COUNT(*)
+        FROM public.transactions
+        WHERE client_id = ${idInput}::uuid
+      ) AS dependencies
+      WHERE total > 0
+      ORDER BY reference
+    `
+      .returnsRow({
+        reference: 'pg/text@1',
+        total: 'pg/int8@1',
+      })
+      .build();
+
+    const rows = await db.runtime().query(dependencyPlan);
+
+    const blockingReferences = rows.map((row) => ({
+      reference: row.reference,
+      total: Number(row.total),
+    }));
+
+    return {
+      success: true,
+      message: 'Purge dependency check completed',
+      data: {
+        entity: 'clients',
+        id: client.id,
+        name: client.name,
+        isArchived: true,
+        hasBlockingReferences: blockingReferences.length > 0,
+        blockingReferences,
+        databaseDependenciesClear: blockingReferences.length === 0,
+        readyToPurge: false,
+        note: 'Permanent deletion remains disabled pending backup, retention, authorization, and transaction-time checks.',
+      },
+    };
+  }
+
+  async getBackupJobs() {
+    const plan = db.raw.sql`
+      SELECT
+        id::text AS id,
+        requested_by::text AS "requestedBy",
+        status::text AS status,
+        storage_object_key AS "storageObjectKey",
+        file_size_bytes::text AS "fileSizeBytes",
+        error_message AS "errorMessage",
+        requested_at::text AS "requestedAt",
+        started_at::text AS "startedAt",
+        completed_at::text AS "completedAt"
+      FROM public.backup_jobs
+      ORDER BY requested_at DESC, id DESC
+      LIMIT 50
+    `
+      .returnsRow({
+        id: 'pg/text@1',
+        requestedBy: 'pg/text@1',
+        status: 'pg/text@1',
+        storageObjectKey: {
+          codecId: 'pg/text@1',
+          nullable: true,
+        },
+        fileSizeBytes: {
+          codecId: 'pg/text@1',
+          nullable: true,
+        },
+        errorMessage: {
+          codecId: 'pg/text@1',
+          nullable: true,
+        },
+        requestedAt: 'pg/text@1',
+        startedAt: {
+          codecId: 'pg/text@1',
+          nullable: true,
+        },
+        completedAt: {
+          codecId: 'pg/text@1',
+          nullable: true,
+        },
+      })
+      .build();
+
+    const jobs = await db.runtime().query(plan);
+
+    return {
+      success: true,
+      message: 'Backup jobs retrieved successfully',
+      total: jobs.length,
+      data: jobs,
     };
   }
 

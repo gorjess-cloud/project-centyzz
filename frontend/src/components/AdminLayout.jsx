@@ -3,6 +3,7 @@ import { useWorkspaceTheme, WorkspaceNavigationContext } from './workspace/Works
 import { workspacePages } from './workspace/navigation';
 import SuperAdminLayout from './superadmin/SuperAdminLayout';
 import AdminSidebar from './AdminSidebar';
+import StaffLayout from './staff/StaffLayout';
 import DashboardView from '../pages/admin/DashboardView';
 import UserManagementView from '../pages/admin/UserManagementView';
 import ServiceManagementView from '../pages/admin/ServiceManagementView';
@@ -20,6 +21,10 @@ export default function AdminLayout({ currentUser, onLogout }) {
 
   if (currentUser?.role?.toUpperCase() === 'SUPERADMIN') {
     return <SuperAdminLayout currentUser={currentUser} onLogout={onLogout} />;
+  }
+
+  if (currentUser?.role?.toUpperCase() === 'STAFF') {
+    return <StaffLayout currentUser={currentUser} onLogout={onLogout} />;
   }
 
   return (
