@@ -1,28 +1,21 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, Plus, Minus, ChevronDown, ChevronRight, Scissors, Paintbrush, Sparkles, Wind, User, Flower2, Hand, Gem, ShoppingBag, Trash2, X } from 'lucide-react';
+import { Search, Plus, Minus, ChevronDown, ChevronRight, Scissors, Flower2, Hand, ShoppingBag, Trash2, X, Moon, Sun } from 'lucide-react';
 import { Toast, useToast, Badge, EmptyState, ConfirmModal, peso, card, input } from '../../components/staff/ui';
 import { PaymentMethods, SplitPayment, CashModal, QrModal, ReceiptSummary } from '../../components/staff/payment';
+import { useWorkspaceTheme } from '../../components/workspace/WorkspaceContext';
+import { api } from '../../api/client';
 
 const GROUPS = ['Hair Services', 'Nail Services', 'Skin & Lashes'];
 const SUBS = ['All-services', 'Cuts & Styling', 'Coloring & Highlights', 'Treatments', 'Packages'];
-const SERVICES = [
-  { id: 1, group: 0, sub: 1, name: 'Haircut', price: 99, icon: Scissors },
-  { id: 2, group: 0, sub: 2, name: 'Hair Color Basic', price: 599, icon: Paintbrush },
-  { id: 3, group: 0, sub: 3, name: 'Brazilian', price: 799, icon: Wind },
-  { id: 4, group: 0, sub: 3, name: 'Botox', price: 999, icon: Sparkles },
-  { id: 5, group: 0, sub: 3, name: 'Rebond', price: 999, icon: Wind },
-  { id: 6, group: 0, sub: 2, name: 'Balayage', price: 1999, icon: User },
-  { id: 7, group: 0, sub: 4, name: 'Cut + Color Package', price: 1499, icon: Gem },
-  { id: 8, group: 1, sub: 3, name: 'Gel Manicure', price: 450, icon: Hand },
-  { id: 9, group: 1, sub: 3, name: 'Pedicure', price: 400, icon: Hand },
-  { id: 10, group: 2, sub: 3, name: 'Facial', price: 799, icon: Flower2 },
-];
+const categoryIndex = (name = '') => /nail|mani|pedi/i.test(name) ? 1 : /skin|lash|facial/i.test(name) ? 2 : 0;
+const serviceSubcategory = (name = '') => /package|bundle/i.test(name) ? 4 : /color|highlight|balayage/i.test(name) ? 2 : /cut|style|blowout/i.test(name) ? 1 : 3;
+const serviceIcon = [Scissors, Hand, Flower2];
 const makeCustomerId = () => `Customer${new Date().toISOString().slice(0, 10).replace(/-/g, '')}0001`;
 
 function CartPanel({ cart, subtotal, customerId, editable, onChange, onRemove, onClear, footer }) {
   const count = cart.reduce((n, i) => n + i.qty, 0);
   return (
-    <aside className={`${card} flex min-h-96 w-full shrink-0 flex-col p-5 sm:min-h-0 sm:w-72 lg:w-80`}>
+    <aside className={`${card} flex min-h-96 w-full shrink-0 flex-col p-5 md:min-h-0 md:w-64 xl:w-80`}>
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 className="flex items-center gap-2 text-2xl font-bold text-[#2A1E1B]">Current Cart {count > 0 && <Badge tone="gold">{count}</Badge>}</h2>
@@ -63,11 +56,16 @@ function CartPanel({ cart, subtotal, customerId, editable, onChange, onRemove, o
 }
 
 export default function StaffPOSView({ onSale }) {
+  const { theme, toggleTheme } = useWorkspaceTheme();
+  const isDark = theme === 'dark';
   const [group, setGroup] = useState(0);
   const [menu, setMenu] = useState(false);
   const [sub, setSub] = useState(0);
   const [q, setQ] = useState('');
   const [cart, setCart] = useState([]);
+  const [services, setServices] = useState([]);
+  const [servicesLoading, setServicesLoading] = useState(true);
+  const [servicesError, setServicesError] = useState('');
   const [toast, say] = useToast();
   const chipsRef = useRef(null);
   const menuRef = useRef(null);
@@ -77,6 +75,28 @@ export default function StaffPOSView({ onSale }) {
   const [splitPayments, setSplitPayments] = useState([]);
   const [confirmClear, setConfirmClear] = useState(false);
 
+  useEffect(() => {
+    let current = true;
+    api.getServices()
+      .then((categories) => {
+        if (!current) return;
+        const catalog = (Array.isArray(categories) ? categories : []).flatMap((category) =>
+          (category.services || []).map((service) => ({
+            id: service.id,
+            group: categoryIndex(category.category),
+            sub: serviceSubcategory(service.name),
+            name: service.name,
+            price: Number(service.price),
+            icon: serviceIcon[categoryIndex(category.category)],
+          })),
+        );
+        setServices(catalog);
+      })
+      .catch((error) => { if (current) setServicesError(error.message); })
+      .finally(() => { if (current) setServicesLoading(false); });
+    return () => { current = false; };
+  }, []);
+
   // close the group dropdown when clicking elsewhere
   useEffect(() => {
     if (!menu) return;
@@ -85,7 +105,7 @@ export default function StaffPOSView({ onSale }) {
     return () => document.removeEventListener('mousedown', h);
   }, [menu]);
 
-  const shown = SERVICES.filter((s) => s.group === group && (sub === 0 || s.sub === sub) && s.name.toLowerCase().includes(q.toLowerCase()));
+  const shown = services.filter((s) => s.group === group && (sub === 0 || s.sub === sub) && s.name.toLowerCase().includes(q.toLowerCase()));
   const qtyOf = (id) => cart.find((c) => c.id === id)?.qty || 0;
   const change = (item, d) => setCart((c) => {
     const found = c.find((x) => x.id === item.id);
@@ -130,11 +150,11 @@ export default function StaffPOSView({ onSale }) {
   };
 
   return (
-    <div className="fade-in flex flex-col gap-4 sm:h-[calc(100vh-2.5rem)] sm:flex-row">
+    <div className="fade-in flex flex-col gap-4 md:h-[calc(100vh-2.5rem)] md:flex-row">
       {view === 'methods' && <PaymentMethods total={subtotal} onBack={() => setView('pos')} onSelect={selectMethod} />}
       {view === 'split' && <SplitPayment total={subtotal} payments={splitPayments} onBack={() => setView('methods')} onCharge={(m, amt) => setModal({ type: m, amount: amt, split: true })} />}
       {view === 'pos' && (
-        <section className="min-w-0 flex-1 sm:overflow-y-auto sm:pr-1">
+        <section className="min-w-0 flex-1 md:overflow-y-auto md:pr-1">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <div ref={menuRef} className="relative">
               <p className="text-xs font-bold text-[#8B5E3C]">Services</p>
@@ -150,6 +170,9 @@ export default function StaffPOSView({ onSale }) {
               <input aria-label="Search services" className={`${input} py-2.5 pl-9`} placeholder="Search services" value={q} onChange={(e) => setQ(e.target.value)} />
               {q && <button aria-label="Clear search" onClick={() => setQ('')} className="absolute right-2.5 top-2.5 rounded-full p-0.5 text-[#8A8174] hover:text-[#2A1E1B]"><X size={14} /></button>}
             </div>
+            <button type="button" className="workspace-action shrink-0" aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'} title={isDark ? 'Switch to light mode' : 'Switch to dark mode'} aria-pressed={isDark} onClick={toggleTheme}>
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
           </div>
 
           <div className="mb-5 flex items-center gap-2">
@@ -162,7 +185,10 @@ export default function StaffPOSView({ onSale }) {
           </div>
 
           <div className="grid grid-cols-2 gap-3 pb-2 lg:gap-4 xl:grid-cols-3">
-            {shown.length === 0 && <div className="col-span-full"><EmptyState icon={Search} title="No services found" hint="Try a different search or category." /></div>}
+            {servicesLoading && <div className="col-span-full rounded-xl border border-[#E7DFD4] bg-white p-5 text-center text-xs text-[#8A8174]">Loading services…</div>}
+            {servicesError && <div role="alert" className="col-span-full rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-700">Unable to load services: {servicesError}</div>}
+            {!servicesLoading && !servicesError && !services.length && <div className="col-span-full rounded-xl border border-[#E7DFD4] bg-white p-5 text-center text-xs text-[#8A8174]">No active services are available.</div>}
+            {!servicesLoading && !servicesError && services.length > 0 && shown.length === 0 && <div className="col-span-full"><EmptyState icon={Search} title="No services found" hint="Try a different search or category." /></div>}
             {shown.map((s) => {
               const Icon = s.icon; const n = qtyOf(s.id);
               return (
@@ -179,11 +205,13 @@ export default function StaffPOSView({ onSale }) {
         </section>
       )}
 
-      <CartPanel cart={cart} subtotal={subtotal} customerId={customerId} editable={view === 'pos'}
-        onChange={change} onRemove={remove} onClear={() => setConfirmClear(true)}
-        footer={view === 'pos' && (
-          <button disabled={!cart.length} onClick={() => setView('methods')} className="mt-4 rounded-full bg-[#4A3928] py-3.5 text-sm font-bold text-white shadow-md transition hover:bg-[#2A1E1B] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40">Proceed to Checkout</button>
-        )} />
+      {cart.length > 0 && (
+        <CartPanel cart={cart} subtotal={subtotal} customerId={customerId} editable={view === 'pos'}
+          onChange={change} onRemove={remove} onClear={() => setConfirmClear(true)}
+          footer={view === 'pos' && (
+            <button disabled={!cart.length} onClick={() => setView('methods')} className="mt-4 rounded-full bg-[#4A3928] py-3.5 text-sm font-bold text-white shadow-md transition hover:bg-[#2A1E1B] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40">Proceed to Checkout</button>
+          )} />
+      )}
 
       {modal?.type === 'cash' && <CashModal items={cart} subtotal={subtotal} amount={modal.amount} allowDiscount={!modal.split} onConfirm={onCash} onCancel={() => setModal(null)} />}
       {modal?.type === 'qr' && <QrModal items={cart} subtotal={subtotal} amount={modal.amount} onConfirm={onQr} onCancel={() => setModal(null)} />}

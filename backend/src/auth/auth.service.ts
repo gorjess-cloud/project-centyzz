@@ -14,6 +14,8 @@ import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
 import { OAuth2Client } from 'google-auth-library';
+import { UpdateProfileDto } from './dto/update-profile.dto.js';
+
 
 @Injectable()
 export class AuthService {
