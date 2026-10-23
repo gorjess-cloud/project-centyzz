@@ -136,12 +136,7 @@ export default function AuthPage({
         setFormMessage({ type: 'info', text: 'Registration successful. Check your email for the verification code.' });
         return;
       }
-
-      const result = await api.login({ email: normalizedEmail, password });
-      const user = result.data?.user;
-      const accessToken = result.data?.accessToken;
-      if (!user?.role || !accessToken) {
-        throw new Error('The server did not return a role for this account.');
+      
       // 2. FORGOT PASSWORD FLOW - REQUEST OTP
       if (isForgotPassword && !isResetOtpStep) {
         await api.forgotPassword({ email: normalizedEmail });
@@ -831,7 +826,6 @@ export default function AuthPage({
                 </div>
               </div>
 
-              {!isOtpStep && !isPinStep && (
               {!isSignup && !isForgotPassword && (
                 <div className="flex justify-center">
                   <GoogleLogin
