@@ -1,0 +1,12 @@
+$kind: http-request
+name: http://localhost:3000/api/superadmin/archives
+description: ""
+url: http://localhost:3000/api/superadmin/archives?entity=users
+method: GET
+queryParams:
+  entity: users
+auth:
+  type: bearer
+  credentials:
+    token: "{{json_web_token_0jnu}}"
+order: 15000

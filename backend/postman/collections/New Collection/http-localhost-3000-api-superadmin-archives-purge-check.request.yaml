@@ -1,0 +1,13 @@
+$kind: http-request
+name: http://localhost:3000/api/superadmin/archives/purge-check
+description: ""
+url: http://localhost:3000/api/superadmin/archives/purge-check?entity=users&id=13
+method: GET
+queryParams:
+  entity: users
+  id: "13"
+auth:
+  type: bearer
+  credentials:
+    token: "{{json_web_token_0kus}}"
+order: 18000
