@@ -5,6 +5,7 @@ import { SuperadminController } from './superadmin.controller.js';
 import { SuperadminService } from './superadmin.service.js';
 import { SuperadminGuard } from './superadmin.guard.js';
 import { AuditInterceptor } from '../audit/audit.interceptor.js';
+import { BackupService } from '../backup/backup.service.js';
 
 @Module({
   imports: [AuthModule],
@@ -12,7 +13,8 @@ import { AuditInterceptor } from '../audit/audit.interceptor.js';
   providers: [
     SuperadminService,
     SuperadminGuard,
-    AuditInterceptor, 
+    AuditInterceptor,
+    BackupService, 
   ],
 })
 export class SuperadminModule {}

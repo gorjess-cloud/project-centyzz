@@ -507,7 +507,7 @@ export default function AuthPage({
                   }}
                   onFocus={() => isSignup && setActiveValidationField('email')}
                   onBlur={() => setActiveValidationField('')}
-                  placeholder="you@example.com"
+                  placeholder="Enter Your Email"
                   required
                   className={fieldClass}
                 />

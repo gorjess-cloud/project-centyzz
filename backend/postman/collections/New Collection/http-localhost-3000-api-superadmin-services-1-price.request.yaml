@@ -1,0 +1,13 @@
+$kind: http-request
+name: http://localhost:3000/api/superadmin/services/1/price
+description: ""
+url: http://localhost:3000/api/superadmin/services/1/price
+method: PATCH
+body:
+  type: json
+  content: "{\r\n  \"price\": 150\r\n}"
+auth:
+  type: bearer
+  credentials:
+    token: "{{json_web_token_01xh}}"
+order: 14000
