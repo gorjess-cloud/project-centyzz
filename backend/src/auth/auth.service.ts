@@ -13,6 +13,7 @@ import { db } from '../prisma/db.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
+import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { OAuth2Client } from 'google-auth-library';
 
 @Injectable()
@@ -24,6 +25,47 @@ export class AuthService {
   private readonly jwtService: JwtService,
   private readonly emailService: EmailService,
 ) {}
+
+private normalizeAccountRole(role: string): string {
+  const normalized = role.trim().toUpperCase().replace(/[\s_-]+/g, '');
+  if (!['SUPERADMIN', 'ADMIN', 'STAFF', 'CUSTOMER'].includes(normalized)) {
+    throw new ForbiddenException('This account has an unsupported role');
+  }
+  return normalized;
+}
+
+async getMyProfile(userId: number) {
+  const user = await db.orm.public.User.where({ id: userId }).first();
+  if (!user || !user.isActive) {
+    throw new UnauthorizedException('Account unavailable');
+  }
+  return {
+    success: true,
+    data: {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: this.normalizeAccountRole(user.role),
+      emailVerified: user.emailVerified,
+      createdAt: user.createdAt,
+    },
+  };
+}
+
+async updateMyProfile(userId: number, profile: UpdateProfileDto) {
+  const firstName = profile.firstName.trim();
+  const lastName = profile.lastName.trim();
+  if (!firstName || !lastName) {
+    throw new BadRequestException('First and last name are required');
+  }
+  const user = await db.orm.public.User.where({ id: userId }).first();
+  if (!user || !user.isActive) {
+    throw new UnauthorizedException('Account unavailable');
+  }
+  await db.orm.public.User.where({ id: userId }).update({ firstName, lastName });
+  return this.getMyProfile(userId);
+}
 
   private hashOtp(email: string, otp: string): string {
   const secret = process.env.OTP_SECRET;
@@ -247,12 +289,6 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
       throw new UnauthorizedException('Account is inactive');
     }
 
-    if (!user.emailVerified) {
-      throw new ForbiddenException(
-        'Please verify your email before logging in',
-      );
-    }
-
     const passwordMatches = await bcrypt.compare(
       password,
       user.passwordHash,
@@ -262,10 +298,20 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    const role = this.normalizeAccountRole(user.role);
+
+    // Employee accounts are provisioned by administrators. Customer accounts
+    // still need to complete the email verification flow before sign-in.
+    if (role === 'CUSTOMER' && !user.emailVerified) {
+      throw new ForbiddenException(
+        'Please verify your email before logging in',
+      );
+    }
+
     const accessToken = await this.jwtService.signAsync({
       sub: user.id,
       email: user.email,
-      role: user.role,
+      role,
     });
 
     return {
@@ -278,7 +324,7 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
-          role: user.role,
+          role,
           isActive: user.isActive,
         },
       },
@@ -377,10 +423,12 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
       );
     }
 
+    const role = this.normalizeAccountRole(user.role);
+
     const accessToken = await this.jwtService.signAsync({
       sub: user.id,
       email: user.email,
-      role: user.role,
+      role,
     });
 
     return {
@@ -393,7 +441,7 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
-          role: user.role,
+          role,
           isActive: user.isActive,
         },
       },

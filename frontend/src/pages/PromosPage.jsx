@@ -1,10 +1,35 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Tag, X, Lock, Sparkles, ArrowRight } from 'lucide-react';
-import { PROMOS_DATA } from '../data/promosData';
+import { api } from '../api/client';
 
 export default function PromosPage({ setActivePage, setAuthMode, isDarkMode }) {
   const [selectedPromo, setSelectedPromo] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [promos, setPromos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let current = true;
+    api.getPublicPromos().then((result) => {
+      const records = Array.isArray(result) ? result : result.data;
+      if (!current || !Array.isArray(records)) return;
+      setPromos(records.map((promo) => {
+        const value = Number(promo.discountValue) || 0;
+        const isPercent = String(promo.discountType).toLowerCase().includes('percent');
+        return {
+          ...promo,
+          title: promo.title || promo.code,
+          savings: isPercent ? `${value}% off` : `₱${value.toLocaleString('en-PH')} off`,
+          bundlePrice: `₱${value.toLocaleString('en-PH')} ${isPercent ? 'discount' : 'off'}`,
+          originalPrice: '',
+          features: [promo.code, ...(promo.minPurchase > 0 ? [`Minimum purchase: ₱${Number(promo.minPurchase).toLocaleString('en-PH')}`] : []), ...(promo.expiresAt ? [`Valid until ${new Date(promo.expiresAt).toLocaleDateString()}`] : [])],
+        };
+      }));
+    }).catch((error) => { if (current) setLoadError(error.message); })
+      .finally(() => { if (current) setLoading(false); });
+    return () => { current = false; };
+  }, []);
 
   const handleClaimClick = (promo) => {
     setSelectedPromo(promo);
@@ -29,24 +54,27 @@ export default function PromosPage({ setActivePage, setAuthMode, isDarkMode }) {
   };
 
   return (
-    <div className={`py-12 min-h-screen relative ${isDarkMode ? 'bg-gradient-to-b from-[#121212] via-[#1B1917] to-[#2A231B] text-[#F5F1EA]' : 'bg-gradient-to-b from-[#FDFBF7] via-[#F1E8D3] to-[#DDC8A2] text-[#2A1E1B]'}`}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-        <div className="text-center max-w-3xl mx-auto space-y-3">
+    <div className={`relative min-h-screen py-6 sm:py-10 lg:py-12 ${isDarkMode ? 'bg-gradient-to-b from-[#121212] via-[#1B1917] to-[#2A231B] text-[#F5F1EA]' : 'bg-gradient-to-b from-[#FDFBF7] via-[#F1E8D3] to-[#DDC8A2] text-[#2A1E1B]'}`}>
+      <div className="mx-auto max-w-7xl space-y-7 px-4 sm:space-y-10 sm:px-6 lg:space-y-12 lg:px-8">
+        <div className="mx-auto max-w-3xl space-y-2 text-center sm:space-y-3">
           <span className="text-xs font-bold text-[#C5A059] uppercase tracking-widest">Exclusive Combos</span>
-          <h1 className={`text-3xl sm:text-5xl font-serif font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>
+          <h1 className={`text-2xl leading-tight sm:text-5xl font-serif font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>
             Bundle it. More Services <span className="italic font-normal text-[#C5A059]">for less.</span>
           </h1>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-          {PROMOS_DATA.map((promo) => (
-            <div key={promo.id} className={`rounded-3xl p-6 border shadow-md flex flex-col justify-between ${isDarkMode ? 'bg-[#1A1A1A] border-[#2A2A2A]' : 'bg-white border-[#E8DFD1]'}`}>
+        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 lg:gap-8">
+          {loading && <p role="status" className="col-span-full text-center text-sm">Loading active promotions…</p>}
+          {loadError && <p role="alert" className="col-span-full text-center text-sm text-red-600">Couldn’t load promotions: {loadError}</p>}
+          {!loading && !loadError && promos.length === 0 && <p className="col-span-full text-center text-sm">There are no active promotions right now.</p>}
+          {promos.map((promo) => (
+            <div key={promo.id} className={`flex flex-col justify-between rounded-2xl border p-5 shadow-md sm:rounded-3xl sm:p-6 ${isDarkMode ? 'bg-[#1A1A1A] border-[#2A2A2A]' : 'bg-white border-[#E8DFD1]'}`}>
               <div className="space-y-4">
                 <span className="inline-block px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-xs">{promo.savings}</span>
                 <h3 className={`text-xl font-serif font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>{promo.title}</h3>
                 <div className="flex items-baseline gap-2">
                   <span className={`text-3xl font-serif font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>{promo.bundlePrice}</span>
-                  <span className="text-sm text-gray-400 line-through">{promo.originalPrice}</span>
+                  {promo.originalPrice && <span className="text-sm text-gray-400 line-through">{promo.originalPrice}</span>}
                 </div>
                 <p className={`text-xs ${isDarkMode ? 'text-[#D6D0C8]' : 'text-gray-600'}`}>{promo.description}</p>
                 <div className="space-y-2 pt-2">
@@ -60,7 +88,7 @@ export default function PromosPage({ setActivePage, setAuthMode, isDarkMode }) {
               </div>
               <button 
                 onClick={() => handleClaimClick(promo)} 
-                className="mt-6 w-full py-3 rounded-xl bg-[#C5A059] text-white text-xs font-semibold hover:bg-[#b08d47] transition-colors"
+                className="mt-4 min-h-11 w-full rounded-xl bg-[#C5A059] py-3 text-xs font-semibold text-white transition-colors hover:bg-[#b08d47] sm:mt-6"
               >
                 Claim Bundle Deal
               </button>
@@ -77,7 +105,7 @@ export default function PromosPage({ setActivePage, setAuthMode, isDarkMode }) {
             {/* Close Button */}
             <button 
               onClick={handleCloseModal}
-              className={`absolute top-4 right-4 z-10 p-2 rounded-full transition-colors ${isDarkMode ? 'text-[#B8B1A7] hover:text-white bg-[#302D29] hover:bg-[#403B34]' : 'text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200'}`}
+              className={`absolute right-3 top-3 z-10 grid min-h-11 min-w-11 place-items-center rounded-full transition-colors sm:right-4 sm:top-4 ${isDarkMode ? 'text-[#B8B1A7] hover:text-white bg-[#302D29] hover:bg-[#403B34]' : 'text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200'}`}
             >
               <X className="w-4 h-4" />
             </button>
@@ -109,17 +137,17 @@ export default function PromosPage({ setActivePage, setAuthMode, isDarkMode }) {
                 </label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
-                    <input 
+                      <input 
                       type="text" 
                       readOnly 
-                      value={selectedPromo ? `${selectedPromo.title.toUpperCase().replace(/\s+/g, '-')}-DEAL` : 'BUNDLE-PROMO'} 
+                      value={selectedPromo?.code || (selectedPromo ? `${selectedPromo.title.toUpperCase().replace(/\s+/g, '-')}-DEAL` : 'BUNDLE-PROMO')} 
                       className={`w-full px-3.5 py-2.5 border rounded-xl text-xs font-bold tracking-wide focus:outline-none pr-8 ${isDarkMode ? 'bg-[#242220] border-[#484033] text-[#E8D9B7]' : 'bg-indigo-50/40 border-indigo-200 text-indigo-900'}`}
                     />
                     <Lock className={`w-3.5 h-3.5 absolute right-3 top-3 ${isDarkMode ? 'text-[#C5A059]' : 'text-indigo-400'}`} />
                   </div>
-                  <button 
+                    <button 
                     onClick={handleLoginClick}
-                    className={`px-4 py-2.5 font-bold text-xs rounded-xl transition-colors shadow-sm flex items-center gap-1 ${isDarkMode ? 'bg-[#3A342B] border border-[#8D7444] text-[#F5F1EA] hover:bg-[#51432D] hover:border-[#C5A059]' : 'bg-[#2A1E1B] text-white hover:bg-[#C5A059]'}`}
+                    className={`min-h-11 px-4 py-2.5 font-bold text-xs rounded-xl transition-colors shadow-sm flex items-center gap-1 ${isDarkMode ? 'bg-[#3A342B] border border-[#8D7444] text-[#F5F1EA] hover:bg-[#51432D] hover:border-[#C5A059]' : 'bg-[#2A1E1B] text-white hover:bg-[#C5A059]'}`}
                   >
                     <span>Apply</span>
                     <Sparkles className="w-3 h-3 text-amber-300" />

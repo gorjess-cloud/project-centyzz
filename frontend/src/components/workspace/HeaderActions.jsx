@@ -2,7 +2,7 @@ import { useContext, useEffect, useId, useRef, useState } from 'react';
 import { Bell, Moon, Search, Sun, X } from 'lucide-react';
 import { useWorkspaceTheme, WorkspaceNavigationContext } from './WorkspaceContext';
 
-export default function HeaderActions() {
+export default function HeaderActions({ className = '' }) {
   const { theme, toggleTheme } = useWorkspaceTheme();
   const { items, navigate } = useContext(WorkspaceNavigationContext);
   const [panel, setPanel] = useState(null);
@@ -41,7 +41,7 @@ export default function HeaderActions() {
   }
 
   return (
-    <div className="workspace-actions" ref={containerRef}>
+    <div className={`workspace-actions ${className}`} ref={containerRef}>
       <button type="button" className="workspace-action" aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'} title={isDark ? 'Switch to light mode' : 'Switch to dark mode'} aria-pressed={isDark} onClick={toggleTheme}>
         {isDark ? <Sun size={16} /> : <Moon size={16} />}
       </button>

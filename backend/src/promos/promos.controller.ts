@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
@@ -10,6 +11,11 @@ import { PromosService } from './promos.service.js';
 @Controller('api/promos')
 export class PromosController {
   constructor(private readonly promosService: PromosService) {}
+
+  @Get()
+  getActivePromos() {
+    return this.promosService.findActivePromos();
+  }
 
   @Post('validate')
   @HttpCode(HttpStatus.OK)
