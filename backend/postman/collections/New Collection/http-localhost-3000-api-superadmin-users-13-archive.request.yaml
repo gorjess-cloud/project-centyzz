@@ -1,0 +1,17 @@
+$kind: http-request
+name: http://localhost:3000/api/superadmin/users/13/archive
+description: ""
+url: http://localhost:3000/api/superadmin/users/13/archive
+method: PATCH
+body:
+  type: json
+  content: "{\r
+
+    \  \"reason\": \"Archived during authorized backend testing\"\r
+
+    }"
+auth:
+  type: bearer
+  credentials:
+    token: "{{json_web_token_19bw}}"
+order: 12000
