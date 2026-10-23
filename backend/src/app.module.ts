@@ -11,6 +11,8 @@ import { AppointmentsModule } from './appointments/appointments.module.js';
 import { PromosModule } from './promos/promos.module.js';
 import { SuperadminModule } from './superadmin/superadmin.module.js';
 import { ErrorsModule } from './errors/errors.module.js';
+import { AdminModule } from './admin/admin.module.js';
+
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { ErrorsModule } from './errors/errors.module.js';
     PromosModule,
     SuperadminModule,
     ErrorsModule,
+    AdminModule,
+
   ],
   controllers: [AppController],
   providers: [AppService],
