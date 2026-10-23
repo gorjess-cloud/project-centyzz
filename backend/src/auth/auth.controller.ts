@@ -1,6 +1,8 @@
 
 import { Body, Controller, Post } from '@nestjs/common';
 import { AuthService } from './auth.service.js';
+import { JwtAuthGuard } from './jwt-auth.guard.js';
+import type { AuthenticatedRequest } from './jwt-auth.guard.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
