@@ -6,11 +6,20 @@ import StaffScheduleView from '../../pages/staff/StaffScheduleView';
 import StaffInventoryView from '../../pages/staff/StaffInventoryView';
 import StaffSettingsView from '../../pages/staff/StaffSettingsView';
 import { useWorkspaceTheme } from '../workspace/WorkspaceContext';
+import { WorkspaceNavigationContext } from '../workspace/WorkspaceContext';
+
+const staffPages = [
+  { id: 'pos', label: 'POS' },
+  { id: 'schedule', label: 'Schedule' },
+  { id: 'inventory', label: 'Inventory' },
+  { id: 'settings', label: 'Settings' },
+];
 
 export default function StaffLayout({ currentUser, onLogout }) {
   const [activePage, setActivePage] = useState('pos');
   const { theme } = useWorkspaceTheme();
   return (
+    <WorkspaceNavigationContext.Provider value={{ items: staffPages, navigate: setActivePage }}>
     <div data-theme={theme} className="workspace-theme staff-workspace flex h-screen w-screen overflow-hidden bg-[#F6F4EF] text-[#443523] transition-colors duration-300">
       <MotionStyles />
       <StaffSidebar activePage={activePage} setActivePage={setActivePage} currentUser={currentUser} onLogout={onLogout} />
@@ -23,5 +32,6 @@ export default function StaffLayout({ currentUser, onLogout }) {
         </div>
       </main>
     </div>
+    </WorkspaceNavigationContext.Provider>
   );
 }

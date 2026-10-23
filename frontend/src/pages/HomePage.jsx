@@ -54,7 +54,7 @@ export default function HomePage({ setActivePage, setServiceFilter, onOpenBookin
             Luxury Beauty Sanctuary
           </div>
 
-          <h1 className="text-[4rem] leading-[0.88] sm:text-[5.5rem] lg:text-[7rem] font-serif font-light text-white">
+          <h1 className="text-[clamp(2.75rem,12vw,4rem)] leading-[0.92] sm:text-[5.5rem] lg:text-[7rem] font-serif font-light text-white">
             Your Beauty,<br />
             <span className="italic font-normal text-[#D4AF37]">Our Passion</span>
           </h1>
@@ -81,14 +81,14 @@ export default function HomePage({ setActivePage, setServiceFilter, onOpenBookin
       </section>
 
       {/* Specialty Banners Section */}
-      <section className={`py-20 ${sectionShell}`}>
+      <section className={`py-10 sm:py-16 lg:py-20 ${sectionShell}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-2xl mx-auto mb-12">
             <span className="text-xs uppercase tracking-widest text-[#503007] font-semibold">SIGNATURE COLLECTIONS</span>
             <h2 className={`text-3xl sm:text-4xl font-serif font-bold mt-2 ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>Our Beauty Services</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:gap-8">
             <div 
               onClick={() => { setActivePage('services'); setServiceFilter('hair'); }} 
               className="cursor-pointer relative h-80 rounded-2xl overflow-hidden group shadow-lg"
@@ -129,7 +129,7 @@ export default function HomePage({ setActivePage, setServiceFilter, onOpenBookin
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-xs font-semibold uppercase tracking-wider text-[#C5A059]">Why choose Centy’zz</p>
           
-          <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <div className="mt-4 grid grid-cols-1 items-start gap-4 sm:gap-6 lg:mt-6 lg:grid-cols-12 lg:gap-8">
             {/* Left Value Cards */}
             <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
               <div className={`p-6 rounded-2xl border ${cardBg} shadow-sm space-y-3`}>
@@ -177,7 +177,7 @@ export default function HomePage({ setActivePage, setServiceFilter, onOpenBookin
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <div className="grid grid-cols-1 items-start gap-4 sm:gap-6 lg:grid-cols-12 lg:gap-8">
             {/* Reviews Grid (2x2) */}
             <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
               {reviews.slice(0, 4).map((rev) => (

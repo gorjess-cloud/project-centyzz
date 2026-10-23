@@ -130,24 +130,11 @@ export default function AuthPage({
         return;
       }
 
-      // 1. Try real backend API call first
-      let user, accessToken;
-      try {
-        const result = await api.login({ email: normalizedEmail, password });
-        user = result.data?.user;
-        accessToken = result.data?.accessToken;
-      } catch {
-        // 2. Fallback to mock login if NestJS backend is offline
-        console.warn('Backend server offline. Falling back to frontend mock authentication.');
-        const isClient = normalizedEmail.includes('client');
-        user = {
-          id: 'usr_admin_123',
-          firstName: 'Millicent',
-          lastName: 'Campillos',
-          email: normalizedEmail,
-          role: isClient ? 'CLIENT' : 'ADMIN',
-        };
-        accessToken = 'mock_dev_access_token';
+      const result = await api.login({ email: normalizedEmail, password });
+      const user = result.data?.user;
+      const accessToken = result.data?.accessToken;
+      if (!user?.role || !accessToken) {
+        throw new Error('The server did not return a role for this account.');
       }
 
       // Check role routing
@@ -813,7 +800,7 @@ export default function AuthPage({
                 </div>
               </div>
 
-              {!isSignup && (
+              {!isOtpStep && !isPinStep && (
                 <div className="flex justify-center">
                   <GoogleLogin
                     onSuccess={handleGoogleSuccess}

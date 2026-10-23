@@ -27,7 +27,7 @@ export class SuperadminGuard implements CanActivate {
       throw new ForbiddenException('Account unavailable');
     }
 
-    if (user.role !== 'SUPERADMIN') {
+    if (user.role.toUpperCase().replace(/[\s_-]+/g, '') !== 'SUPERADMIN') {
       throw new ForbiddenException(
         'Superadmin access required',
       );

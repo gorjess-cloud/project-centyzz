@@ -9,11 +9,8 @@ import {
   ClipboardList, 
   Calendar, 
   Settings, 
-  LogOut,
-  Moon,
-  Sun
+  LogOut
 } from 'lucide-react';
-import { useWorkspaceTheme } from './workspace/WorkspaceContext';
 
 export default function AdminSidebar({ 
   activePage = 'dashboard', 
@@ -24,8 +21,6 @@ export default function AdminSidebar({
   className = ''
 }) {
   const [isExpanded, setIsExpanded] = useState(true);
-  const { theme, toggleTheme } = useWorkspaceTheme();
-  const isDark = theme === 'dark';
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
@@ -87,20 +82,6 @@ export default function AdminSidebar({
               </span>
             </div>
           )}
-        </button>
-      </div>
-
-      <div className="px-3 py-2 border-b border-[#E7DFD4]">
-        <button
-          type="button"
-          onClick={toggleTheme}
-          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-          aria-pressed={isDark}
-          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-          className={`w-full flex items-center p-2.5 rounded-xl text-[#443523] hover:bg-[#C5A059]/15 transition-all duration-200 active:scale-95 ${isExpanded ? 'justify-start gap-3' : 'justify-center'}`}
-        >
-          {isDark ? <Sun size={18} /> : <Moon size={18} />}
-          {isExpanded && <span className="text-xs font-bold truncate">{isDark ? 'Light Mode' : 'Dark Mode'}</span>}
         </button>
       </div>
 

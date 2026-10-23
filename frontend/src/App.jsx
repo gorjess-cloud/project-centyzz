@@ -129,8 +129,16 @@ export default function App() {
     setActivePage('home');
   };
 
+  const handleProfileUpdated = (profile) => {
+    setMemberUser((current) => current ? {
+      ...current,
+      ...profile,
+      name: `${profile.firstName || ''} ${profile.lastName || ''}`.trim(),
+    } : current);
+  };
+
   return (
-    <div className={`min-h-screen flex flex-col justify-between ${isDarkMode ? 'bg-[#111111] text-[#F5F1EA]' : 'bg-[#FDFBF7] text-[#3A2E2B]'}`}>
+    <div className={`min-h-screen flex flex-col justify-between overflow-x-clip ${isDarkMode ? 'bg-[#111111] text-[#F5F1EA]' : 'bg-[#FDFBF7] text-[#3A2E2B]'}`}>
       
       {!isAuthPage && !isMemberDashboard && !isAdminDashboard && (
         <Navbar 
@@ -163,6 +171,7 @@ export default function App() {
               setActivePage={setActivePage}
               onOpenBooking={handleMemberBooking}
               onLogout={handleLogout}
+              onUserUpdated={handleProfileUpdated}
               appointments={memberAppointments}
               isLoadingAppointments={isLoadingAppointments}
               appointmentsError={appointmentsError}
@@ -184,6 +193,7 @@ export default function App() {
             setActivePage={setActivePage}
             onOpenBooking={handleMemberBooking}
             onLogout={handleLogout}
+            onUserUpdated={handleProfileUpdated}
             initialSection="account"
             appointments={memberAppointments}
             isLoadingAppointments={isLoadingAppointments}
