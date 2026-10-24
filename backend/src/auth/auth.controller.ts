@@ -1,5 +1,5 @@
 
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import type { AuthenticatedRequest } from './jwt-auth.guard.js';
@@ -9,6 +9,7 @@ import { VerifyEmailDto } from './dto/verify-email.dto.js';
 import { ForgotPasswordDto } from './dto/forgot-password.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { GoogleLoginDto } from './dto/google-login.dto.js';
+import { UpdateProfileDto } from './dto/update-profile.dto.js';
 
 @Controller('api/auth')
 export class AuthController {
@@ -27,6 +28,21 @@ export class AuthController {
   @Post('login')
   login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  getMyProfile(@Req() request: AuthenticatedRequest) {
+    return this.authService.getMyProfile(request.user.sub);
+  }
+
+  @Patch('me')
+  @UseGuards(JwtAuthGuard)
+  updateMyProfile(
+    @Body() profile: UpdateProfileDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.authService.updateMyProfile(request.user.sub, profile);
   }
 
   @Post('google')

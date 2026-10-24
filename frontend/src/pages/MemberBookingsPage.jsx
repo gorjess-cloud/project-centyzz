@@ -23,7 +23,6 @@ export default function MemberBookingsPage({
   isDarkMode,
   setIsDarkMode,
   setActivePage,
-  onOpenBooking,
   onLogout,
   appointments = [],
   isLoadingAppointments,
@@ -37,6 +36,7 @@ export default function MemberBookingsPage({
 
   const fullName = user?.fullName || user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Member";
   const initials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+  const profilePhoto = (() => { try { return localStorage.getItem(`centyzz-member-avatar:${user?.id ?? user?.email ?? "member"}`) || ""; } catch { return ""; } })();
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Manila",
   }).format(new Date());
@@ -186,7 +186,7 @@ export default function MemberBookingsPage({
             aria-label={`${fullName} profile`}
             className={`flex items-center justify-center rounded-full border-2 border-[#C5A059] bg-[#4A3928] font-semibold text-white transition-all duration-300 ${isSidebarCollapsed ? "h-9 w-9 text-[10px]" : "mb-2 h-12 w-12 text-xs"}`}
           >
-            {initials || "M"}
+            {profilePhoto ? <img src={profilePhoto} alt="" className="h-full w-full rounded-full object-cover" /> : (initials || "M")}
           </div>
           {!isSidebarCollapsed && (
             <div className="w-full px-2">
@@ -265,7 +265,7 @@ export default function MemberBookingsPage({
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8 transition-all duration-300">
+      <main className="min-w-0 flex-1 px-3 py-4 transition-all duration-300 sm:px-6 sm:py-5 lg:px-8">
         <div className="mx-auto max-w-4xl">
           <header className="mb-6 flex items-center justify-between gap-4">
             <div className="min-w-0">
@@ -285,7 +285,7 @@ export default function MemberBookingsPage({
                 type="button"
                 onClick={() => setIsDarkMode((current) => !current)}
                 aria-label="Toggle dark mode"
-                className={`rounded-full border p-2.5 ${cardSurface} hover:border-[#C5A059] transition-all duration-200 active:scale-95 shadow-sm`}
+                className={`min-h-11 min-w-11 rounded-full border p-2.5 ${cardSurface} hover:border-[#C5A059] transition-all duration-200 active:scale-95 shadow-sm`}
               >
                 {isDarkMode ? (
                   <Sun className="h-4 w-4" />
@@ -296,7 +296,7 @@ export default function MemberBookingsPage({
               <button
                 type="button"
                 aria-label="Search"
-                className={`rounded-full border p-2.5 ${cardSurface} hover:border-[#C5A059] transition-all duration-200 active:scale-95 shadow-sm`}
+                className={`min-h-11 min-w-11 rounded-full border p-2.5 ${cardSurface} hover:border-[#C5A059] transition-all duration-200 active:scale-95 shadow-sm`}
               >
                 <Search className="h-4 w-4" />
               </button>
@@ -357,7 +357,7 @@ export default function MemberBookingsPage({
                 <h2 className="text-sm font-bold">Upcoming Appointments</h2>
                 <button
                   type="button"
-                  onClick={() => onOpenBooking(null)}
+                  onClick={openServices}
                   className="flex items-center gap-1.5 text-xs font-semibold text-[#B4833F] hover:underline transition-colors"
                 >
                   <CalendarPlus className="h-3.5 w-3.5" />
@@ -375,7 +375,7 @@ export default function MemberBookingsPage({
                 </p>
               ) : upcomingBookings.length === 0 ? (
                 <div
-                  className={`text-center py-20 rounded-2xl border transition-all duration-300 ${cardSurface}`}
+                  className={`rounded-2xl border py-10 text-center transition-all duration-300 sm:py-16 lg:py-20 ${cardSurface}`}
                 >
                   <CalendarDays
                     className={`w-12 h-12 mx-auto mb-3 ${mutedText}`}
@@ -385,7 +385,7 @@ export default function MemberBookingsPage({
                   </p>
                   <button
                     type="button"
-                    onClick={() => onOpenBooking(null)}
+                    onClick={openServices}
                     className="mt-3 text-xs font-semibold text-[#B4833F] hover:underline transition-colors"
                   >
                     Book your first appointment
@@ -468,7 +468,7 @@ export default function MemberBookingsPage({
                 </p>
               ) : filteredPastBookings.length === 0 ? (
                 <div
-                  className={`text-center py-20 rounded-2xl border transition-all duration-300 ${cardSurface}`}
+                  className={`rounded-2xl border py-10 text-center transition-all duration-300 sm:py-16 lg:py-20 ${cardSurface}`}
                 >
                   <CalendarDays
                     className={`w-12 h-12 mx-auto mb-3 ${mutedText}`}
@@ -690,10 +690,10 @@ export default function MemberBookingsPage({
         </div>
       )}
 
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 lg:hidden w-[90%] max-w-sm">
+      <div className="fixed bottom-3 left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 lg:hidden">
         <nav
           aria-label="Mobile Navigation"
-          className="flex items-center justify-around rounded-full bg-[#4A3928]/95 backdrop-blur-md px-3 py-2 text-white shadow-xl border border-white/10 transition-all duration-300"
+          className="flex items-center justify-around rounded-full border border-white/10 bg-[#4A3928]/95 px-2 py-1.5 text-white shadow-xl backdrop-blur-md transition-all duration-300"
         >
           {[
             {
@@ -728,7 +728,7 @@ export default function MemberBookingsPage({
                 key={item.id}
                 type="button"
                 onClick={item.action}
-                className={`relative flex flex-col items-center justify-center p-2 text-[10px] transition-all duration-200 active:scale-90 ${
+                className={`relative flex min-h-11 min-w-[3.5rem] flex-col items-center justify-center rounded-full px-1 text-[10px] transition-all duration-200 active:scale-90 ${
                   isActive
                     ? "text-[#F1E7C6] font-bold"
                     : "text-white/70 hover:text-white"

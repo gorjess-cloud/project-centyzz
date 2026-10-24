@@ -36,11 +36,9 @@ const SERVICES_BY_CATEGORY = {
 function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const [step, setStep] = useState('form');
   const [loadingPayment, setLoadingPayment] = useState(false);
-  const initialCategory = selectedService?.category === 'nails'
-    ? 'Nails'
-    : selectedService?.category === 'bundle'
-      ? 'Bundle'
-      : 'Hair';
+  const selectedCategory = String(selectedService?.category || '').toLowerCase();
+  const initialCategory = selectedCategory.includes('nail') ? 'Nails'
+    : selectedCategory.includes('bundle') ? 'Bundle' : 'Hair';
   
   // Date and Calendar Navigation
   const today = new Date();

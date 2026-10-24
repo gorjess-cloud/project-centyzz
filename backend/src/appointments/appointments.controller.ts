@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   ParseIntPipe,
   Post,
   Query,
@@ -31,6 +32,26 @@ export class AppointmentsController {
     return this.appointmentsService.findMine(
       request.user.sub,
       request.user.email,
+    );
+  }
+
+  @Get('staff')
+  @UseGuards(JwtAuthGuard)
+  getStaffAppointments(@Req() request: AuthenticatedRequest) {
+    return this.appointmentsService.findForStaff(request.user.role);
+  }
+
+  @Patch(':id/staff-status')
+  @UseGuards(JwtAuthGuard)
+  updateStaffStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { status?: string },
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.appointmentsService.updateStatusForStaff(
+      id,
+      body.status ?? '',
+      request.user.role,
     );
   }
 

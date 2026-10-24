@@ -36,10 +36,11 @@ export default function MemberBookScheduler({
   const [serviceGroups, setServiceGroups] = useState([]);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
   const [servicesError, setServicesError] = useState('');
-  const [selectedServiceId, setSelectedServiceId] = useState('');
+  const [selectedServiceIds, setSelectedServiceIds] = useState([]);
   const [appointmentDate, setAppointmentDate] = useState(getSalonDate);
-  const [availability, setAvailability] = useState(null);
-  const [selectedTime, setSelectedTime] = useState('');
+  const [availability, setAvailability] = useState({});
+  const [selectedTimes, setSelectedTimes] = useState({});
+  const [createdServiceIds, setCreatedServiceIds] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -49,11 +50,9 @@ export default function MemberBookScheduler({
   );
   const fullName = user?.fullName || user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Member';
   const initials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
-  const currentQuery = `${appointmentDate}:${selectedServiceId}`;
-  const currentAvailability = availability?.query === currentQuery ? availability : null;
-  const timeSlots = currentAvailability?.slots || [];
-  const isLoadingSlots = Boolean(selectedServiceId && appointmentDate && !currentAvailability);
-  const service = services.find((item) => String(item.id) === selectedServiceId);
+  const profilePhoto = (() => { try { return localStorage.getItem(`centyzz-member-avatar:${user?.id ?? user?.email ?? 'member'}`) || ''; } catch { return ''; } })();
+  const selectedServices = selectedServiceIds.map((id) => services.find((item) => String(item.id) === String(id))).filter(Boolean);
+  const isLoadingSlots = selectedServiceIds.some((id) => !availability[`${appointmentDate}:${id}`]);
 
   const surface = isDarkMode ? 'bg-[#171512] text-[#F5F1EA]' : 'bg-[#F6F4EF] text-[#443523]';
   const cardSurface = isDarkMode ? 'border-[#39342B] bg-[#211F1B]' : 'border-[#E9E4D8] bg-white';
@@ -70,12 +69,14 @@ export default function MemberBookScheduler({
         if (!isCurrent) return;
         const groups = Array.isArray(result) ? result : [];
         setServiceGroups(groups);
-        const requestedName = String(selectedService?.title || selectedService?.name || '').toLowerCase();
-        const match = groups.flatMap((group) => group.services || []).find((item) =>
-          String(item.id) === String(selectedService?.id) ||
-          (requestedName && item.name.toLowerCase() === requestedName),
-        );
-        if (match) setSelectedServiceId(String(match.id));
+        const requested = Array.isArray(selectedService) ? selectedService : selectedService ? [selectedService] : [];
+        const availableServices = groups.flatMap((group) => group.services || []);
+        const matches = requested.map((requestedService) => {
+          const requestedName = String(requestedService?.title || requestedService?.name || '').toLowerCase();
+          return availableServices.find((item) => String(item.id) === String(requestedService?.id))
+            || availableServices.find((item) => requestedName && item.name.toLowerCase() === requestedName);
+        }).filter(Boolean);
+        setSelectedServiceIds(matches.map((item) => String(item.id)));
       })
       .catch((error) => {
         if (isCurrent) setServicesError(error.message);
@@ -89,19 +90,25 @@ export default function MemberBookScheduler({
   }, [selectedService]);
 
   useEffect(() => {
-    if (!selectedServiceId || !appointmentDate) return undefined;
+    if (!selectedServiceIds.length || !appointmentDate) return undefined;
     let isCurrent = true;
-    api.getAvailableSlots(appointmentDate, selectedServiceId)
-      .then((result) => {
-        if (isCurrent) setAvailability({ query: currentQuery, slots: result.slots || [] });
-      })
-      .catch((error) => {
-        if (isCurrent) setAvailability({ query: currentQuery, slots: [], error: error.message });
-      });
+    Promise.all(selectedServiceIds.map(async (id) => {
+      try {
+        const result = await api.getAvailableSlots(appointmentDate, id);
+        return [id, { slots: result.slots || [] }];
+      } catch (error) {
+        return [id, { slots: [], error: error.message }];
+      }
+    })).then((results) => {
+      if (isCurrent) setAvailability((current) => ({
+        ...current,
+        ...Object.fromEntries(results.map(([id, value]) => [`${appointmentDate}:${id}`, value])),
+      }));
+    });
     return () => {
       isCurrent = false;
     };
-  }, [appointmentDate, currentQuery, selectedServiceId]);
+  }, [appointmentDate, selectedServiceIds]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -110,24 +117,31 @@ export default function MemberBookScheduler({
       setFormError('Please sign in with a registered account to book an appointment.');
       return;
     }
-    if (!service || !selectedTime) {
-      setFormError('Choose a service and an available time.');
+    if (!selectedServices.length || selectedServices.some((item) => !selectedTimes[item.id])) {
+      setFormError('Choose an available time for every selected service.');
       return;
     }
 
     setIsSubmitting(true);
+    let createdCount = 0;
     try {
-      await api.createMyAppointment(user.accessToken, {
-        serviceId: Number(service.id),
-        customerName: fullName,
-        customerEmail: user.email,
-        appointmentDate,
-        startTime: selectedTime,
-      });
+      for (const selected of selectedServices) {
+        if (createdServiceIds.includes(selected.id)) continue;
+        await api.createMyAppointment(user.accessToken, {
+          serviceId: Number(selected.id),
+          customerName: fullName,
+          customerEmail: user.email,
+          appointmentDate,
+          startTime: selectedTimes[selected.id],
+        });
+        createdCount += 1;
+        setCreatedServiceIds((ids) => [...ids, selected.id]);
+      }
       onAppointmentCreated?.();
       setActivePage('member-bookings');
     } catch (error) {
-      setFormError(error.message);
+      const completed = createdServiceIds.length + createdCount;
+      setFormError(completed ? `${completed} appointment(s) were saved. The remaining service could not be booked: ${error.message}` : error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -141,7 +155,7 @@ export default function MemberBookScheduler({
         </div>
         <div className="flex justify-center border-b border-inherit py-4">
           <div aria-label={`${fullName} profile`} role="img" className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#C5A059] bg-[#4A3928] text-[10px] font-semibold text-white">
-            {initials || 'M'}
+            {profilePhoto ? <img src={profilePhoto} alt="" className="h-full w-full rounded-full object-cover" /> : (initials || 'M')}
           </div>
         </div>
         <nav aria-label="Member navigation" className="flex flex-1 flex-col gap-1.5 p-3">
@@ -152,8 +166,9 @@ export default function MemberBookScheduler({
             { label: 'Account', icon: UserRound, page: 'member-account' },
           ].map((item) => {
             const Icon = item.icon;
+            const active = item.page === 'member-bookings';
             return (
-              <button key={item.page} type="button" title={item.label} onClick={() => setActivePage(item.page)} className="flex h-10 items-center justify-center rounded-lg text-[#8A8174] transition-colors hover:bg-[#C5A059]/15 hover:text-[#4A3928]">
+              <button key={item.page} type="button" title={item.label} aria-current={active ? 'page' : undefined} onClick={() => setActivePage(item.page)} className={`flex h-10 items-center justify-center rounded-lg transition-colors ${active ? 'bg-[#4A3928] text-white' : 'text-[#8A8174] hover:bg-[#C5A059]/15 hover:text-[#4A3928]'}`}>
                 <Icon className="h-4 w-4" />
               </button>
             );
@@ -164,7 +179,7 @@ export default function MemberBookScheduler({
         </button>
       </aside>
 
-      <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
+      <main className="min-w-0 flex-1 px-3 py-4 sm:px-6 sm:py-5 lg:px-8">
         <div className="mx-auto max-w-5xl">
           <header className="mb-6 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -184,28 +199,28 @@ export default function MemberBookScheduler({
           <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
             <section className={`space-y-6 rounded-xl border p-5 sm:p-6 ${cardSurface}`}>
               <div>
-                <label htmlFor="member-book-service" className="mb-2 block text-xs font-semibold">Service</label>
+                <label htmlFor="member-book-service" className="mb-2 block text-xs font-semibold">Selected services</label>
                 {isLoadingServices ? (
                   <p role="status" className={`text-sm ${mutedText}`}>Loading services...</p>
                 ) : servicesError ? (
                   <p role="alert" className="text-sm text-red-600">{servicesError}</p>
                 ) : (
-                  <select id="member-book-service" value={selectedServiceId} onChange={(event) => { setSelectedServiceId(event.target.value); setSelectedTime(''); setAvailability(null); }} required className={`w-full rounded-lg border px-3 py-2.5 text-sm ${inputSurface}`}>
-                    <option value="">Choose a service</option>
+                  <div id="member-book-service" className={`max-h-52 space-y-2 overflow-y-auto rounded-lg border p-3 ${inputSurface}`}>
                     {serviceGroups.map((group) => (
-                      <optgroup key={group.id} label={group.category}>
+                      <fieldset key={group.id} className="space-y-1.5">
+                        <legend className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[#C5A059]">{group.category}</legend>
                         {(group.services || []).map((item) => (
                           <option key={item.id} value={item.id}>{item.name} · ₱{Number(item.price).toFixed(2)}</option>
                         ))}
-                      </optgroup>
+                      </fieldset>
                     ))}
-                  </select>
+                  </div>
                 )}
               </div>
 
               <div>
                 <label htmlFor="member-book-date" className="mb-2 block text-xs font-semibold">Appointment date</label>
-                <input id="member-book-date" type="date" min={getSalonDate()} value={appointmentDate} onChange={(event) => { setAppointmentDate(event.target.value); setSelectedTime(''); setAvailability(null); }} required className={`w-full rounded-lg border px-3 py-2.5 text-sm ${inputSurface}`} />
+                <input id="member-book-date" type="date" min={getSalonDate()} value={appointmentDate} onChange={(event) => { setAppointmentDate(event.target.value); setSelectedTimes({}); setAvailability({}); }} required className={`w-full rounded-lg border px-3 py-2.5 text-sm ${inputSurface}`} />
               </div>
 
               <div>
@@ -213,22 +228,33 @@ export default function MemberBookScheduler({
                   <Clock className="h-4 w-4 text-[#C5A059]" />
                   <h2 className="text-xs font-semibold">Available times</h2>
                 </div>
-                {!selectedServiceId ? (
-                  <p className={`text-sm ${mutedText}`}>Select a service to view available times.</p>
+                {!selectedServiceIds.length ? (
+                  <p className={`text-sm ${mutedText}`}>Select one or more services to view available times.</p>
                 ) : isLoadingSlots ? (
                   <p role="status" className={`text-sm ${mutedText}`}>Checking availability...</p>
-                ) : currentAvailability?.error ? (
-                  <p role="alert" className="text-sm text-red-600">{currentAvailability.error}</p>
-                ) : timeSlots.length === 0 ? (
-                  <p className={`text-sm ${mutedText}`}>No times are available for this date.</p>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {timeSlots.map((slot) => (
-                      <button key={slot.startTime} type="button" disabled={!slot.available} onClick={() => setSelectedTime(slot.startTime)} className={`rounded-lg border px-3 py-2.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${selectedTime === slot.startTime ? 'border-[#4A3928] bg-[#4A3928] text-white' : `${inputSurface} hover:border-[#C5A059]`}`}>
-                        {slot.startTime}
-                      </button>
-                    ))}
-                  </div>
+                  <div className="space-y-4">{selectedServices.map((item) => {
+                    const slotData = availability[`${appointmentDate}:${item.id}`];
+                    const duration = Number(item.durationMinutes) || 0;
+                    const toMinutes = (time) => { const [hour, minute] = time.split(':').map(Number); return hour * 60 + minute; };
+                    return <section key={item.id} className={`rounded-lg border p-3 ${inputSurface}`}>
+                      <h3 className="mb-2 text-xs font-semibold">{item.name}</h3>
+                      {slotData?.error ? <p role="alert" className="text-xs text-red-600">{slotData.error}</p>
+                        : !slotData?.slots?.length ? <p className={`text-xs ${mutedText}`}>No times are available for this date.</p>
+                          : <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{slotData.slots.map((slot) => {
+                            const start = toMinutes(slot.startTime);
+                            const overlapsChosen = selectedServices.some((other) => {
+                              if (String(other.id) === String(item.id) || !selectedTimes[other.id]) return false;
+                              const otherStart = toMinutes(selectedTimes[other.id]);
+                              const otherEnd = otherStart + (Number(other.durationMinutes) || 0);
+                              return start < otherEnd && start + duration > otherStart;
+                            });
+                            return <button key={slot.startTime} type="button" disabled={!slot.available || overlapsChosen} onClick={() => setSelectedTimes((times) => ({ ...times, [item.id]: slot.startTime }))} className={`min-h-11 rounded-lg border px-3 py-2.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${selectedTimes[item.id] === slot.startTime ? 'border-[#4A3928] bg-[#4A3928] text-white' : `${inputSurface} hover:border-[#C5A059]`}`}>
+                              {slot.startTime}
+                            </button>;
+                          })}</div>}
+                    </section>;
+                  })}</div>
                 )}
               </div>
 
@@ -255,10 +281,10 @@ export default function MemberBookScheduler({
         </div>
       </main>
 
-      <nav aria-label="Member mobile navigation" className="fixed bottom-4 left-1/2 z-40 flex w-[90%] max-w-sm -translate-x-1/2 items-center justify-around rounded-full border border-white/10 bg-[#4A3928]/95 px-3 py-2 text-white shadow-xl backdrop-blur-md lg:hidden">
+      <nav aria-label="Member mobile navigation" className="fixed bottom-3 left-1/2 z-40 flex w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 items-center justify-around rounded-full border border-white/10 bg-[#4A3928]/95 px-2 py-1.5 text-white shadow-xl backdrop-blur-md lg:hidden">
         <button type="button" onClick={() => setActivePage('home')} className="flex flex-col items-center p-2 text-[10px]"><Home className="h-5 w-5" /><span>Home</span></button>
         <button type="button" onClick={() => setActivePage('member-services')} className="flex flex-col items-center p-2 text-[10px]"><Scissors className="h-5 w-5" /><span>Services</span></button>
-        <button type="button" onClick={() => setActivePage('member-bookings')} className="flex flex-col items-center p-2 text-[10px] text-[#F1E7C6]"><CalendarDays className="h-5 w-5" /><span>Bookings</span></button>
+        <button type="button" onClick={() => setActivePage('member-bookings')} aria-current="page" className="flex flex-col items-center p-2 text-[10px] font-bold text-[#F1E7C6]"><CalendarDays className="h-5 w-5" /><span>Bookings</span></button>
         <button type="button" onClick={() => setActivePage('member-account')} className="flex flex-col items-center p-2 text-[10px]"><UserRound className="h-5 w-5" /><span>Account</span></button>
       </nav>
     </div>

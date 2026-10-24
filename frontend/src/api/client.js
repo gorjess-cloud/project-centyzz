@@ -47,6 +47,23 @@ async function get(path, token) {
   return result;
 }
 
+async function patch(path, body, token) {
+  const response = await fetch(path, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const result = await readJsonResponse(response);
+  if (!response.ok) {
+    const message = Array.isArray(result.message) ? result.message.join(' ') : result.message || 'The request could not be completed.';
+    throw new Error(message);
+  }
+  return result;
+}
+
 export const api = {
   login: (credentials) => post('/api/auth/login', credentials),
 
@@ -55,7 +72,14 @@ export const api = {
   register: (user) => post('/api/auth/register', user),
   verifyEmail: (verification) => post('/api/auth/verify-email', verification),
   getMyAppointments: (token) => get('/api/appointments/mine', token),
+  getMyProfile: (token) => get('/api/auth/me', token),
+  updateMyProfile: (token, profile) => patch('/api/auth/me', profile, token),
   getServices: () => get('/api/services'),
+  getPublicPromos: () => get('/api/promos'),
+  getStaffAppointments: (token) => get('/api/appointments/staff', token),
+  updateStaffAppointmentStatus: (token, id, status) =>
+    patch(`/api/appointments/${encodeURIComponent(id)}/staff-status`, { status }, token),
+  validatePromo: (promoCode) => post('/api/promos/validate', { promoCode }),
   getAvailableSlots: (date, serviceId) =>
     get(`/api/appointments/available-slots?date=${encodeURIComponent(date)}&service_id=${encodeURIComponent(serviceId)}`),
   createMyAppointment: (token, appointment) =>

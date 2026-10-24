@@ -13,6 +13,7 @@ import { db } from '../prisma/db.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
+import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { OAuth2Client } from 'google-auth-library';
 
 @Injectable()
@@ -422,10 +423,12 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
       );
     }
 
+    const role = this.normalizeAccountRole(user.role);
+
     const accessToken = await this.jwtService.signAsync({
       sub: user.id,
       email: user.email,
-      role: user.role,
+      role,
     });
 
     return {
@@ -438,7 +441,7 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
-          role: user.role,
+          role,
           isActive: user.isActive,
         },
       },

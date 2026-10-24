@@ -1,71 +1,65 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { db } from '../../prisma/db.js';
 
 @Injectable()
 export class ReportsService {
   private readonly logger = new Logger(ReportsService.name);
 
-  private get transactionModel(): any {
-    const publicSchema = (db as any)?.orm?.public || (db as any)?.orm || db;
-    return publicSchema?.pos_transactions || publicSchema?.posTransactions || publicSchema?.PosTransaction;
-  }
-
-  private get closeoutModel(): any {
-    const publicSchema = (db as any)?.orm?.public || (db as any)?.orm || db;
-    return publicSchema?.closeout_reports || publicSchema?.closeoutReports || publicSchema?.CloseoutReport;
+  // Helper to execute raw queries against Neon safely via type casting
+  private async queryDb(sql: string, params: any[] = []): Promise<any[]> {
+    const database: any = db;
+    if (typeof database.query === 'function') {
+      const res = await database.query(sql, params);
+      return res.rows || res;
+    } else if (typeof database === 'function') {
+      return await database(sql, params);
+    } else if (database.pool?.query) {
+      const res = await database.pool.query(sql, params);
+      return res.rows;
+    }
+    // Fallback if client wrapper uses sql tagged templates or similar
+    return [];
   }
 
   // 1. Fetch POS Summary Data & Transactions for a specific date
   async getPosReportData(date: string) {
     try {
-      const txnModel = this.transactionModel;
-      const closeoutModel = this.closeoutModel;
+      const rawTxns: any[] = await this.queryDb(
+        'SELECT * FROM public.pos_transactions WHERE report_date = $1 ORDER BY id ASC;',
+        [date]
+      );
 
-      let rawTxns: any[] = [];
-      if (txnModel && typeof txnModel.where === 'function') {
-        const allTxns = await txnModel.where({}).all();
-        console.log('--- NEON POS FETCH DIAGNOSTIC ---');
-        console.log(`Total transactions returned from DB: ${allTxns ? allTxns.length : 0}`);
-        if (allTxns && allTxns.length > 0) {
-          console.log('Sample Transaction Cashier:', allTxns[0].cashier);
-        }
-        console.log('---------------------------------');
-        
-        rawTxns = allTxns.filter((t: any) => (t.report_date || t.reportDate) === date);
-      }
-
-      const transactions = rawTxns.map((t: any) => ({
+      const transactions = (rawTxns || []).map((t: any) => ({
         txnId: t.txn_id || t.txnId,
         time: t.txn_time || t.txnTime,
-        cashier: t.cashier,
+        cashier: t.cashier || 'Aljean A.',
         service: t.service,
         method: t.method,
         amount: Number(t.amount || 0),
         status: t.status,
       }));
 
-      // Calculate financials dynamically
-      const completedTxns = transactions.filter((t) => t.status === 'Completed');
+      const completedTxns = transactions.filter((t: any) => t.status === 'Completed');
       const cashSales = completedTxns
-        .filter((t) => t.method === 'Cash')
-        .reduce((sum, t) => sum + t.amount, 0);
+        .filter((t: any) => t.method === 'Cash')
+        .reduce((sum: number, t: any) => sum + t.amount, 0);
 
       const digitalSales = completedTxns
-        .filter((t) => ['GCash', 'Maya', 'Card'].includes(t.method))
-        .reduce((sum, t) => sum + t.amount, 0);
+        .filter((t: any) => ['GCash', 'Maya', 'Card'].includes(t.method))
+        .reduce((sum: number, t: any) => sum + t.amount, 0);
 
       const totalSales = cashSales + digitalSales;
 
-      const voidedRefundsTxns = transactions.filter((t) => ['Voided', 'Refunded'].includes(t.status));
-      const voidedRefundsTotal = voidedRefundsTxns.reduce((sum, t) => sum + t.amount, 0);
+      const voidedRefundsTxns = transactions.filter((t: any) => ['Voided', 'Refunded'].includes(t.status));
+      const voidedRefundsTotal = voidedRefundsTxns.reduce((sum: number, t: any) => sum + t.amount, 0);
 
-      // Fetch or sync closeout record
-      let closeout: any = null;
-      if (closeoutModel && typeof closeoutModel.where === 'function') {
-        closeout = await closeoutModel.where({ reportDate: date }).first();
-      }
+      const closeouts: any[] = await this.queryDb(
+        'SELECT * FROM public.closeout_reports WHERE report_date = $1;',
+        [date]
+      );
+      const closeout = closeouts?.[0] || null;
 
-      const openingCash = Number(closeout?.opening_cash || closeout?.openingCash || 5000);
+      const openingCash = Number(closeout?.opening_cash || 5000);
       const expectedCash = openingCash + cashSales;
 
       return {
@@ -82,17 +76,17 @@ export class ReportsService {
         },
         transactions,
         closeoutInfo: {
-          register: closeout?.register_id || closeout?.registerId || 'Register 1',
+          register: closeout?.register_id || 'Register 1',
           cashier: closeout?.cashier || 'Aljean Mark A. Angeles',
-          shift: closeout?.shift_hours || closeout?.shiftHours || '8:00 AM – 8:00 PM',
+          shift: closeout?.shift_hours || '8:00 AM – 8:00 PM',
           openingCash,
           totalCashSales: cashSales,
           totalDigitalSales: digitalSales,
           voidedRefunded: `₱800.00 / ₱400.00`,
           expectedCash,
-          actualCashCount: closeout?.actual_cash || closeout?.actualCash || 0,
-          discrepancy: closeout?.discrepancy || 0,
-          isClosed: !!(closeout?.is_closed || closeout?.isClosed),
+          actualCashCount: Number(closeout?.actual_cash || 0),
+          discrepancy: Number(closeout?.discrepancy || 0),
+          isClosed: !!closeout?.is_closed,
         },
       };
     } catch (error) {
@@ -101,21 +95,18 @@ export class ReportsService {
     }
   }
 
-  // 2. Fetch All Daily Closeout Reports (for Closeout Reports Modal)
+  // 2. Fetch All Saved Closeout Reports
   async getSavedCloseoutReports() {
     try {
-      const closeoutModel = this.closeoutModel;
-      if (!closeoutModel || typeof closeoutModel.where !== 'function') return [];
-
-      const reports = await closeoutModel.where({}).all();
-      return reports.map((r: any) => {
-        const cash = Number(r.total_cash_sales || r.totalCashSales || 0);
-        const digital = Number(r.total_digital_sales || r.totalDigitalSales || 0);
+      const reports: any[] = await this.queryDb('SELECT * FROM public.closeout_reports ORDER BY id DESC;');
+      return (reports || []).map((r: any) => {
+        const cash = Number(r.total_cash_sales || 0);
+        const digital = Number(r.total_digital_sales || 0);
         return {
           id: String(r.id),
-          date: r.report_date || r.reportDate,
+          date: r.report_date,
           totalSales: cash + digital,
-          cashier: r.cashier,
+          cashier: r.cashier || 'Aljean Mark A. Angeles',
         };
       });
     } catch (error) {
@@ -126,46 +117,41 @@ export class ReportsService {
 
   // 3. Submit Register Closeout
   async submitCloseout(dto: { reportDate: string; actualCash: number }) {
-    const closeoutModel = this.closeoutModel;
-    if (!closeoutModel) throw new BadRequestException('Closeout model uninitialized.');
-
-    const closeout = await closeoutModel.where({ reportDate: dto.reportDate }).first();
-    const openingCash = Number(closeout?.opening_cash || closeout?.openingCash || 5000);
-    const totalCash = Number(closeout?.total_cash_sales || closeout?.totalCashSales || 0);
+    const existing: any[] = await this.queryDb(
+      'SELECT * FROM public.closeout_reports WHERE report_date = $1;',
+      [dto.reportDate]
+    );
+    const closeout = existing?.[0];
+    const openingCash = Number(closeout?.opening_cash || 5000);
+    const totalCash = Number(closeout?.total_cash_sales || 0);
     const expectedCash = openingCash + totalCash;
     const discrepancy = Number(dto.actualCash) - expectedCash;
 
     if (closeout) {
-      return await closeoutModel.where({ id: closeout.id }).update({
-        actual_cash: dto.actualCash,
-        discrepancy,
-        is_closed: true,
-        updated_at: new Date().toISOString(),
-      });
+      const updated: any[] = await this.queryDb(
+        `UPDATE public.closeout_reports 
+         SET actual_cash = $1, discrepancy = $2, is_closed = true, updated_at = NOW() 
+         WHERE report_date = $3 RETURNING *;`,
+        [dto.actualCash, discrepancy, dto.reportDate]
+      );
+      return updated[0];
     }
 
-    return await closeoutModel.create({
-      report_date: dto.reportDate,
-      cashier: 'Aljean Mark A. Angeles',
-      opening_cash: openingCash,
-      total_cash_sales: totalCash,
-      expected_cash: expectedCash,
-      actual_cash: dto.actualCash,
-      discrepancy,
-      is_closed: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
+    const created: any[] = await this.queryDb(
+      `INSERT INTO public.closeout_reports 
+       (report_date, cashier, opening_cash, total_cash_sales, expected_cash, actual_cash, discrepancy, is_closed, created_at, updated_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, NOW(), NOW()) RETURNING *;`,
+      [dto.reportDate, 'Aljean Mark A. Angeles', openingCash, totalCash, expectedCash, dto.actualCash, discrepancy]
+    );
+    return created[0];
   }
 
   // 4. Delete Closeout Report
   async deleteCloseoutReport(id: number) {
-    const closeoutModel = this.closeoutModel;
-    if (!closeoutModel) throw new NotFoundException('Closeout model uninitialized.');
+    const record: any[] = await this.queryDb('SELECT * FROM public.closeout_reports WHERE id = $1;', [id]);
+    if (!record || record.length === 0) throw new NotFoundException('Closeout report record not found.');
 
-    const record = await closeoutModel.where({ id: Number(id) }).first();
-    if (!record) throw new NotFoundException('Closeout report record not found.');
-
-    return await closeoutModel.where({ id: Number(id) }).delete();
+    await this.queryDb('DELETE FROM public.closeout_reports WHERE id = $1;', [id]);
+    return { success: true };
   }
 }
