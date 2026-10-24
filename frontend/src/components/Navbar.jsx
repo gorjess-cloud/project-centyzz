@@ -16,7 +16,7 @@ export default function Navbar({ activePage, setActivePage, setServiceFilter, se
   return (
     <header className={`sticky top-0 z-40 backdrop-blur-md border-b ${shellClasses}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
+        <div className="flex h-16 items-center justify-between sm:h-20">
           <div 
             onClick={() => setActivePage('home')}
             className="cursor-pointer flex items-center gap-3 group"
@@ -24,10 +24,10 @@ export default function Navbar({ activePage, setActivePage, setServiceFilter, se
             <img 
               src="/logo.png" 
               alt="Centy'zz Salon Logo" 
-              className="h-12 w-12 object-contain transition-transform duration-500 hover:scale-105" 
+              className="h-10 w-10 object-contain transition-transform duration-500 hover:scale-105 sm:h-12 sm:w-12" 
             />
             <div className="leading-none">
-              <span className={`text-[2rem] sm:text-[2.2rem] font-serif tracking-[-0.08em] font-bold block uppercase ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>
+              <span className={`text-2xl sm:text-[2.2rem] font-serif tracking-[-0.08em] font-bold block uppercase ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>
                 CENTYZZ
               </span>
               <span className="text-[10px] tracking-[0.35em] text-[#C5A059] block uppercase font-medium pt-1">
@@ -96,7 +96,7 @@ export default function Navbar({ activePage, setActivePage, setServiceFilter, se
           </div>
 
           <div className="md:hidden flex items-center">
-            <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className={`p-2 ${navText} hover:text-[#C5A059]`}>
+            <button type="button" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"} aria-expanded={isMobileMenuOpen} className={`grid min-h-11 min-w-11 place-items-center rounded-lg ${navText} hover:text-[#C5A059]`}>
               {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
@@ -104,11 +104,11 @@ export default function Navbar({ activePage, setActivePage, setServiceFilter, se
       </div>
 
       {isMobileMenuOpen && (
-        <div className={`md:hidden border-b px-4 pt-2 pb-6 space-y-3 ${panelClasses}`}>
-          <button onClick={() => { setActivePage('home'); setIsMobileMenuOpen(false); }} className={`block w-full text-left py-2 font-medium ${navText}`}>Home</button>
-          <button onClick={() => { setActivePage('services'); setServiceFilter('all'); setIsMobileMenuOpen(false); }} className={`block w-full text-left py-2 font-medium ${navText}`}>Services</button>
-          <button onClick={() => { setActivePage('promos'); setIsMobileMenuOpen(false); }} className={`block w-full text-left py-2 font-medium ${navText}`}>Promos</button>
-          <button onClick={() => { setActivePage('about'); setIsMobileMenuOpen(false); }} className={`block w-full text-left py-2 font-medium ${navText}`}>About Us</button>
+        <div className={`md:hidden border-b px-4 pt-2 pb-4 space-y-1 ${panelClasses}`}>
+          <button onClick={() => { setActivePage('home'); setIsMobileMenuOpen(false); }} className={`block min-h-11 w-full rounded-lg px-2 text-left font-medium ${navText}`}>Home</button>
+          <button onClick={() => { setActivePage('services'); setServiceFilter('all'); setIsMobileMenuOpen(false); }} className={`block min-h-11 w-full rounded-lg px-2 text-left font-medium ${navText}`}>Services</button>
+          <button onClick={() => { setActivePage('promos'); setIsMobileMenuOpen(false); }} className={`block min-h-11 w-full rounded-lg px-2 text-left font-medium ${navText}`}>Promos</button>
+          <button onClick={() => { setActivePage('about'); setIsMobileMenuOpen(false); }} className={`block min-h-11 w-full rounded-lg px-2 text-left font-medium ${navText}`}>About Us</button>
           <div className="flex items-center justify-between gap-3 pt-2">
             <button
               type="button"

@@ -10,6 +10,30 @@ import type { Varchar } from '@prisma/orm-postgres/target/codec-types';
 export class PromosService {
   private readonly logger = new Logger(PromosService.name);
 
+  async findActivePromos() {
+    try {
+      const promos = await db.orm.public.Promo.where({ isActive: true }).all();
+      const now = Date.now();
+      return promos.filter((promo) =>
+        (!promo.startsAt || new Date(promo.startsAt).getTime() <= now) &&
+        (!promo.expiresAt || new Date(promo.expiresAt).getTime() > now) &&
+        (promo.usageLimit === null || promo.usageCount < promo.usageLimit),
+      ).map((promo) => ({
+        id: promo.id,
+        code: promo.code,
+        title: promo.code,
+        description: promo.description || '',
+        discountType: promo.discountType,
+        discountValue: Number(promo.discountValue),
+        minPurchase: Number(promo.minPurchase),
+        expiresAt: promo.expiresAt,
+      }));
+    } catch (error) {
+      this.logger.error('Failed to fetch active promos', error instanceof Error ? error.stack : String(error));
+      throw new InternalServerErrorException('Unable to retrieve active promos.');
+    }
+  }
+
   async validatePromo(promoCode: string) {
     const code = promoCode?.trim().toUpperCase();
 
