@@ -51,7 +51,7 @@ export default function AdminLayout({ currentUser, onLogout }) {
           )}
 
           {activePage === 'services' && (
-            <ServiceManagementView />
+            <ServiceManagementView currentUser={currentUser} />
           )}
 
           {activePage === 'inventory' && (
@@ -64,7 +64,7 @@ export default function AdminLayout({ currentUser, onLogout }) {
 
           {/* POS REPORTS ROUTE */}
           {activePage === 'reports' && (
-            <POSReportsView />
+            <POSReportsView currentUser={currentUser} />
           )}
 
           {activePage === 'logs' && (

@@ -56,7 +56,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
     tempPassword: '',
   });
 
-  const getAuthToken = () => localStorage.getItem('token') || localStorage.getItem('accessToken') || '';
+  const getAuthToken = () => currentUser?.accessToken || '';
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -75,7 +75,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
         const isArchivedParam = activeTab === 'ARCHIVED';
         const token = getAuthToken();
 
-        const response = await fetch(`http://localhost:3000/api/admin/users?archived=${isArchivedParam}`, {
+        const response = await fetch(`/api/admin/users?archived=${isArchivedParam}`, {
           headers: {
             'Content-Type': 'application/json',
             ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -115,7 +115,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
       const isArchivedParam = activeTab === 'ARCHIVED';
       const token = getAuthToken();
 
-      const response = await fetch(`http://localhost:3000/api/admin/users?archived=${isArchivedParam}`, {
+      const response = await fetch(`/api/admin/users?archived=${isArchivedParam}`, {
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -212,7 +212,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
 
     requestAdminPin(async () => {
       try {
-        const response = await fetch('http://localhost:3000/api/admin/users', {
+        const response = await fetch('/api/admin/users', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${getAuthToken()}`,
@@ -242,7 +242,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
   const handleSaveEditProfile = (u) => {
     requestAdminPin(async () => {
       try {
-        const response = await fetch(`http://localhost:3000/api/admin/users/${u.id}`, {
+        const response = await fetch(`/api/admin/users/${u.id}`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${getAuthToken()}`,
@@ -270,7 +270,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
   const handleRoleChange = (targetUser, newRole) => {
     requestAdminPin(async () => {
       try {
-        const response = await fetch(`http://localhost:3000/api/admin/users/${targetUser.id}/role`, {
+        const response = await fetch(`/api/admin/users/${targetUser.id}/role`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${getAuthToken()}`,
@@ -310,7 +310,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
 
     requestAdminPin(async () => {
       try {
-        const response = await fetch(`http://localhost:3000/api/admin/users/${targetUser.id}/status`, {
+        const response = await fetch(`/api/admin/users/${targetUser.id}/status`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${getAuthToken()}`,
@@ -342,7 +342,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
 
     requestAdminPin(async () => {
       try {
-        const response = await fetch(`http://localhost:3000/api/admin/users/${targetUser.id}/archive`, {
+        const response = await fetch(`/api/admin/users/${targetUser.id}/archive`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${getAuthToken()}`,

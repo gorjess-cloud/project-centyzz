@@ -40,9 +40,9 @@ export default function SuperAdminLayout({ currentUser = demoUser, onLogout = ()
 
   const views = {
     users: <UserManagementView currentUser={currentUser} />,
-    services: <ServiceManagementView />,
+    services: <ServiceManagementView currentUser={currentUser} />,
     clients: <ClientManagementView currentUser={currentUser} />,
-    reports: <POSReportsView />,
+    reports: <POSReportsView currentUser={currentUser} />,
     logs: <OperationalLogsView />,
     inventory: <InventoryManagementView />,
     schedule: <ScheduleManagementView />,

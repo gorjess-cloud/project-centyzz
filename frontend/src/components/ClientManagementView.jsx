@@ -40,7 +40,7 @@ const SERVICES_BY_CATEGORY = {
   ]
 };
 
-export default function ClientManagementView({ showHeaderActions = true }) {
+export default function ClientManagementView({ currentUser, showHeaderActions = true }) {
   const [clients, setClients] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('ACTIVE');
@@ -91,9 +91,9 @@ export default function ClientManagementView({ showHeaderActions = true }) {
       setIsLoading(true);
       const isArchived = activeTab === 'ARCHIVED';
       try {
-        const response = await fetch(`http://localhost:3000/api/admin/clients?archived=${isArchived}`, {
+        const response = await fetch(`/api/admin/clients?archived=${isArchived}`, {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${currentUser?.accessToken}`,
             'Content-Type': 'application/json',
           },
         });
@@ -122,10 +122,10 @@ export default function ClientManagementView({ showHeaderActions = true }) {
 
     try {
       if (editingClient) {
-        const res = await fetch(`http://localhost:3000/api/admin/clients/${editingClient.id}`, {
+        const res = await fetch(`/api/admin/clients/${editingClient.id}`, {
           method: 'PATCH',
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${currentUser?.accessToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(clientForm),
@@ -133,16 +133,16 @@ export default function ClientManagementView({ showHeaderActions = true }) {
         if (res.ok) {
           showToast(`Successfully updated client "${clientForm.fullName}"`);
           const isArchived = activeTab === 'ARCHIVED';
-          const r = await fetch(`http://localhost:3000/api/admin/clients?archived=${isArchived}`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+          const r = await fetch(`/api/admin/clients?archived=${isArchived}`, {
+            headers: { 'Authorization': `Bearer ${currentUser?.accessToken}` }
           });
           if (r.ok) setClients(await r.json());
         }
       } else {
-        const res = await fetch('http://localhost:3000/api/admin/clients', {
+        const res = await fetch('/api/admin/clients', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${currentUser?.accessToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(clientForm),
@@ -150,8 +150,8 @@ export default function ClientManagementView({ showHeaderActions = true }) {
         if (res.ok) {
           showToast(`Successfully added new client "${clientForm.fullName}"`);
           const isArchived = activeTab === 'ARCHIVED';
-          const r = await fetch(`http://localhost:3000/api/admin/clients?archived=${isArchived}`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+          const r = await fetch(`/api/admin/clients?archived=${isArchived}`, {
+            headers: { 'Authorization': `Bearer ${currentUser?.accessToken}` }
           });
           if (r.ok) setClients(await r.json());
         }
@@ -167,18 +167,18 @@ export default function ClientManagementView({ showHeaderActions = true }) {
 
   const handleToggleArchive = async (targetClient) => {
     try {
-      const res = await fetch(`http://localhost:3000/api/admin/clients/${targetClient.id}/archive`, {
+      const res = await fetch(`/api/admin/clients/${targetClient.id}/archive`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${currentUser?.accessToken}`,
           'Content-Type': 'application/json',
         },
       });
       if (res.ok) {
         showToast(targetClient.isArchived ? `Restored client ${targetClient.fullName}` : `Archived client ${targetClient.fullName}`);
         const isArchived = activeTab === 'ARCHIVED';
-        const r = await fetch(`http://localhost:3000/api/admin/clients?archived=${isArchived}`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        const r = await fetch(`/api/admin/clients?archived=${isArchived}`, {
+          headers: { 'Authorization': `Bearer ${currentUser?.accessToken}` }
         });
         if (r.ok) setClients(await r.json());
       }
@@ -201,10 +201,10 @@ export default function ClientManagementView({ showHeaderActions = true }) {
     const priceVal = selectedSrvObj ? '₱ ' + selectedSrvObj.price.replace('₱', '') + '.00' : '₱ 1,500.00';
 
     try {
-      const res = await fetch(`http://localhost:3000/api/admin/clients/${bookingClient.id}/bookings`, {
+      const res = await fetch(`/api/admin/clients/${bookingClient.id}/bookings`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${currentUser?.accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -219,8 +219,8 @@ export default function ClientManagementView({ showHeaderActions = true }) {
         setIsBookingModalOpen(false);
         showToast(`Successfully booked appointment for ${bookingClient.fullName}!`);
         const isArchived = activeTab === 'ARCHIVED';
-        const r = await fetch(`http://localhost:3000/api/admin/clients?archived=${isArchived}`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        const r = await fetch(`/api/admin/clients?archived=${isArchived}`, {
+          headers: { 'Authorization': `Bearer ${currentUser?.accessToken}` }
         });
         if (r.ok) setClients(await r.json());
       }

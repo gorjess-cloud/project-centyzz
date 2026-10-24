@@ -30,7 +30,7 @@ const formatPromoDate = (date) => {
 };
 
 export default function ServiceManagementView({ showHeaderActions = true }) {
-  const getAuthToken = () => localStorage.getItem('token') || localStorage.getItem('accessToken') || '';
+  const getAuthToken = () => currentUser?.accessToken || '';
 
   // Active Promo Banner State
   const [activePromo, setActivePromo] = useState({
@@ -105,7 +105,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
   useEffect(() => {
     const loadPromoFromApi = async () => {
       try {
-        const response = await fetch('http://localhost:3000/api/admin/promos', {
+        const response = await fetch('/api/admin/promos', {
           headers: { 'Authorization': `Bearer ${getAuthToken()}` },
         });
         if (response.ok) {
@@ -130,7 +130,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
         const isArchivedParam = activeTab === 'ARCHIVED';
         const token = getAuthToken();
 
-        const response = await fetch(`http://localhost:3000/api/admin/services?archived=${isArchivedParam}`, {
+        const response = await fetch(`/api/admin/services?archived=${isArchivedParam}`, {
           headers: {
             'Content-Type': 'application/json',
             ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -162,7 +162,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
       const isArchivedParam = activeTab === 'ARCHIVED';
       const token = getAuthToken();
 
-      const response = await fetch(`http://localhost:3000/api/admin/services?archived=${isArchivedParam}`, {
+      const response = await fetch(`/api/admin/services?archived=${isArchivedParam}`, {
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -211,7 +211,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
   const handleSavePromoSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:3000/api/admin/promos', {
+      const response = await fetch('/api/admin/promos', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
@@ -248,8 +248,8 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
 
     try {
       const url = editingService 
-        ? `http://localhost:3000/api/admin/services/${editingService.id}`
-        : 'http://localhost:3000/api/admin/services';
+        ? `/api/admin/services/${editingService.id}`
+        : '/api/admin/services';
       
       const method = editingService ? 'PATCH' : 'POST';
 
@@ -282,7 +282,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
   // -------------------------------------------------------------
   const handleToggleStatus = async (targetService) => {
     try {
-      const response = await fetch(`http://localhost:3000/api/admin/services/${targetService.id}/status`, {
+      const response = await fetch(`/api/admin/services/${targetService.id}/status`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
@@ -306,7 +306,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
   // -------------------------------------------------------------
   const handleToggleArchive = async (targetService) => {
     try {
-      const response = await fetch(`http://localhost:3000/api/admin/services/${targetService.id}/archive`, {
+      const response = await fetch(`/api/admin/services/${targetService.id}/archive`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
