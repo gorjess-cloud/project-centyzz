@@ -70,6 +70,9 @@ export const api = {
   googleLogin: (idToken) => post('/api/auth/google', { idToken }),
   
   register: (user) => post('/api/auth/register', user),
+  forgotPassword: ({ email }) => post('/api/auth/forgot-password', { email }),
+  resetPassword: ({ email, otp, newPassword }) =>
+    post('/api/auth/reset-password', { email, otp, newPassword }),
   verifyEmail: (verification) => post('/api/auth/verify-email', verification),
   getMyAppointments: (token) => get('/api/appointments/mine', token),
   getMyProfile: (token) => get('/api/auth/me', token),
