@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import useMemberSidebarState from "../hooks/useMemberSidebarState";
+import { getServiceImage } from "../utils/serviceImages";
 import {
   CalendarDays,
   Check,
@@ -15,71 +17,14 @@ import {
 } from "lucide-react";
 import { api } from "../api/client";
 
-const SERVICE_FILTERS = [
-  { id: "all", label: "All-services", icon: "grid" },
-  { id: "cuts", label: "Cuts & Styling" },
-  { id: "color", label: "Coloring & Highlights" },
-  { id: "treatments", label: "Treatments" },
-  { id: "nails", label: "Nail Services" },
-  { id: "lashes", label: "Eyelashes" },
-];
+const formatPrice = (price) => `₱${Number(price).toLocaleString("en-PH")}`;
 
-const BOOKING_SERVICE_DETAILS = {
-  "hair-1": {
-    title: "Haircut (Haircut / Trim)",
-    category: "hair",
-    price: 99,
-    duration: "30 mins",
-  },
-  "hair-2": {
-    title: "Creative Haircut & Styling",
-    category: "hair",
-    price: 150,
-    duration: "40 mins",
-  },
-  "hair-3": {
-    title: "Blowout / Hair Styling",
-    category: "hair",
-    price: 120,
-    duration: "40 mins",
-  },
-  "hair-4": {
-    title: "Basic Hair Color (Root Touch-up or Solid)",
-    category: "hair",
-    price: 599,
-    duration: "60 mins",
-  },
-  "hair-5": {
-    title: "Bleaching & Double Process",
-    category: "hair",
-    price: 1200,
-    duration: "120 mins",
-  },
-  "hair-6": {
-    title: "Balayage / Ombre Highlights",
-    category: "hair",
-    price: 1999,
-    duration: "3 hours",
-  },
-  "hair-7": {
-    title: "Brazilian Keratin Treatment",
-    category: "hair",
-    price: 799,
-    duration: "1 hour",
-  },
-  "hair-8": {
-    title: "Hair Botox Deep Conditioning",
-    category: "hair",
-    price: 999,
-    duration: "1 hour",
-  },
-};
-
-const getServiceFilter = (service) => {
-  if (service.category === "nails") return "nails";
-  if (["hair-1", "hair-2", "hair-3"].includes(service.id)) return "cuts";
-  if (["hair-4", "hair-5", "hair-6"].includes(service.id)) return "color";
-  return "treatments";
+const getServiceIcon = (service) => {
+  const searchable = `${service.category || ""} ${service.title || ""}`.toLowerCase();
+  if (/lash|brow|eye/.test(searchable)) return Eye;
+  if (/nail|mani|pedi/.test(searchable)) return Hand;
+  if (/skin|facial|wax|makeup|beauty/.test(searchable)) return Sparkles;
+  return Scissors;
 };
 
 const formatPrice = (price) => `₱${Number(price).toLocaleString("en-PH")}`;
@@ -99,7 +44,7 @@ export default function MemberServicesPage({
   onOpenBooking,
   onLogout,
 }) {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useMemberSidebarState();
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [serviceGroups, setServiceGroups] = useState([]);
   const [servicesLoading, setServicesLoading] = useState(true);
@@ -147,6 +92,7 @@ export default function MemberServicesPage({
     setCartServices((items) => items.some((item) => String(item.id) === String(service.id))
       ? items.filter((item) => String(item.id) !== String(service.id))
       : [...items, { ...service, ...details }]);
+    if (window.matchMedia("(min-width: 1024px)").matches) setIsCartOpen(true);
     setIsCartOpen(true);
   };
 
@@ -329,6 +275,8 @@ export default function MemberServicesPage({
                 type="button"
                 onClick={() => setIsCartOpen((prev) => !prev)}
                 aria-label="Toggle Cart"
+                aria-expanded={isCartOpen}
+                aria-controls="member-services-cart"
                 className={`relative grid min-h-11 min-w-11 place-items-center rounded-full border transition-all duration-200 active:scale-95 ${
                   isCartOpen
                     ? "bg-[#C5A059] text-white border-[#C5A059]"
@@ -377,13 +325,10 @@ export default function MemberServicesPage({
               {servicesError && <p role="alert" className="mb-3 text-sm text-red-600">Couldn’t load services: {servicesError}</p>}
               {filteredServices.length ? (
                 <div
-                  className={`grid gap-3 sm:gap-4 transition-all duration-300 ${
-                    isCartOpen
-                      ? "grid-cols-2 md:grid-cols-3"
-                      : "grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
-                  }`}
+                  className={`grid grid-cols-1 gap-3 transition-all duration-300 sm:grid-cols-2 sm:gap-4 md:grid-cols-3 ${isCartOpen ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}
                 >
                   {filteredServices.map((service) => {
+                    const serviceImage = getServiceImage(service.title, service.category);
                     const ServiceIcon = getServiceIcon(service);
                     const details = {
                       title: service.title,
@@ -395,8 +340,17 @@ export default function MemberServicesPage({
                     return (
                       <article
                         key={service.id}
-                        className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border p-2.5 transition-all duration-300 hover:-translate-y-1 hover:shadow-md ${cardSurface}`}
+                        className={`group relative flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl border p-3 transition-all duration-300 hover:shadow-md sm:flex-col sm:items-stretch sm:justify-between sm:p-2.5 sm:hover:-translate-y-1 ${cardSurface}`}
                       >
+                        <img src={serviceImage} alt={details.title} loading="lazy" className="h-20 w-20 shrink-0 rounded-xl object-cover sm:h-32 sm:w-full" />
+
+                        <div className="flex min-w-0 flex-1 flex-col self-stretch sm:flex-1">
+                          <h2 className="line-clamp-2 pr-12 text-sm font-bold leading-snug sm:min-h-[32px] sm:pr-0 sm:text-xs">
+                            {details.title}
+                          </h2>
+                          <p className={`mt-1 line-clamp-2 text-xs leading-relaxed sm:text-[10px] ${mutedText}`}>
+                            {service.description || "Professional salon care tailored for a premium finishing look."}
+                          </p>
                         <div>
                           <div className={`flex h-28 items-center justify-center overflow-hidden rounded-xl sm:h-32 ${isDarkMode ? "bg-[#30291E]" : "bg-[#F6F0E6]"}`} aria-hidden="true">
                             <div className={`grid h-14 w-14 place-items-center rounded-full border ${isDarkMode ? "border-[#C5A059]/30 bg-[#1D1A16]" : "border-[#C5A059]/30 bg-white"}`}>
@@ -423,19 +377,29 @@ export default function MemberServicesPage({
                             </button>
                           </div>
 
-                          <div className="mt-2.5 px-0.5">
-                            <h2 className="line-clamp-2 min-h-[32px] text-xs font-bold leading-snug">
-                              {details.title}
-                            </h2>
-                            <p
-                              className={`mt-1 line-clamp-2 text-[10px] leading-relaxed ${mutedText}`}
-                            >
-                              {service.description ||
-                                "Professional salon care tailored for a premium finishing look."}
-                            </p>
+                          <div className="mt-auto flex min-w-0 items-baseline justify-between gap-2 border-t border-inherit pt-2 sm:mt-3 sm:px-0.5 sm:pt-2.5">
+                            <span className="shrink-0 text-sm font-extrabold text-[#B48B43] sm:text-xs">
+                              {formatPrice(details.price)}
+                            </span>
+                            <span className={`truncate text-[10px] ${mutedText} sm:text-[9px]`}>
+                              {details.duration}
+                            </span>
                           </div>
                         </div>
 
+                        <button
+                          type="button"
+                          onClick={() => handleAddToCart(service, details)}
+                          className={`absolute right-3 top-3 flex min-h-11 min-w-11 items-center justify-center rounded-lg shadow-md transition-all duration-200 active:scale-90 sm:right-2 sm:top-2 ${
+                            isAdded
+                              ? "bg-[#4A3928] text-white"
+                              : "bg-[#C5A059] text-white hover:bg-[#A9823F]"
+                          }`}
+                          title={isAdded ? "Remove from cart" : "Add to cart"}
+                          aria-label={`${isAdded ? "Remove" : "Add"} ${details.title} ${isAdded ? "from" : "to"} cart`}
+                        >
+                          {isAdded ? <Check className="h-3.5 w-3.5" /> : <span className="text-sm font-bold leading-none">+</span>}
+                        </button>
                         <div className="mt-3 flex items-baseline justify-between border-t border-inherit pt-2.5 px-0.5">
                           <span className="text-xs font-extrabold text-[#B48B43]">
                             {formatPrice(details.price)}
@@ -459,8 +423,25 @@ export default function MemberServicesPage({
               )}
             </section>
 
-            {/* Current Cart Panel - ONLY MOUNTED & VISIBLE WHEN ISCARTOPEN IS TRUE */}
+            {/* Current Cart: inline on desktop, overlay drawer on mobile */}
             {isCartOpen && (
+              <div className="fixed inset-0 z-[60] lg:contents">
+                <button
+                  type="button"
+                  onClick={() => setIsCartOpen(false)}
+                  className="absolute inset-0 bg-black/40 backdrop-blur-[1px] lg:hidden"
+                  aria-label="Close current cart"
+                />
+                <aside
+                  id="member-services-cart"
+                  aria-label="Current Cart"
+                  className={`absolute inset-y-0 right-0 z-[61] flex h-full w-full max-w-md flex-col overflow-y-auto border-l p-5 shadow-2xl animate-in fade-in slide-in-from-right duration-200 lg:relative lg:inset-auto lg:z-auto lg:h-auto lg:w-72 lg:max-w-none lg:flex-none lg:rounded-2xl lg:border lg:p-4 lg:shadow-xl lg:animate-none ${
+                    isDarkMode
+                      ? "border-[#39342B] bg-[#211F1B]"
+                      : "border-[#E9E4D8] bg-[#FFFDF8]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between border-b border-inherit pb-3">
               <aside
                 className={`w-full shrink-0 rounded-2xl border p-4 shadow-xl transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 lg:w-72 lg:slide-in-from-right-4 ${
                   isDarkMode
@@ -532,6 +513,7 @@ export default function MemberServicesPage({
                   </div>
                 )}
               </aside>
+              </div>
             )}
           </div>
         </div>
