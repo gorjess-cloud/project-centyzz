@@ -10,6 +10,9 @@ import {
   User, 
   CreditCard,
   ArrowRight,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
 // Always use the salon's local calendar date, regardless of the visitor's time zone.
@@ -31,6 +34,8 @@ function toDateKey(year, month, day) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+const guestSessionKey = 'centyzz-guest-checkout';
+
 function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const [step, setStep] = useState('form');
   const [serviceGroups, setServiceGroups] = useState([]);
@@ -43,6 +48,12 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const [slotsError, setSlotsError] = useState('');
   const [checkingSlot, setCheckingSlot] = useState(false);
   const [formError, setFormError] = useState('');
+  const [stylists, setStylists] = useState([]);
+  const [stylistId, setStylistId] = useState('');
+  const [loadingStylists, setLoadingStylists] = useState(false);
+  const [checkout, setCheckout] = useState(null);
+  const [checkoutStatus, setCheckoutStatus] = useState(null);
+  const [submittingCheckout, setSubmittingCheckout] = useState(false);
 
   const initialSalonDate = getSalonToday();
   const [yearToday, monthToday, dayToday] = initialSalonDate.split('-').map(Number);
@@ -53,8 +64,8 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  // Staff assignment is NOT currently supported by the existing appointments backend.
-  const [stylist, setStylist] = useState('Any Available Senior Specialist');
+  const chosenStylist = stylists.find((s) => String(s.id) === stylistId);
+  const stylist = chosenStylist?.name || 'Choose a specialist';
 
   const allServices = useMemo(
     () => serviceGroups.flatMap((group) => group.services || []),
@@ -74,8 +85,31 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   useEffect(() => {
     if (!isOpen) return undefined;
     let active = true;
-    setStep('form');
+    // PayMongo return redirects recreate the modal and restore a local checkout reference.
+    const returningFromCheckout = new URLSearchParams(window.location.search).has('centyzz_booking');
+    const stored = (() => { try { return JSON.parse(sessionStorage.getItem(guestSessionKey) || 'null'); } catch { return null; } })();
+    if (returningFromCheckout && stored?.referenceCode && stored?.token) {
+      setCheckout(stored);
+      setStep('result');
+      api.getGuestCheckoutStatus(stored.referenceCode, stored.token)
+        .then((status) => { if (active) setCheckoutStatus(status); })
+        .catch((err) => { if (active) setFormError(err.message); });
+      const url = new URL(window.location.href);
+      url.searchParams.delete('centyzz_booking');
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+    } else {
+      setStep('form');
+      setCheckout(null);
+      setCheckoutStatus(null);
+    }
     setFormError('');
+    setStylistId('');
+    setStylists([]);
+    setLoadingStylists(true);
+    api.getGuestStylists().then((data) => {
+      if (active) setStylists(Array.isArray(data) ? data : data?.data || []);
+    }).catch((err) => { if (active) setFormError('Could not load specialists: ' + err.message); })
+      .finally(() => { if (active) setLoadingStylists(false); });
     setSlots([]);
     setSelectedTime('');
     setServicesError('');
@@ -111,14 +145,14 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   // Refetch when the date or selected service changes. Ignore responses from
   // superseded requests so stale slots cannot become selectable.
   useEffect(() => {
-    if (!isOpen || !serviceId) { setSlots([]); setSelectedTime(''); return undefined; }
+    if (!isOpen || !serviceId || !stylistId) { setSlots([]); setSelectedTime(''); return undefined; }
     let active = true;
     setSlots([]);
     setSelectedTime('');
     setSlotsError('');
     setFormError('');
     setLoadingSlots(true);
-    api.getAvailableSlots(selectedDate, Number(serviceId))
+    api.getGuestAvailableSlots(selectedDate, Number(serviceId), stylistId)
       .then((result) => {
         if (active) setSlots(Array.isArray(result.slots) ? result.slots : []);
       })
@@ -127,7 +161,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
       })
       .finally(() => { if (active) setLoadingSlots(false); });
     return () => { active = false; };
-  }, [isOpen, serviceId, selectedDate]);
+  }, [isOpen, serviceId, stylistId, selectedDate]);
 
   const handleCategoryChange = (event) => {
     const next = event.target.value;
@@ -188,8 +222,12 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const handleFormSubmit = async (event) => {
     event.preventDefault();
     setFormError('');
-    if (!currentServiceObj || loadingServices || loadingSlots || slotsError) {
+    if (!currentServiceObj || loadingServices || loadingStylists || loadingSlots || slotsError) {
       setFormError('Please choose a service and wait for availability to load.');
+      return;
+    }
+    if (!stylistId || !chosenStylist) {
+      setFormError('Choose an active specialist to see their available appointments.');
       return;
     }
     if (!selectedSlot) {
@@ -200,7 +238,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
     // may have booked this slot since the calendar originally loaded.
     setCheckingSlot(true);
     try {
-      const fresh = await api.getAvailableSlots(selectedDate, Number(serviceId));
+      const fresh = await api.getGuestAvailableSlots(selectedDate, Number(serviceId), stylistId);
       const latestSlots = Array.isArray(fresh.slots) ? fresh.slots : [];
       setSlots(latestSlots);
       if (!latestSlots.some((slot) => slot.startTime === selectedTime && slot.available)) {
@@ -214,6 +252,60 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
     } finally {
       setCheckingSlot(false);
     }
+  };
+
+  const beginCheckout = async () => {
+    if (!chosenStylist || !currentServiceObj) { setFormError('Choose a service and specialist.'); setStep('form'); return; }
+    setSubmittingCheckout(true);
+    setFormError('');
+    try {
+      const created = await api.createGuestCheckout({
+        serviceId: Number(serviceId),
+        stylistId: stylistId,
+        appointmentDate: selectedDate,
+        startTime: selectedTime,
+        customerName: fullName.trim(),
+        customerEmail: email.trim(),
+        customerPhone: phone.trim(),
+      });
+      setCheckout(created);
+      if (created.mode === 'PAYMONGO_TEST' && created.checkoutUrl) {
+        sessionStorage.setItem(guestSessionKey, JSON.stringify({referenceCode: created.referenceCode, token: created.token}));
+        window.location.assign(created.checkoutUrl);
+      } else if (created.mode === 'DEMO') {
+        setStep('demo');
+      } else {
+        throw new Error('Unsupported payment mode returned by server');
+      }
+    } catch (err) {
+      setFormError(err.message || 'Unable to start checkout.');
+      if (/time|slot|reserved|unavailable|expired/i.test(String(err.message))) {
+        setStep('form');
+        setSelectedTime('');
+        api.getGuestAvailableSlots(selectedDate, Number(serviceId), stylistId)
+          .then((result) => setSlots(result.slots || [])).catch(() => setSlots([]));
+      }
+    } finally { setSubmittingCheckout(false); }
+  };
+
+  const finishDemo = async () => {
+    if (!checkout?.id || !checkout?.token) return;
+    setSubmittingCheckout(true); setFormError('');
+    try {
+      await api.finishGuestDemo(checkout.id, checkout.token);
+      const status = await api.getGuestCheckoutStatus(checkout.referenceCode, checkout.token);
+      setCheckoutStatus(status);
+      setStep('result');
+    } catch (err) { setFormError(err.message || 'Demo checkout failed.'); }
+    finally { setSubmittingCheckout(false); }
+  };
+
+  const refreshStatus = async () => {
+    if (!checkout?.referenceCode || !checkout?.token) return;
+    setSubmittingCheckout(true); setFormError('');
+    try { setCheckoutStatus(await api.getGuestCheckoutStatus(checkout.referenceCode, checkout.token)); }
+    catch (err) { setFormError(err.message || 'Unable to check payment status.'); }
+    finally { setSubmittingCheckout(false); }
   };
 
   const handleResetAndClose = () => {
@@ -332,9 +424,10 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                   </div>
 
                   <div className="space-y-2 max-h-[290px] overflow-y-auto pr-1 custom-scrollbar">
+                    {!stylistId && <p className={`text-xs text-center py-3 ${mutedText}`}>Select a specialist to view real appointment availability.</p>}
                     {loadingSlots && <p role="status" className={`text-xs text-center py-3 ${mutedText}`}>Checking real availability…</p>}
                     {slotsError && <p role="alert" className="text-xs text-red-500">Could not load times: {slotsError}</p>}
-                    {!loadingSlots && !slotsError && !slots.length && <p className={`text-xs text-center py-3 ${mutedText}`}>No appointment times available for this date and service.</p>}
+                    {!loadingSlots && stylistId && !slotsError && !slots.length && <p className={`text-xs text-center py-3 ${mutedText}`}>No appointment times available for this date, service, and specialist.</p>}
                     {slots.map((slot) => {
                       const isSelected = selectedTime === slot.startTime;
                       const disabled = !slot.available || loadingSlots;
@@ -448,27 +541,25 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                     <label className={`block text-[10px] font-bold ${isDarkMode ? 'text-[#A9A39B]' : 'text-gray-500'} uppercase tracking-wider mb-1`}>
                       Specialist Preference
                     </label>
-                    <select 
-                      value={stylist}
-                      onChange={(e) => setStylist(e.target.value)}
+                    <select
+                      value={stylistId}
+                      onChange={(e) => { setStylistId(e.target.value); setSelectedTime(''); }}
+                      required
+                      disabled={loadingStylists}
                       className={`w-full px-3 py-2 rounded-xl border ${fieldStyle} text-xs focus:outline-none focus:border-[#C5A059]`}
                     >
-                      <option>Karl Maverick Anonuevo (Master Stylist)</option>
-                      <option>Gian Carlo Dela Torre (Senior Hair Stylist)</option>
-                      <option>Christian Angelo Javier (Lead Nail Sculptor)</option>
-                      <option>Any Available Senior Specialist</option>
+                      <option value="">{loadingStylists ? 'Loading specialists…' : 'Choose a specialist'}</option>
+                      {stylists.map((item) => <option key={item.id} value={String(item.id)}>{item.name}</option>)}
                     </select>
-                    <p className={`mt-1 text-[10px] ${mutedText}`}>
-                      This is a preference only. Available times are currently salon-wide;
-                      individual stylist availability will be linked in the next stage.
-                    </p>
+                    {!loadingStylists && !stylists.length && <p role="alert" className="mt-1 text-xs text-red-500">No active STAFF specialists are available.</p>}
+                    <p className={`mt-1 text-[10px] ${mutedText}`}>Times are checked for your selected specialist. Published shifts and leave are not yet configured.</p>
                   </div>
 
                   {servicesError && <p role="alert" className="text-xs text-red-500">Unable to load services: {servicesError}</p>}
                   {formError && <p role="alert" className="text-xs text-red-500">{formError}</p>}
                   <button 
                     type="submit"
-                    disabled={loadingServices || loadingSlots || checkingSlot || !currentServiceObj || !selectedSlot}
+                    disabled={loadingServices || loadingStylists || loadingSlots || checkingSlot || !currentServiceObj || !chosenStylist || !selectedSlot}
                     className={`w-full mt-2 py-3.5 rounded-2xl ${primaryButton} disabled:opacity-50 disabled:cursor-not-allowed font-serif font-bold text-xs tracking-widest uppercase transition-all shadow-md flex items-center justify-center gap-2 group`}
                   >
                     <span>{checkingSlot ? 'Verifying selected time…' : 'Review Appointment & 50% Deposit'}</span>
@@ -494,7 +585,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                 50% Partial Payment
               </h3>
               <p className={`text-xs ${mutedText} max-w-xs mx-auto`}>
-                Review your selected service and time. Actual booking and test payment will be enabled in Stage 2.
+                Confirm your details to hold this appointment briefly and start a TEST payment. No real payment is collected in demo mode.
               </p>
             </div>
 
@@ -508,7 +599,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                 <span className={`font-semibold ${primaryText}`}>{selectedDate} at {formatClock(selectedTime)}</span>
               </div>
               <div className="flex justify-between gap-2">
-                <span className={mutedText}>Specialist preference:</span>
+                <span className={mutedText}>Assigned specialist:</span>
                 <span className={`font-semibold ${primaryText} text-right`}>{stylist}</span>
               </div>
               <div className="flex justify-between">
@@ -527,15 +618,17 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
 
             <div className="flex flex-col gap-2 pt-2 max-w-xs mx-auto">
               <p className={`text-xs ${mutedText}`}>
-                Stage 1 preview only — no appointment has been created or paid for yet.
+                The backend will recheck this specialist and time, then hold your slot for 15 minutes during TEST checkout.
               </p>
+              {formError && <p role="alert" className="text-xs text-red-500">{formError}</p>}
               <button
                 type="button"
-                disabled
-                title="Payment integration is planned for Stage 2"
+                onClick={beginCheckout}
+                disabled={submittingCheckout}
                 className={`w-full py-3.5 rounded-2xl ${primaryButton} disabled:opacity-50 disabled:cursor-not-allowed font-serif font-bold text-xs tracking-widest uppercase transition-all shadow-md flex items-center justify-center gap-2`}
               >
-                <span>PayMongo test payment — Stage 2</span>
+                {submittingCheckout && <Loader2 className="w-4 h-4 animate-spin" />}
+                <span>{submittingCheckout ? 'Preparing secure test checkout…' : 'Continue to 50% test deposit'}</span>
               </button>
               
               <button 
@@ -545,6 +638,49 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                 Go Back & Edit
               </button>
             </div>
+          </div>
+        )}
+
+        {/* STEP 3: Explicit no-money demo, only if enabled on the backend. */}
+        {step === 'demo' && (
+          <div className="p-8 text-center space-y-5">
+            <CreditCard className="w-12 h-12 mx-auto text-[#C5A059]" />
+            <h3 className={`text-xl font-serif font-bold ${primaryText}`}>Temporary PayMongo Demo</h3>
+            <p className={`text-xs ${mutedText}`}>Prototype only. The next action simulates a deposit; it does not contact PayMongo or charge any money.</p>
+            <div className={`${insetSurface} p-4 rounded-2xl border text-sm space-y-2`}>
+              <p>Booking: <strong>{checkout?.referenceCode}</strong></p>
+              <p>Specialist: <strong>{checkout?.stylistName}</strong></p>
+              <p>Simulated 50% deposit: <strong>₱{Number(checkout?.depositAmount || 0).toFixed(2)}</strong></p>
+            </div>
+            {formError && <p role="alert" className="text-xs text-red-500">{formError}</p>}
+            <button type="button" disabled={submittingCheckout} onClick={finishDemo} className={`w-full py-3.5 rounded-2xl ${primaryButton} font-bold text-xs disabled:opacity-50`}>
+              {submittingCheckout ? 'Processing demo…' : 'Simulate successful TEST deposit'}
+            </button>
+            <button type="button" onClick={handleResetAndClose} className={`w-full py-2 rounded-xl border ${fieldStyle}`}>Close</button>
+          </div>
+        )}
+
+        {/* STEP 4: A browser redirect never verifies a payment: server status does. */}
+        {step === 'result' && (
+          <div className="p-8 text-center space-y-5">
+            {['DEMO_PAID', 'TEST_PAID'].includes(checkoutStatus?.paymentStatus)
+              ? <CheckCircle2 className="w-12 h-12 mx-auto text-[#C5A059]" />
+              : <AlertCircle className="w-12 h-12 mx-auto text-[#C5A059]" />}
+            <h3 className={`text-xl font-serif font-bold ${primaryText}`}>Booking Payment Status</h3>
+            <p className={`text-xs ${mutedText}`}>Reference: <strong>{checkoutStatus?.referenceCode || checkout?.referenceCode || 'Unavailable'}</strong></p>
+            <p className={`text-xs ${mutedText}`}>
+              {checkoutStatus?.paymentStatus === 'DEMO_PAID' ? 'DEMO deposit recorded; no money was charged. Appointment is pending stylist confirmation.'
+              : checkoutStatus?.paymentStatus === 'TEST_PAID' ? 'PayMongo TEST deposit was verified by the backend. Appointment is pending stylist confirmation.'
+              : checkoutStatus?.status === 'PAYMENT_REVIEW' ? 'A test payment was received but the slot requires manual review; contact the salon.'
+              : checkoutStatus?.holdExpired ? 'The temporary reservation expired. Start a new booking.'
+              : 'Payment is not yet verified. A redirect back to the salon is not proof of payment.'}
+            </p>
+            {formError && <p role="alert" className="text-xs text-red-500">{formError}</p>}
+            {checkoutStatus?.paymentStatus !== 'DEMO_PAID' && checkoutStatus?.paymentStatus !== 'TEST_PAID' &&
+              <button type="button" onClick={refreshStatus} disabled={submittingCheckout} className={`w-full py-3 rounded-xl ${primaryButton} font-bold text-xs`}>
+                {submittingCheckout ? 'Checking…' : 'Refresh payment status'}
+              </button>}
+            <button type="button" onClick={handleResetAndClose} className={`w-full py-2 rounded-xl border ${fieldStyle}`}>Close</button>
           </div>
         )}
 

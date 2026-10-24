@@ -20,7 +20,7 @@ import { useWorkspaceTheme } from './components/workspace/WorkspaceContext';
 export default function App() {
   const [activePage, setActivePage] = useState('home');
   const [serviceFilter, setServiceFilter] = useState('all');
-  const [isBookingOpen, setIsBookingOpen] = useState(false);
+  const [isBookingOpen, setIsBookingOpen] = useState(() => new URLSearchParams(window.location.search).has('centyzz_booking'));
   const [selectedService, setSelectedService] = useState(null);
   const [bookingSessionId, setBookingSessionId] = useState(0);
   const [authMode, setAuthMode] = useState('login');
