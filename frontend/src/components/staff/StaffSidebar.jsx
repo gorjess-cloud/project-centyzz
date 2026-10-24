@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Receipt, CalendarClock, ClipboardCheck, Settings, LogOut, ChevronLeft } from 'lucide-react';
+import { ConfirmModal } from './ui';
 
 const ITEMS = [
   { id: 'pos', label: 'POS', icon: Receipt },
@@ -10,6 +11,7 @@ const ITEMS = [
 
 export default function StaffSidebar({ activePage, setActivePage, currentUser, onLogout }) {
   const [open, setOpen] = useState(typeof window === 'undefined' || window.innerWidth >= 1024);
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const name = currentUser?.fullName || [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(' ') || 'Jessica Palma';
   const initials = name.split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
 
@@ -68,6 +70,7 @@ export default function StaffSidebar({ activePage, setActivePage, currentUser, o
 
       <div className="border-t border-[#E7DFD4] p-3">
         <button type="button" onClick={() => onLogout?.()} title={!open ? 'Log Out' : undefined}
+        <button type="button" onClick={() => setConfirmLogout(true)} title={!open ? 'Log Out' : undefined}
           className={`flex w-full items-center rounded-xl p-2.5 text-[#443523] transition-all hover:bg-red-500/10 hover:text-red-600 active:scale-95 ${open ? 'justify-start gap-3' : 'justify-center'}`}>
           <LogOut size={18} />
           {open && <span className="truncate text-xs font-bold">Log Out</span>}

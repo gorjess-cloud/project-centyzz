@@ -1,9 +1,11 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { db } from '../../prisma/db.js';
+import pg from 'pg';
 
 @Injectable()
 export class ReportsService {
   private readonly logger = new Logger(ReportsService.name);
+  private pool: pg.Pool;
 
   // Helper to execute raw queries against Neon safely via type casting
   private async queryDb(sql: string, params: any[] = []): Promise<any[]> {
@@ -19,9 +21,25 @@ export class ReportsService {
     }
     // Fallback if client wrapper uses sql tagged templates or similar
     return [];
+  constructor() {
+    this.pool = new pg.Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }, // Direct connection to Neon DB
+    });
   }
 
-  // 1. Fetch POS Summary Data & Transactions for a specific date
+  // Execute raw SQL directly against Neon PostgreSQL
+  private async queryDb(sql: string, params: any[] = []): Promise<any[]> {
+    try {
+      const res = await this.pool.query(sql, params);
+      return res.rows || [];
+    } catch (err) {
+      this.logger.error('Direct Neon SQL Error:', err);
+      return [];
+    }
+  }
+
+  // 1. Fetch POS Summary Data & Transactions
   async getPosReportData(date: string) {
     try {
       const rawTxns: any[] = await this.queryDb(
@@ -32,6 +50,32 @@ export class ReportsService {
       const transactions = (rawTxns || []).map((t: any) => ({
         txnId: t.txn_id || t.txnId,
         time: t.txn_time || t.txnTime,
+      const cleanDate = (date || '').trim();
+
+      // Direct SQL query to public.pos_transactions
+      let rawTxns: any[] = await this.queryDb(
+        `SELECT * FROM public.pos_transactions WHERE report_date ILIKE $1 ORDER BY id ASC;`,
+        [`%${cleanDate}%`]
+      );
+
+      // Diagnostic logging in terminal
+      console.log(`[NEON DIRECT DIAGNOSTIC] Found ${rawTxns.length} transactions for date "${cleanDate}"`);
+
+      // Fallback: If strict date filter returns 0, query all rows and filter
+      if (!rawTxns || rawTxns.length === 0) {
+        const allTxns = await this.queryDb('SELECT * FROM public.pos_transactions ORDER BY id ASC;');
+        console.log(`[NEON DIRECT DIAGNOSTIC] Total rows in pos_transactions: ${allTxns.length}`);
+        
+        if (allTxns && allTxns.length > 0) {
+          rawTxns = allTxns.filter((t: any) => 
+            String(t.report_date || '').toLowerCase().includes(cleanDate.toLowerCase())
+          );
+        }
+      }
+
+      const transactions = (rawTxns || []).map((t: any) => ({
+        txnId: t.txn_id || t.txnId || `TXN-${t.id}`,
+        time: t.txn_time || t.txnTime || '12:00 PM',
         cashier: t.cashier || 'Aljean A.',
         service: t.service,
         method: t.method,
@@ -39,6 +83,7 @@ export class ReportsService {
         status: t.status,
       }));
 
+      // Financial Calculations
       const completedTxns = transactions.filter((t: any) => t.status === 'Completed');
       const cashSales = completedTxns
         .filter((t: any) => t.method === 'Cash')
@@ -56,6 +101,10 @@ export class ReportsService {
       const closeouts: any[] = await this.queryDb(
         'SELECT * FROM public.closeout_reports WHERE report_date = $1;',
         [date]
+      // Closeout Record Lookup
+      const closeouts: any[] = await this.queryDb(
+        `SELECT * FROM public.closeout_reports WHERE report_date ILIKE $1;`,
+        [`%${cleanDate}%`]
       );
       const closeout = closeouts?.[0] || null;
 
@@ -63,7 +112,7 @@ export class ReportsService {
       const expectedCash = openingCash + cashSales;
 
       return {
-        selectedDate: date,
+        selectedDate: cleanDate,
         kpiData: {
           totalSales: `₱${totalSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
           totalSalesGrowth: '+12.4% vs yesterday',
@@ -120,6 +169,10 @@ export class ReportsService {
     const existing: any[] = await this.queryDb(
       'SELECT * FROM public.closeout_reports WHERE report_date = $1;',
       [dto.reportDate]
+    const cleanDate = (dto.reportDate || '').trim();
+    const existing: any[] = await this.queryDb(
+      'SELECT * FROM public.closeout_reports WHERE report_date ILIKE $1;',
+      [`%${cleanDate}%`]
     );
     const closeout = existing?.[0];
     const openingCash = Number(closeout?.opening_cash || 5000);
@@ -133,6 +186,8 @@ export class ReportsService {
          SET actual_cash = $1, discrepancy = $2, is_closed = true, updated_at = NOW() 
          WHERE report_date = $3 RETURNING *;`,
         [dto.actualCash, discrepancy, dto.reportDate]
+         WHERE report_date ILIKE $3 RETURNING *;`,
+        [dto.actualCash, discrepancy, `%${cleanDate}%`]
       );
       return updated[0];
     }
@@ -142,6 +197,7 @@ export class ReportsService {
        (report_date, cashier, opening_cash, total_cash_sales, expected_cash, actual_cash, discrepancy, is_closed, created_at, updated_at) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, true, NOW(), NOW()) RETURNING *;`,
       [dto.reportDate, 'Aljean Mark A. Angeles', openingCash, totalCash, expectedCash, dto.actualCash, discrepancy]
+      [cleanDate, 'Aljean Mark A. Angeles', openingCash, totalCash, expectedCash, dto.actualCash, discrepancy]
     );
     return created[0];
   }

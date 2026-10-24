@@ -180,6 +180,7 @@ export default function App() {
               setActivePage={setActivePage}
               onOpenBooking={handleMemberBooking}
               onLogout={requestLogout}
+              onLogout={handleLogout}
               onUserUpdated={handleProfileUpdated}
               appointments={memberAppointments}
               isLoadingAppointments={isLoadingAppointments}
@@ -202,6 +203,7 @@ export default function App() {
             setActivePage={setActivePage}
             onOpenBooking={handleMemberBooking}
             onLogout={requestLogout}
+            onLogout={handleLogout}
             onUserUpdated={handleProfileUpdated}
             initialSection="account"
             appointments={memberAppointments}
