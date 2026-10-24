@@ -826,7 +826,7 @@ export default function AuthPage({
                 </div>
               </div>
 
-              {!isSignup && !isForgotPassword && (
+              {!isForgotPassword && (
                 <div className="flex justify-center">
                   <GoogleLogin
                     onSuccess={handleGoogleSuccess}

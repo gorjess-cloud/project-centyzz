@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import useMemberSidebarState from "../hooks/useMemberSidebarState";
 import {
   Bell,
   CalendarDays,
@@ -25,6 +26,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { api } from "../api/client";
+import ConfirmationModal from "../components/ConfirmationModal";
 
 const formatMonth = (date) =>
   date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
@@ -69,7 +71,7 @@ export default function MemberHomePage({
   const [month, setMonth] = useState(() => new Date());
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeSection, setActiveSection] = useState(initialSection);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useMemberSidebarState();
   const [accountProfile, setAccountProfile] = useState(user || {});
   const [profileDraft, setProfileDraft] = useState({ firstName: user?.firstName || "", lastName: user?.lastName || "" });
   const [editingProfile, setEditingProfile] = useState(false);
@@ -80,6 +82,7 @@ export default function MemberHomePage({
   const photoInputRef = useRef(null);
   const photoDragRef = useRef(null);
   const [photoModal, setPhotoModal] = useState(false);
+  const [confirmPhotoRemoval, setConfirmPhotoRemoval] = useState(false);
   const [cropSource, setCropSource] = useState("");
   const [photoZoom, setPhotoZoom] = useState(1);
   const [photoOffset, setPhotoOffset] = useState({ x: 0, y: 0 });
@@ -102,6 +105,12 @@ export default function MemberHomePage({
     }
   }, [avatarStorageKey, storedPhoto]);
 
+  const removeProfilePhoto = () => {
+    setStoredPhoto({ key: avatarStorageKey, data: "" });
+    setPhotoModal(false);
+    setProfileMessage({ type: "success", text: "Profile photo removed." });
+    setConfirmPhotoRemoval(false);
+  };
   const handleProfilePhoto = (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -467,7 +476,7 @@ export default function MemberHomePage({
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {profilePhoto && <button type="button" onClick={() => { setStoredPhoto({ key: avatarStorageKey, data: "" }); setProfileMessage({ type: "success", text: "Profile photo removed." }); }} className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${isDarkMode ? "border-[#51493B] hover:bg-white/5" : "border-[#E9E4D8] hover:bg-black/5"}`}><Trash2 size={14} /> Remove photo</button>}
+                  {profilePhoto && <button type="button" onClick={() => setConfirmPhotoRemoval(true)} className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${isDarkMode ? "border-[#51493B] hover:bg-white/5" : "border-[#E9E4D8] hover:bg-black/5"}`}><Trash2 size={14} /> Remove photo</button>}
                   <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold ${accountProfile.emailVerified ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
                     {accountProfile.emailVerified ? <BadgeCheck size={13} /> : <ShieldCheck size={13} />}
                     {accountProfile.emailVerified ? "Verified email" : "Account active"}
@@ -802,7 +811,7 @@ export default function MemberHomePage({
             {photoModal === "view" ? <>
               <div className="mb-5 flex items-start justify-between gap-4"><div><h2 id="profile-photo-modal-title" className="font-serif text-xl">Profile Picture</h2><p className={`mt-1 text-xs ${mutedText}`}>Preview, update, re-crop, or remove your profile picture.</p></div><button type="button" aria-label="Close" onClick={() => setPhotoModal(false)} className={`rounded-full p-2 ${isDarkMode ? "hover:bg-white/10" : "hover:bg-black/5"}`}><X size={17} /></button></div>
               <div className="mx-auto mb-6 flex h-56 w-56 items-center justify-center overflow-hidden rounded-full bg-[#F6F0E6] text-5xl font-bold text-[#C5A059]">{profilePhoto ? <img src={profilePhoto} alt="Profile preview" className="h-full w-full object-cover" /> : initials || "M"}</div>
-              <div className="flex flex-wrap items-center justify-between gap-3"><button type="button" disabled={!profilePhoto} onClick={() => { setStoredPhoto({ key: avatarStorageKey, data: "" }); setPhotoModal(false); setProfileMessage({ type: "success", text: "Profile photo removed." }); }} className="text-xs font-bold text-red-600 disabled:opacity-40">Remove</button><div className="flex flex-wrap gap-2"><button type="button" disabled={!profilePhoto} onClick={() => { setCropSource(profilePhoto); setPhotoZoom(1); setPhotoOffset({ x: 0, y: 0 }); setPhotoModal("crop"); }} className={`rounded-lg border px-4 py-2.5 text-xs font-bold disabled:opacity-40 ${isDarkMode ? "border-[#51493B]" : "border-[#E7DFD4]"}`}><Crop size={14} className="mr-1 inline" />Crop</button><button type="button" onClick={() => photoInputRef.current?.click()} className="flex items-center gap-2 rounded-lg bg-[#4A3928] px-4 py-2.5 text-xs font-bold text-white"><Upload size={14} />Upload New Photo</button></div></div>
+              <div className="flex flex-wrap items-center justify-between gap-3"><button type="button" disabled={!profilePhoto} onClick={() => setConfirmPhotoRemoval(true)} className="text-xs font-bold text-red-600 disabled:opacity-40">Remove</button><div className="flex flex-wrap gap-2"><button type="button" disabled={!profilePhoto} onClick={() => { setCropSource(profilePhoto); setPhotoZoom(1); setPhotoOffset({ x: 0, y: 0 }); setPhotoModal("crop"); }} className={`rounded-lg border px-4 py-2.5 text-xs font-bold disabled:opacity-40 ${isDarkMode ? "border-[#51493B]" : "border-[#E7DFD4]"}`}><Crop size={14} className="mr-1 inline" />Crop</button><button type="button" onClick={() => photoInputRef.current?.click()} className="flex items-center gap-2 rounded-lg bg-[#4A3928] px-4 py-2.5 text-xs font-bold text-white"><Upload size={14} />Upload New Photo</button></div></div>
             </> : <>
               <div className="mb-5 flex items-start justify-between gap-4"><div><h2 id="profile-photo-modal-title" className="font-serif text-xl">Crop Profile Picture</h2><p className={`mt-1 text-xs ${mutedText}`}>Drag to reposition and use the slider to zoom your photo.</p></div><button type="button" aria-label="Close" onClick={() => { setPhotoModal(false); setCropSource(""); }} className={`rounded-full p-2 ${isDarkMode ? "hover:bg-white/10" : "hover:bg-black/5"}`}><X size={17} /></button></div>
               <div className="mx-auto mb-5 h-64 w-64 max-w-full touch-none select-none overflow-hidden rounded-xl bg-[#F6F0E6]" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); photoDragRef.current = { x: event.clientX, y: event.clientY, offset: photoOffset }; }} onPointerMove={(event) => { if (photoDragRef.current) setPhotoOffset({ x: photoDragRef.current.offset.x + event.clientX - photoDragRef.current.x, y: photoDragRef.current.offset.y + event.clientY - photoDragRef.current.y }); }} onPointerUp={() => { photoDragRef.current = null; }} onPointerCancel={() => { photoDragRef.current = null; }}>
@@ -814,6 +823,7 @@ export default function MemberHomePage({
           </section>
         </div>
       )}
+      {confirmPhotoRemoval && <ConfirmationModal title="Remove profile photo?" message="Your current profile photo will be removed from this device." confirmLabel="Remove photo" danger onCancel={() => setConfirmPhotoRemoval(false)} onConfirm={removeProfilePhoto} />}
     </div>
   );
 }

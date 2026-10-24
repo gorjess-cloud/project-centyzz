@@ -1,5 +1,6 @@
 import HeaderActions from '../../components/workspace/HeaderActions';
 import { useState, useEffect } from 'react';
+import ConfirmationModal from '../../components/ConfirmationModal';
 import { 
   TrendingUp, 
   Clock, 
@@ -56,6 +57,7 @@ export default function POSReportsView({ showHeaderActions = true }) {
   const [toastMessage, setToastMessage] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
  const [selectedReportForInvoice, setSelectedReportForInvoice] = useState(null);
+ const [pendingDeleteReport, setPendingDeleteReport] = useState(null);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -596,7 +598,7 @@ useEffect(() => {
                 <div key={report.id} className="bg-white rounded-2xl border border-[#B3A772]/60 p-4 sm:px-6 flex items-center justify-between shadow-2xs">
                   <span className="text-base font-bold text-[#2A1E1B]">{report.date}</span>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => handleDeleteReport(report.id, report.date)} className="px-4 py-2 rounded-xl border border-[#A29883] text-[#5C5243] hover:bg-[#F6F4EF] text-xs font-bold">Delete</button>
+                    <button onClick={() => setPendingDeleteReport(report)} className="px-4 py-2 rounded-xl border border-[#A29883] text-[#5C5243] hover:bg-[#F6F4EF] text-xs font-bold">Delete</button>
                     <button onClick={() => handleViewReportInvoice(report)} className="px-5 py-2 rounded-xl bg-[#675B4B] hover:bg-[#4A3F32] text-white text-xs font-bold shadow-2xs">View</button>
                   </div>
                 </div>
@@ -663,6 +665,7 @@ useEffect(() => {
           </div>
         </div>
       )}
+      {pendingDeleteReport && <ConfirmationModal title="Delete closeout report?" message={`This will permanently delete the closeout report for ${pendingDeleteReport.date}.`} confirmLabel="Delete report" danger onCancel={() => setPendingDeleteReport(null)} onConfirm={() => { handleDeleteReport(pendingDeleteReport.id, pendingDeleteReport.date); setPendingDeleteReport(null); }} />}
     </div>
   );
 }

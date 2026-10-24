@@ -4,6 +4,7 @@ import { Toast, useToast, Badge, EmptyState, ConfirmModal, peso, card, input } f
 import { PaymentMethods, SplitPayment, CashModal, QrModal, ReceiptSummary } from '../../components/staff/payment';
 import { useWorkspaceTheme } from '../../components/workspace/WorkspaceContext';
 import { api } from '../../api/client';
+import { getServiceImage } from '../../utils/serviceImages';
 
 const GROUPS = ['Hair Services', 'Nail Services', 'Skin & Lashes'];
 const SUBS = ['All-services', 'Cuts & Styling', 'Coloring & Highlights', 'Treatments', 'Packages'];
@@ -86,6 +87,7 @@ export default function StaffPOSView({ onSale }) {
             group: categoryIndex(category.category),
             sub: serviceSubcategory(service.name),
             name: service.name,
+            image: getServiceImage(service.name, category.category),
             price: Number(service.price),
             icon: serviceIcon[categoryIndex(category.category)],
           })),
@@ -196,7 +198,7 @@ export default function StaffPOSView({ onSale }) {
                   className={`${card} group relative flex h-44 touch-manipulation flex-col p-4 text-left transition hover:-translate-y-0.5 hover:border-[#C5A059] hover:shadow-md active:scale-95 lg:h-52 ${n > 0 ? 'border-[#C5A059] ring-2 ring-[#C5A059]/30' : ''}`}>
                   <span className="pr-7 text-sm font-bold text-[#4A3928]">{s.name}</span>
                   {n > 0 && <span className="pop-in absolute right-3 top-3 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#4A3928] px-1.5 text-[11px] font-bold text-white">{n}</span>}
-                  <span className="m-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#F6F0E6] text-[#4A3928] transition group-hover:bg-[#EBDBC8] lg:h-20 lg:w-20"><Icon size={36} strokeWidth={1.5} /></span>
+                  <span className="m-auto flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-[#F6F0E6] text-[#4A3928] transition group-hover:bg-[#EBDBC8] lg:h-20 lg:w-20">{s.image ? <img src={s.image} alt="" loading="lazy" className="h-full w-full object-cover" /> : <Icon size={36} strokeWidth={1.5} />}</span>
                   <span className="self-end rounded-full bg-[#F6F0E6] px-3 py-1 text-sm font-bold text-[#8B5E3C]">₱ {s.price.toLocaleString()}</span>
                 </button>
               );

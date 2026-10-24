@@ -5,6 +5,7 @@ import BookingModal from './components/BookingModal';
 import AdminLayout from './components/AdminLayout';
 import { api } from './api/client.js'; // 👈 Fixed import path
 
+import ConfirmationModal from './components/ConfirmationModal';
 import HomePage from './pages/HomePage';
 import ServicesPage from './pages/ServicesPage';
 import PromosPage from './pages/PromosPage';
@@ -35,6 +36,7 @@ export default function App() {
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
   const [appointmentsError, setAppointmentsError] = useState('');
   const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0);
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   useEffect(() => {
     if (!memberUser?.accessToken) return undefined;
@@ -129,6 +131,13 @@ export default function App() {
     setActivePage('home');
   };
 
+  const requestLogout = () => setConfirmLogout(true);
+
+  const confirmAndLogout = () => {
+    setConfirmLogout(false);
+    handleLogout();
+  };
+
   const handleProfileUpdated = (profile) => {
     setMemberUser((current) => current ? {
       ...current,
@@ -150,7 +159,7 @@ export default function App() {
           isDarkMode={isDarkMode}
           setIsDarkMode={setIsDarkMode}
           currentUser={memberUser}
-          onLogout={handleLogout}
+          onLogout={requestLogout}
         />
       )}
 
@@ -158,7 +167,7 @@ export default function App() {
         {isAdminDashboard && (
           <AdminLayout 
             currentUser={memberUser || { firstName: 'Millicent', lastName: 'Campillos', email: 'MillicentCampillos@example.com', role: 'ADMIN' }} 
-            onLogout={handleLogout} 
+            onLogout={requestLogout}
           />
         )}
 
@@ -170,7 +179,7 @@ export default function App() {
               setIsDarkMode={setIsDarkMode}
               setActivePage={setActivePage}
               onOpenBooking={handleMemberBooking}
-              onLogout={handleLogout}
+              onLogout={requestLogout}
               onUserUpdated={handleProfileUpdated}
               appointments={memberAppointments}
               isLoadingAppointments={isLoadingAppointments}
@@ -192,7 +201,7 @@ export default function App() {
             setIsDarkMode={setIsDarkMode}
             setActivePage={setActivePage}
             onOpenBooking={handleMemberBooking}
-            onLogout={handleLogout}
+            onLogout={requestLogout}
             onUserUpdated={handleProfileUpdated}
             initialSection="account"
             appointments={memberAppointments}
@@ -206,7 +215,7 @@ export default function App() {
             isDarkMode={isDarkMode}
             setActivePage={setActivePage}
             onOpenBooking={handleMemberBooking}
-            onLogout={handleLogout}
+            onLogout={requestLogout}
             appointments={memberAppointments}
             isLoadingAppointments={isLoadingAppointments}
             appointmentsError={appointmentsError}
@@ -218,7 +227,7 @@ export default function App() {
             isDarkMode={isDarkMode}
             setIsDarkMode={setIsDarkMode}
             setActivePage={setActivePage}
-            onLogout={handleLogout}
+            onLogout={requestLogout}
             selectedService={selectedService}
             onAppointmentCreated={handleAppointmentCreated}
           />
@@ -230,7 +239,7 @@ export default function App() {
             setIsDarkMode={setIsDarkMode}
             setActivePage={setActivePage}
             onOpenBooking={handleMemberBooking}
-            onLogout={handleLogout}
+            onLogout={requestLogout}
           />
         )}
         {!isAdminDashboard && activePage === 'services' && (
@@ -238,6 +247,9 @@ export default function App() {
             serviceFilter={serviceFilter}
             setServiceFilter={setServiceFilter}
             onOpenBooking={handleOpenBooking}
+            setActivePage={setActivePage}
+            setAuthMode={setAuthMode}
+            currentUser={memberUser}
             isDarkMode={isDarkMode}
           />
         )}
@@ -268,6 +280,8 @@ export default function App() {
       {!isAuthPage && !isMemberDashboard && !isAdminDashboard && (
         <Footer setActivePage={setActivePage} setServiceFilter={setServiceFilter} isDarkMode={isDarkMode} />
       )}
+
+      {confirmLogout && <ConfirmationModal title="Log out?" message="Are you sure you want to log out of your account?" confirmLabel="Log out" danger onCancel={() => setConfirmLogout(false)} onConfirm={confirmAndLogout} />}
 
       {!memberUser && !isAdminDashboard && (
         <BookingModal

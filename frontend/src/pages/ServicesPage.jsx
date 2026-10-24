@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { getServiceImage } from '../utils/serviceImages';
 
-export default function ServicesPage({ serviceFilter, setServiceFilter, onOpenBooking, isDarkMode }) {
+export default function ServicesPage({ serviceFilter, setServiceFilter, onOpenBooking, setActivePage, setAuthMode, currentUser, isDarkMode }) {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -16,9 +17,16 @@ export default function ServicesPage({ serviceFilter, setServiceFilter, onOpenBo
   }, []);
 
   const categories = [{ id: 'all', label: 'All Services' }, ...groups.map((group) => ({ id: String(group.id), label: group.category }))];
-  const filteredGroups = serviceFilter === 'all'
-    ? groups
-    : groups.filter((group) => String(group.id) === String(serviceFilter) || String(group.category).toLowerCase() === String(serviceFilter).toLowerCase() || String(group.category).toLowerCase().includes(String(serviceFilter).toLowerCase()));
+  const allServices = groups.flatMap((group) => (group.services || []).map((service) => ({ ...service, category: group.category, categoryId: String(group.id) })));
+  const previewLimit = 4;
+  const isRegistered = Boolean(currentUser);
+  const servicesToShow = (isRegistered ? allServices : allServices.slice(0, previewLimit)).filter((service) =>
+    serviceFilter === 'all'
+      || service.categoryId === String(serviceFilter)
+      || String(service.category).toLowerCase() === String(serviceFilter).toLowerCase()
+      || String(service.category).toLowerCase().includes(String(serviceFilter).toLowerCase()),
+  );
+  const additionalServicesCount = Math.max(0, allServices.length - previewLimit);
   const text = isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]';
 
   return (
@@ -35,11 +43,17 @@ export default function ServicesPage({ serviceFilter, setServiceFilter, onOpenBo
 
         {loading && <p role="status" className="text-center text-sm">Loading services…</p>}
         {error && <p role="alert" className="text-center text-sm text-red-600">Couldn’t load services: {error}</p>}
-        {!loading && !error && filteredGroups.every((group) => !group.services?.length) && <p className="text-center text-sm">No services are available in this category right now.</p>}
+        {!loading && !error && allServices.length === 0 && <p className="text-center text-sm">No services are available right now.</p>}
 
+        {!loading && !error && allServices.length > 0 && servicesToShow.length === 0 && (
+          <p className={`text-center text-sm ${isDarkMode ? 'text-[#D6D0C8]' : 'text-[#63513B]'}`}>
+            This category has more services available. Create an account to explore the full catalog.
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4 lg:gap-6">
-          {filteredGroups.flatMap((group) => (group.services || []).map((service) => ({ ...service, category: group.category }))).map((service) => (
+          {servicesToShow.map((service) => (
             <article key={service.id} className={`flex flex-col justify-between overflow-hidden rounded-2xl border shadow-sm ${isDarkMode ? 'border-[#2A2A2A] bg-[#1A1A1A]' : 'border-[#E8DFD1] bg-white'}`}>
+              <img src={getServiceImage(service.name, service.category)} alt={service.name} loading="lazy" className="h-44 w-full object-cover" />
               <div className="p-4 sm:p-5">
                 <span className="text-[10px] font-bold uppercase text-[#C5A059]">{service.category}</span>
                 <h2 className={`mt-2 font-serif text-lg font-bold ${text}`}>{service.name}</h2>
@@ -53,6 +67,22 @@ export default function ServicesPage({ serviceFilter, setServiceFilter, onOpenBo
             </article>
           ))}
         </div>
+        {!loading && !error && !isRegistered && additionalServicesCount > 0 && (
+          <section className={`mx-auto max-w-4xl rounded-2xl border p-6 text-center shadow-sm sm:p-8 ${isDarkMode ? 'border-[#51493B] bg-[#211F1B]' : 'border-[#E8DFD1] bg-white/80'}`}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#C5A059]">Enjoy the full experience</p>
+            <h2 className={`mt-2 font-serif text-2xl font-bold sm:text-3xl ${text}`}>There’s more to discover</h2>
+            <p className={`mx-auto mt-2 max-w-2xl text-sm ${isDarkMode ? 'text-[#D6D0C8]' : 'text-[#63513B]'}`}>
+              You’re viewing a preview. Create an account to explore and book all {allServices.length} services, including {additionalServicesCount} more {additionalServicesCount === 1 ? "option" : "options"}.
+            </p>
+            <button
+              type="button"
+              onClick={() => { setAuthMode('signup'); setActivePage('auth'); }}
+              className="mt-5 min-h-11 rounded-full bg-[#C5A059] px-6 py-3 text-xs font-bold text-white shadow transition hover:bg-[#A9823F]"
+            >
+              Create your account
+            </button>
+          </section>
+        )}
       </div>
     </div>
   );
