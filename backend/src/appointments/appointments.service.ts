@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -24,6 +25,49 @@ interface CreateAppointmentInput {
 @Injectable()
 export class AppointmentsService {
   private readonly logger = new Logger(AppointmentsService.name);
+
+  async findForStaff(role: string) {
+    this.assertStaffRole(role);
+    try {
+      const appointments = await db.orm.public.Appointment.where({}).all();
+      const services = await db.orm.public.Service.where({}).all();
+      const data = await Promise.all(appointments.map(async (appointment) => {
+        const service = services.find((item) => item.id === appointment.serviceId);
+        return {
+          ...appointment,
+          service: service ? {
+            id: service.id,
+            name: service.name,
+            price: Number(service.price),
+            durationMinutes: service.durationMinutes,
+          } : null,
+        };
+      }));
+      data.sort((a, b) => `${a.appointmentDate} ${a.startTime}`.localeCompare(`${b.appointmentDate} ${b.startTime}`));
+      return { success: true, data };
+    } catch (error) {
+      this.logger.error('Failed to fetch staff appointments', error instanceof Error ? error.stack : String(error));
+      throw new InternalServerErrorException('Unable to retrieve appointments');
+    }
+  }
+
+  async updateStatusForStaff(id: number, status: string, role: string) {
+    this.assertStaffRole(role);
+    const normalizedStatus = status.trim().toUpperCase();
+    if (!['CONFIRMED', 'NO_SHOW'].includes(normalizedStatus)) {
+      throw new BadRequestException('Status must be CONFIRMED or NO_SHOW');
+    }
+    const appointment = await db.orm.public.Appointment.where({ id }).first();
+    if (!appointment) throw new NotFoundException('Appointment not found');
+    const updated = await db.orm.public.Appointment.where({ id }).update({ status: normalizedStatus as Varchar<30> });
+    return { success: true, data: updated };
+  }
+
+  private assertStaffRole(role: string) {
+    if (!['STAFF', 'ADMIN', 'SUPERADMIN'].includes((role || '').toUpperCase())) {
+      throw new ForbiddenException('Staff access required');
+    }
+  }
 
   async createForUser(
     input: CreateAppointmentDto,

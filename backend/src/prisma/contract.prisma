@@ -24,6 +24,65 @@ model User {
   @@map("user")
 }
 
+
+model PosTransaction {
+  id         Int      @id @default(autoincrement())
+  txnId      String   @unique @map("txn_id")
+  txnTime    String   @map("txn_time")
+  cashier    String
+  service    String
+  method     String
+  amount     Decimal  @db.Decimal(10, 2)
+  status     String   @default("Completed")
+  reportDate String   @map("report_date")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("pos_transactions")
+}
+
+model CloseoutReport {
+  id               Int      @id @default(autoincrement())
+  reportDate       String   @unique @map("report_date")
+  registerId       String   @default("Register 1") @map("register_id")
+  cashier          String   @default("Aljean Mark A. Angeles")
+  shiftHours       String   @default("8:00 AM – 8:00 PM") @map("shift_hours")
+  openingCash      Decimal  @default(5000.00) @db.Decimal(10, 2) @map("opening_cash")
+  totalCashSales   Decimal  @default(0.00) @db.Decimal(10, 2) @map("total_cash_sales")
+  totalDigitalSales Decimal @default(0.00) @db.Decimal(10, 2) @map("total_digital_sales")
+  expectedCash     Decimal  @default(5000.00) @db.Decimal(10, 2) @map("expected_cash")
+  actualCash       Decimal? @db.Decimal(10, 2) @map("actual_cash")
+  discrepancy      Decimal  @default(0.00) @db.Decimal(10, 2)
+  isClosed         Boolean  @default(false) @map("is_closed")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("closeout_reports")
+}
+
+model Client {
+  id              Int       @id @default(autoincrement())
+  firstName       String    @map("first_name")
+  lastName        String    @map("last_name")
+  email           String
+  phone           String?
+  gender          String?
+  tier            String    @default("REGULAR")
+  lastVisit       DateTime? @map("last_visit")
+  totalVisits     Int       @default(0) @map("total_visits")
+  totalSpend      Decimal   @default(0.00) @db.Decimal(10, 2) @map("total_spend")
+  favoriteService String?   @map("favorite_service")
+  notes           String?
+  isActive        Boolean   @default(true) @map("is_active")
+  bookingHistory  Json?     @map("booking_history")
+  archivedAt      DateTime? @map("archived_at")
+  archivedBy      Int?      @map("archived_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("clients")
+}
+
+
 model Role {
   id       Int          @id @default(autoincrement())
   roleName VarChar(50)  @unique @map("role_name")

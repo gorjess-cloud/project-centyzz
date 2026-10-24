@@ -68,3 +68,8 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Postman files containing local secrets
 .env.postman
 .env.postman.*
+
+# Database backup files
+/backup-testing/
+*.dump
+*.backup
