@@ -1,5 +1,6 @@
 import HeaderActions from '../../components/workspace/HeaderActions';
 import { useState, useEffect } from 'react';
+import ConfirmationModal from '../../components/ConfirmationModal';
 import { 
   TrendingUp, 
   Clock, 
@@ -56,6 +57,7 @@ export default function POSReportsView({ showHeaderActions = true }) {
   const [toastMessage, setToastMessage] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
  const [selectedReportForInvoice, setSelectedReportForInvoice] = useState(null);
+ const [pendingDeleteReport, setPendingDeleteReport] = useState(null);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -147,6 +149,31 @@ useEffect(() => {
     isSubscribed = false;
   };
 }, [selectedDate]);
+
+  const openingCash = closeoutInfo.openingCash;
+  const totalCashSales = closeoutInfo.totalCashSales;
+  const totalDigitalSales = closeoutInfo.totalDigitalSales;
+  const expectedCash = closeoutInfo.expectedCash;
+
+  const actualCashNum = parseFloat(actualCashCount.replace(/[^0-9.]/g, '')) || 0;
+  const discrepancy = actualCashCount !== '' ? actualCashNum - expectedCash : closeoutInfo.discrepancy;
+
+  const handleConfirmExportCSV = () => {
+    const headers = ["Txn ID,Time,Cashier,Service,Method,Amount,Status\n"];
+    const rows = transactions.map(t => 
+      `${t.txnId},${t.time},${t.cashier},"${t.service}",${t.method},₱${t.amount.toFixed(2)},${t.status}`
+    );
+    
+    const blob = new Blob([headers + rows.join("\n")], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Centyzz_POS_Report_${selectedDate.replace(/\s+/g, '_')}.csv`;
+    a.click();
+    setIsExportModalOpen(false);
+    showToast(`Successfully downloaded POS Transactions CSV for ${selectedDate}`);
+  };
+
 
   const openingCash = closeoutInfo.openingCash;
   const totalCashSales = closeoutInfo.totalCashSales;
@@ -483,6 +510,11 @@ const handleViewReportInvoice = async (report) => {
                   <tr>
                     <td colSpan="7" className="p-8 text-center text-[#8A8174]">No transactions found for {selectedDate}.</td>
                   </tr>
+                  </tr>
+                ) : filteredTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="p-8 text-center text-[#8A8174]">No transactions found for {selectedDate}.</td>
+                  </tr>
                 ) : (
                   filteredTransactions.map((t) => (
                     <tr key={t.txnId} className="hover:bg-[#FDFBF7] transition-colors">
@@ -586,6 +618,18 @@ const handleViewReportInvoice = async (report) => {
               {closeoutInfo.isClosed ? 'Register Closed For Day' : 'Submit & Close Register'}
             </button>
 
+            <button
+              onClick={() => {
+                <p className="text-[11px] font-bold text-[#2A1E1B] mt-2">
+  Date: <span className="font-mono">{selectedReportForInvoice ? selectedReportForInvoice.date : selectedDate}</span>
+</p>
+                setIsInvoiceModalOpen(true);
+              }}
+              className="w-full py-2.5 rounded-xl border border-[#E7DFD4] bg-white hover:bg-[#F8F5F0] text-[#2A1E1B] font-bold text-xs transition-colors flex items-center justify-center gap-2"
+            >
+              <Printer size={14} />
+              <span>Print A4 Invoice Summary</span>
+            </button>
            <button
   onClick={() => {
     setSelectedReportForInvoice({
@@ -668,6 +712,7 @@ const handleViewReportInvoice = async (report) => {
                 <div key={report.id} className="bg-white rounded-2xl border border-[#B3A772]/60 p-4 sm:px-6 flex items-center justify-between shadow-2xs">
                   <span className="text-base font-bold text-[#2A1E1B]">{report.date}</span>
                   <div className="flex items-center gap-2">
+                    <button onClick={() => setPendingDeleteReport(report)} className="px-4 py-2 rounded-xl border border-[#A29883] text-[#5C5243] hover:bg-[#F6F4EF] text-xs font-bold">Delete</button>
                     <button onClick={() => handleDeleteReport(report.id, report.date)} className="px-4 py-2 rounded-xl border border-[#A29883] text-[#5C5243] hover:bg-[#F6F4EF] text-xs font-bold">Delete</button>
                     <button onClick={() => handleViewReportInvoice(report)} className="px-5 py-2 rounded-xl bg-[#675B4B] hover:bg-[#4A3F32] text-white text-xs font-bold shadow-2xs">View</button>
                   </div>
@@ -701,6 +746,41 @@ const handleViewReportInvoice = async (report) => {
         </div>
       )}
 
+      {isInvoiceModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-[#E7DFD4] shadow-2xl max-w-3xl w-full p-8 my-8 text-[#2A1E1B] space-y-6">
+            <div className="flex items-center justify-between border-b border-[#E7DFD4] pb-4 print:hidden">
+              <div className="flex items-center gap-2">
+                <FileText className="text-[#C5A059] h-5 w-5" />
+                <h3 className="font-bold text-base">A4 Non-Tax Invoice Closeout Document</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { window.print(); showToast('Sending A4 Invoice Summary to printer...'); }} className="px-4 py-2 rounded-xl bg-[#2A1E1B] text-white hover:bg-[#C5A059] text-xs font-bold flex items-center gap-2 shadow-sm">
+                  <Printer size={14} /><span>Print Invoice</span>
+                </button>
+                <button onClick={() => setIsInvoiceModalOpen(false)} className="text-gray-400 hover:text-black p-1"><X size={20} /></button>
+              </div>
+            </div>
+            {/* Invoice Print Layout Body */}
+            <div className="bg-[#FFFDF8] border border-[#E7DFD4] p-8 rounded-xl shadow-xs space-y-6 text-xs font-sans">
+              <div className="flex justify-between items-start border-b-2 border-[#2A1E1B] pb-6">
+                <div>
+                  <h1 className="text-2xl font-serif font-bold text-[#2A1E1B] tracking-wide">CENTY'ZZ SALON</h1>
+                  <p className="text-[10px] uppercase tracking-widest text-[#C5A059] font-bold">Hair & Beauty Studio</p>
+                </div>
+                <div className="text-right">
+                  <span className="bg-[#F8F5F0] text-[#2A1E1B] border border-[#E7DFD4] text-xs font-bold px-3 py-1 rounded-md uppercase">OFFICIAL INVOICE</span>
+                  <p className="text-[11px] font-bold text-[#2A1E1B] mt-2">Date: {selectedDate}</p>
+                </div>
+              </div>
+              <div className="text-center py-4">
+                <button onClick={() => setIsInvoiceModalOpen(false)} className="px-6 py-2 bg-[#2A1E1B] text-white rounded-xl text-xs font-bold">Close Invoice</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {pendingDeleteReport && <ConfirmationModal title="Delete closeout report?" message={`This will permanently delete the closeout report for ${pendingDeleteReport.date}.`} confirmLabel="Delete report" danger onCancel={() => setPendingDeleteReport(null)} onConfirm={() => { handleDeleteReport(pendingDeleteReport.id, pendingDeleteReport.date); setPendingDeleteReport(null); }} />}
     {/* ================= MODAL: A4 NON-TAX OFFICIAL INVOICE SUMMARY ================= */}
 {isInvoiceModalOpen && selectedReportForInvoice && (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn overflow-y-auto">

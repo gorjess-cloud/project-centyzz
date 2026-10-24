@@ -69,6 +69,7 @@ export default function StaffSidebar({ activePage, setActivePage, currentUser, o
       </nav>
 
       <div className="border-t border-[#E7DFD4] p-3">
+        <button type="button" onClick={() => onLogout?.()} title={!open ? 'Log Out' : undefined}
         <button type="button" onClick={() => setConfirmLogout(true)} title={!open ? 'Log Out' : undefined}
           className={`flex w-full items-center rounded-xl p-2.5 text-[#443523] transition-all hover:bg-red-500/10 hover:text-red-600 active:scale-95 ${open ? 'justify-start gap-3' : 'justify-center'}`}>
           <LogOut size={18} />
@@ -76,7 +77,6 @@ export default function StaffSidebar({ activePage, setActivePage, currentUser, o
         </button>
       </div>
     </aside>
-    {confirmLogout && <ConfirmModal message="Are you sure you want to log out?" onCancel={() => setConfirmLogout(false)} onConfirm={() => { setConfirmLogout(false); onLogout?.(); }} />}
     </div>
   );
 }

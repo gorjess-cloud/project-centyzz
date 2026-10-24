@@ -1,4 +1,5 @@
 import HeaderActions from '../../components/workspace/HeaderActions';
+import ConfirmationModal from '../../components/ConfirmationModal';
 import { useState, useEffect } from 'react';
 import { 
   Search, 
@@ -51,6 +52,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [selectedServiceIds, setSelectedServiceIds] = useState([]);
   const [activeMenuId, setActiveMenuId] = useState(null);
+  const [pendingServiceAction, setPendingServiceAction] = useState(null);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -325,6 +327,22 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
     }
   };
 
+  const requestServiceAction = (service, actionType) => {
+    const isRestore = actionType === "archive" && service.isArchived;
+    const isDeactivation = actionType === "status" && service.status === "ACTIVE";
+    const actionLabel = actionType === "archive" ? (isRestore ? "Restore" : "Archive") : (isDeactivation ? "Set inactive" : "Set active");
+    const consequence = actionType === "archive"
+      ? (isRestore ? "It will be available in the service catalog again." : "It will be removed from the public and member service catalogs.")
+      : (isDeactivation ? "Clients will no longer be able to book this service." : "Clients will be able to book this service again.");
+    setActiveMenuId(null);
+    setPendingServiceAction({
+      title: `${actionLabel} service?`,
+      message: `${actionLabel} ${service.name}? ${consequence}`,
+      confirmLabel: actionLabel,
+      danger: !isRestore && (actionType === "archive" || isDeactivation),
+      action: () => actionType === "archive" ? handleToggleArchive(service) : handleToggleStatus(service),
+    });
+  };
   const renderCategoryBadge = (category) => {
     const cat = (category || 'HAIR').toUpperCase();
     if (cat === 'HAIR') {
@@ -605,7 +623,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
                                 </button>
 
                                 <button
-                                  onClick={() => handleToggleStatus(s)}
+                                  onClick={() => requestServiceAction(s, "status")}
                                   className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium border-t border-[#E9E4D8]"
                                 >
                                   {s.status === 'ACTIVE' ? <UserX className="h-3.5 w-3.5 text-red-500" /> : <UserCheck className="h-3.5 w-3.5 text-emerald-600" />}
@@ -613,7 +631,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
                                 </button>
 
                                 <button
-                                  onClick={() => handleToggleArchive(s)}
+                                  onClick={() => requestServiceAction(s, "archive")}
                                   className="w-full px-3.5 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 font-semibold border-t border-[#E9E4D8]"
                                 >
                                   <Archive className="h-3.5 w-3.5" />
@@ -623,7 +641,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
                             ) : (
                               <>
                                 <button
-                                  onClick={() => handleToggleArchive(s)}
+                                  onClick={() => requestServiceAction(s, "archive")}
                                   className="w-full px-3.5 py-2 text-xs text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 font-semibold"
                                 >
                                   <RotateCcw className="h-3.5 w-3.5" />
@@ -912,6 +930,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
         </div>
       )}
 
+      {pendingServiceAction && <ConfirmationModal title={pendingServiceAction.title} message={pendingServiceAction.message} confirmLabel={pendingServiceAction.confirmLabel} danger={pendingServiceAction.danger} onCancel={() => setPendingServiceAction(null)} onConfirm={() => { pendingServiceAction.action(); setPendingServiceAction(null); }} />}
     </div>
   );
 }
