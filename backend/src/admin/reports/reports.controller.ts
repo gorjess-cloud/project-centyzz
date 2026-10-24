@@ -1,7 +1,24 @@
-import { Controller, Get, Post, Delete, Query, Param, Body, ParseIntPipe } from '@nestjs/common';
+
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Query,
+  Param,
+  Body,
+  ParseIntPipe,
+  UseGuards,
+} from '@nestjs/common';
+
 import { ReportsService } from './reports.service.js';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
+import { RolesGuard } from '../../auth/roles.guard.js';
+import { Roles } from '../../auth/roles.decorator.js';
 
 @Controller('api/admin/reports')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN', 'SUPERADMIN')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
@@ -17,7 +34,9 @@ export class ReportsController {
   }
 
   @Post('closeout')
-  async submitCloseout(@Body() dto: { reportDate: string; actualCash: number }) {
+  async submitCloseout(
+    @Body() dto: { reportDate: string; actualCash: number },
+  ) {
     return this.reportsService.submitCloseout(dto);
   }
 

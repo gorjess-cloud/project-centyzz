@@ -21,7 +21,7 @@ export class ClientsService {
       }
 
       const allClients: any[] = await ClientModel.where({}).all();
-      
+
       console.log('--- CLIENTS NEON DB FETCH DIAGNOSTIC ---');
       console.log(`Total client rows returned: ${allClients ? allClients.length : 0}`);
       if (allClients && allClients.length > 0) {

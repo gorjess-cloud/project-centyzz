@@ -5,7 +5,7 @@ import { RolesGuard } from '../../auth/roles.guard.js';
 import { Roles } from '../../auth/roles.decorator.js';
 
 @Controller('api/admin/users')
-//@UseGuards(JwtAuthGuard, RolesGuard) 
+@UseGuards(JwtAuthGuard, RolesGuard) 
 @Roles('ADMIN', 'SUPERADMIN')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -35,11 +35,11 @@ export class UsersController {
 
   @Patch(':id/status')
   async toggleStatus(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
-    return this.usersService.toggleUserStatus(id, req.user?.id);
+    return this.usersService.toggleUserStatus(id, req.user?.sub);
   }
 
   @Patch(':id/archive')
   async toggleArchive(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
-    return this.usersService.toggleUserArchive(id, req.user?.id);
+    return this.usersService.toggleUserArchive(id, req.user?.sub);
   }
 }

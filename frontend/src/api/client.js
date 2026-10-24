@@ -80,6 +80,14 @@ export const api = {
   updateStaffAppointmentStatus: (token, id, status) =>
     patch(`/api/appointments/${encodeURIComponent(id)}/staff-status`, { status }, token),
   validatePromo: (promoCode) => post('/api/promos/validate', { promoCode }),
+  getGuestStylists: () => get('/api/appointments/stylists'),
+  getGuestAvailableSlots: (date, serviceId, stylistId) =>
+    get(`/api/appointments/guest-availability?date=${encodeURIComponent(date)}&service_id=${encodeURIComponent(serviceId)}&stylist_id=${encodeURIComponent(stylistId)}`),
+  createGuestCheckout: (booking) => post('/api/appointments/guest-checkout', booking),
+  finishGuestDemo: (appointmentId, token) =>
+    post(`/api/appointments/guest-demo/${encodeURIComponent(appointmentId)}/complete`, { token }),
+  getGuestCheckoutStatus: (reference, token) =>
+    get(`/api/appointments/guest-checkout-status?reference=${encodeURIComponent(reference)}&token=${encodeURIComponent(token)}`),
   getAvailableSlots: (date, serviceId) =>
     get(`/api/appointments/available-slots?date=${encodeURIComponent(date)}&service_id=${encodeURIComponent(serviceId)}`),
   createMyAppointment: (token, appointment) =>

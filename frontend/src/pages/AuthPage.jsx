@@ -136,7 +136,7 @@ export default function AuthPage({
         setFormMessage({ type: 'info', text: 'Registration successful. Check your email for the verification code.' });
         return;
       }
-
+      
       // 2. FORGOT PASSWORD FLOW - REQUEST OTP
       if (isForgotPassword && !isResetOtpStep) {
         await api.forgotPassword({ email: normalizedEmail });

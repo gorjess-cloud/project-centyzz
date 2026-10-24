@@ -16,7 +16,7 @@ import {
   SlidersHorizontal
 } from 'lucide-react';
 
-export default function POSReportsView({ showHeaderActions = true }) {
+export default function POSReportsView({ currentUser, showHeaderActions = true }) {
   const [selectedDate, setSelectedDate] = useState('August 20, 2026');
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [actualCashCount, setActualCashCount] = useState('');
@@ -68,9 +68,9 @@ export default function POSReportsView({ showHeaderActions = true }) {
   const fetchPosData = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`http://localhost:3000/api/admin/reports/pos?date=${encodeURIComponent(selectedDate)}`, {
+      const res = await fetch(`/api/admin/reports/pos?date=${encodeURIComponent(selectedDate)}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${currentUser?.accessToken}`,
           'Content-Type': 'application/json',
         },
       });
@@ -92,8 +92,8 @@ export default function POSReportsView({ showHeaderActions = true }) {
 
   const fetchCloseoutReports = async () => {
     try {
-      const res = await fetch('http://localhost:3000/api/admin/reports/closeouts', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      const res = await fetch('/api/admin/reports/closeouts', {
+        headers: { 'Authorization': `Bearer ${currentUser?.accessToken}` },
       });
       if (res.ok) {
         const data = await res.json();
@@ -109,9 +109,9 @@ useEffect(() => {
 
   const loadData = async () => {
     try {
-      const res = await fetch(`http://localhost:3000/api/admin/reports/pos?date=${encodeURIComponent(selectedDate)}`, {
+      const res = await fetch(`/api/admin/reports/pos?date=${encodeURIComponent(selectedDate)}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${currentUser?.accessToken}`,
           'Content-Type': 'application/json',
         },
       });
@@ -131,8 +131,8 @@ useEffect(() => {
     }
 
     try {
-      const resCloseout = await fetch('http://localhost:3000/api/admin/reports/closeouts', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      const resCloseout = await fetch('/api/admin/reports/closeouts', {
+        headers: { 'Authorization': `Bearer ${currentUser?.accessToken}` },
       });
       if (resCloseout.ok && isSubscribed) {
         const dataCloseout = await resCloseout.json();
@@ -240,10 +240,10 @@ const handleConfirmExportCSV = () => {
 
   const handleConfirmCloseout = async () => {
     try {
-      const res = await fetch('http://localhost:3000/api/admin/reports/closeout', {
+      const res = await fetch('/api/admin/reports/closeout', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${currentUser?.accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ reportDate: selectedDate, actualCash: actualCashNum }),
@@ -262,9 +262,9 @@ const handleConfirmExportCSV = () => {
 
   const handleDeleteReport = async (id, reportDate) => {
     try {
-      const res = await fetch(`http://localhost:3000/api/admin/reports/closeout/${id}`, {
+      const res = await fetch(`/api/admin/reports/closeout/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        headers: { 'Authorization': `Bearer ${currentUser?.accessToken}` },
       });
       if (res.ok) {
         showToast(`Deleted closeout report for ${reportDate}`);

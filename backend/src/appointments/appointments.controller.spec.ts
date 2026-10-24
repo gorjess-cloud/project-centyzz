@@ -1,5 +1,6 @@
 import { AppointmentsController } from './appointments.controller.js';
 import { AppointmentsService } from './appointments.service.js';
+import { GuestBookingService } from './guest-booking.service.js';
 
 describe('AppointmentsController', () => {
   let controller: AppointmentsController;
@@ -12,7 +13,7 @@ describe('AppointmentsController', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    controller = new AppointmentsController(appointmentsService as unknown as AppointmentsService);
+    controller = new AppointmentsController(appointmentsService as unknown as AppointmentsService, {} as GuestBookingService);
   });
 
   it('should be defined', () => {
