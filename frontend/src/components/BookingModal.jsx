@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { readJsonResponse } from '../api/client.js';
+import { useEffect, useMemo, useState } from 'react';
+import { api } from '../api/client.js';
 import { 
   X, 
   ChevronLeft, 
@@ -10,64 +10,133 @@ import {
   User, 
   CreditCard,
   ArrowRight,
-  Loader2
 } from 'lucide-react';
 
-const SERVICES_BY_CATEGORY = {
-  Hair: [
-    { id: 'h1', name: 'Luxury Hair Extensions', duration: '120 min', price: '₱250' },
-    { id: 'h2', name: 'Balayage & Couture Color', duration: '180 min', price: '₱320' },
-    { id: 'h3', name: 'Precision Cut & Blow-Dry', duration: '60 min', price: '₱110' },
-    { id: 'h4', name: 'Keratin Deep Nourish Treatment', duration: '90 min', price: '₱180' }
-  ],
-  Nails: [
-    { id: 'n1', name: 'Royal Spa Gel Manicure', duration: '60 min', price: '₱85' },
-    { id: 'n2', name: 'Sculpted Acrylic Extensions', duration: '90 min', price: '₱130' },
-    { id: 'n3', name: 'Luxury Pedicure & Hydration Spa', duration: '75 min', price: '₱105' },
-    { id: 'n4', name: 'Japanese Nail Art & Chrome', duration: '90 min', price: '₱140' }
-  ],
-  Bundle: [
-    { id: 'b1', name: 'The VIP Glow Package (Hair & Nails)', duration: '210 min', price: '₱350' },
-    { id: 'b2', name: 'Bridal Beauty Suite Experience', duration: '240 min', price: '₱480' },
-    { id: 'b3', name: 'Ultimate Weekend Renewal Bundle', duration: '180 min', price: '₱290' }
-  ]
-};
+// Always use the salon's local calendar date, regardless of the visitor's time zone.
+function getSalonToday() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function formatClock(time) {
+  const [hours, minutes] = String(time).split(':').map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return String(time);
+  return `${String(hours % 12 || 12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
+}
+
+function toDateKey(year, month, day) {
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
 
 function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const [step, setStep] = useState('form');
-  const [loadingPayment, setLoadingPayment] = useState(false);
-  const selectedCategory = String(selectedService?.category || '').toLowerCase();
-  const initialCategory = selectedCategory.includes('nail') ? 'Nails'
-    : selectedCategory.includes('bundle') ? 'Bundle' : 'Hair';
-  
-  // Date and Calendar Navigation
-  const today = new Date();
-  const [currentDate, setCurrentDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
-  const [selectedDay, setSelectedDay] = useState(today.getDate());
-  const [selectedTime, setSelectedTime] = useState('09:00 AM - 10:00 AM');
-  
-  // Form State
-  const [category, setCategory] = useState(initialCategory);
-  const [serviceTitle, setServiceTitle] = useState(
-    selectedService?.title || SERVICES_BY_CATEGORY[initialCategory][0].name
-  );
+  const [serviceGroups, setServiceGroups] = useState([]);
+  const [loadingServices, setLoadingServices] = useState(false);
+  const [servicesError, setServicesError] = useState('');
+  const [category, setCategory] = useState(''); // Database category id, not a display label
+  const [serviceId, setServiceId] = useState(''); // Exactly one service for a guest
+  const [slots, setSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [slotsError, setSlotsError] = useState('');
+  const [checkingSlot, setCheckingSlot] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  const initialSalonDate = getSalonToday();
+  const [yearToday, monthToday, dayToday] = initialSalonDate.split('-').map(Number);
+  const [currentDate, setCurrentDate] = useState(() => new Date(yearToday, monthToday - 1, 1));
+  const [selectedDay, setSelectedDay] = useState(dayToday);
+  const [selectedTime, setSelectedTime] = useState(''); // Backend HH:mm value
+
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [stylist, setStylist] = useState('Karl Maverick Anonuevo (Master Stylist)');
+  // Staff assignment is NOT currently supported by the existing appointments backend.
+  const [stylist, setStylist] = useState('Any Available Senior Specialist');
 
-  const handleCategoryChange = (e) => {
-    const newCat = e.target.value;
-    setCategory(newCat);
-    if (SERVICES_BY_CATEGORY[newCat]?.length > 0) {
-      setServiceTitle(SERVICES_BY_CATEGORY[newCat][0].name);
-    }
-  };
-
-  const currentServiceObj = SERVICES_BY_CATEGORY[category]?.find(s => s.name === serviceTitle) || SERVICES_BY_CATEGORY['Hair'][0];
-  const totalPriceNumber = parseFloat(currentServiceObj.price.replace(/[^0-9.]/g, '')) || 0;
+  const allServices = useMemo(
+    () => serviceGroups.flatMap((group) => group.services || []),
+    [serviceGroups],
+  );
+  const categoryServices = serviceGroups.find((group) => String(group.id) === category)?.services || [];
+  const currentServiceObj = allServices.find((service) => String(service.id) === serviceId);
+  const serviceTitle = currentServiceObj?.name || '';
+  const totalPriceNumber = Number(currentServiceObj?.price || 0);
   const depositAmount = totalPriceNumber * 0.5;
   const balanceRemaining = totalPriceNumber - depositAmount;
+  const selectedDate = toDateKey(currentDate.getFullYear(), currentDate.getMonth(), selectedDay);
+  const selectedSlot = slots.find((slot) => slot.startTime === selectedTime && slot.available);
+
+  // Home and Services both open this same component. A Services-page click supplies
+  // its real database id; Home defaults to the first available database service.
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    let active = true;
+    setStep('form');
+    setFormError('');
+    setSlots([]);
+    setSelectedTime('');
+    setServicesError('');
+    setLoadingServices(true);
+    const salonDate = getSalonToday().split('-').map(Number);
+    setCurrentDate(new Date(salonDate[0], salonDate[1] - 1, 1));
+    setSelectedDay(salonDate[2]);
+
+    api.getServices()
+      .then((result) => {
+        if (!active) return;
+        const groups = Array.isArray(result) ? result : result?.data || [];
+        setServiceGroups(groups);
+        const available = groups.flatMap((group) =>
+          (group.services || []).map((service) => ({ ...service, categoryId: String(group.id) }))
+        );
+        const requestedName = String(selectedService?.name || selectedService?.title || '').trim().toLowerCase();
+        const matched = available.find((service) =>
+          selectedService?.id != null && String(service.id) === String(selectedService.id)
+        ) || available.find((service) =>
+          requestedName && service.name.toLowerCase() === requestedName
+        ) || available[0];
+        setCategory(matched?.categoryId || '');
+        setServiceId(matched ? String(matched.id) : '');
+      })
+      .catch((error) => {
+        if (active) { setServicesError(error.message); setServiceGroups([]); setServiceId(''); }
+      })
+      .finally(() => { if (active) setLoadingServices(false); });
+    return () => { active = false; };
+  }, [isOpen, selectedService]);
+
+  // Refetch when the date or selected service changes. Ignore responses from
+  // superseded requests so stale slots cannot become selectable.
+  useEffect(() => {
+    if (!isOpen || !serviceId) { setSlots([]); setSelectedTime(''); return undefined; }
+    let active = true;
+    setSlots([]);
+    setSelectedTime('');
+    setSlotsError('');
+    setFormError('');
+    setLoadingSlots(true);
+    api.getAvailableSlots(selectedDate, Number(serviceId))
+      .then((result) => {
+        if (active) setSlots(Array.isArray(result.slots) ? result.slots : []);
+      })
+      .catch((error) => {
+        if (active) { setSlots([]); setSlotsError(error.message); }
+      })
+      .finally(() => { if (active) setLoadingSlots(false); });
+    return () => { active = false; };
+  }, [isOpen, serviceId, selectedDate]);
+
+  const handleCategoryChange = (event) => {
+    const next = event.target.value;
+    setCategory(next);
+    const first = serviceGroups.find((group) => String(group.id) === next)?.services?.[0];
+    setServiceId(first ? String(first.id) : '');
+    setSelectedTime('');
+  };
+
   const modalSurface = isDarkMode ? 'bg-[#1A1917] border-[#3A342B]' : 'bg-[#FDFBF7] border-[#E8DFD1]';
   const primaryText = isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]';
   const mutedText = isDarkMode ? 'text-[#C9C1B5]' : 'text-gray-600';
@@ -89,17 +158,23 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const currentYear = currentDate.getFullYear();
   const currentMonthIndex = currentDate.getMonth();
   const monthName = monthNames[currentMonthIndex];
+  const todayDateKey = getSalonToday();
+  const [todayYear, todayMonth] = todayDateKey.split('-').map(Number);
+  const isCurrentMonth = currentYear === todayYear && currentMonthIndex === todayMonth - 1;
 
   const prevMonth = () => {
-    const prev = new Date(currentYear, currentMonthIndex - 1, 1);
-    if (prev.getFullYear() < today.getFullYear() || (prev.getFullYear() === today.getFullYear() && prev.getMonth() < today.getMonth())) return;
-    setCurrentDate(prev);
+    if (isCurrentMonth) return;
+    const previous = new Date(currentYear, currentMonthIndex - 1, 1);
+    if (toDateKey(previous.getFullYear(), previous.getMonth(), 1).slice(0, 7) < todayDateKey.slice(0, 7)) return;
+    setCurrentDate(previous);
     setSelectedDay(1);
+    setSelectedTime('');
   };
 
   const nextMonth = () => {
     setCurrentDate(new Date(currentYear, currentMonthIndex + 1, 1));
     setSelectedDay(1);
+    setSelectedTime('');
   };
 
   const daysInMonth = new Date(currentYear, currentMonthIndex + 1, 0).getDate();
@@ -108,70 +183,36 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const paddingDays = Array.from({ length: firstDayOfWeek }, (_, i) => prevMonthDays - firstDayOfWeek + i + 1);
   const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-  const timeSlots = [
-    '09:00 AM - 10:00 AM',
-    '10:00 AM - 11:00 AM',
-    '11:00 AM - 12:00 PM',
-    '01:00 PM - 02:00 PM',
-    '02:00 PM - 03:00 PM',
-    '03:30 PM - 04:30 PM',
-    '05:00 PM - 06:00 PM'
-  ];
+  const isPastDay = (day) => toDateKey(currentYear, currentMonthIndex, day) < todayDateKey;
 
-  // Check if selected date is today
-  const isSelectedDateToday = 
-    selectedDay === today.getDate() && 
-    currentMonthIndex === today.getMonth() && 
-    currentYear === today.getFullYear();
-
-  // Helper function to check if a specific time slot has passed today
-  const isTimePassed = (timeSlot) => {
-    if (!isSelectedDateToday) return false; // If booking for a future day, all times are available
-
-    const startTimeString = timeSlot.split(' - ')[0]; // e.g., "09:00 AM" or "01:00 PM"
-    const [time, modifier] = startTimeString.split(' ');
-    let [hours, minutes] = time.split(':').map(Number);
-
-    if (modifier === 'PM' && hours < 12) hours += 12;
-    if (modifier === 'AM' && hours === 12) hours = 0;
-
-    const slotTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes);
-    
-    return slotTime < today;
-  };
-
-  const handleFormSubmit = (e) => {
-    e.preventDefault();
-    setStep('confirm');
-  };
-
-  const handlePayMongoCheckout = async () => {
-    setLoadingPayment(true);
+  const handleFormSubmit = async (event) => {
+    event.preventDefault();
+    setFormError('');
+    if (!currentServiceObj || loadingServices || loadingSlots || slotsError) {
+      setFormError('Please choose a service and wait for availability to load.');
+      return;
+    }
+    if (!selectedSlot) {
+      setFormError('Please select an available appointment time.');
+      return;
+    }
+    // Recheck immediately before entering the summary, because another visitor
+    // may have booked this slot since the calendar originally loaded.
+    setCheckingSlot(true);
     try {
-      const response = await fetch('/api/create-paymongo-checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amountInPesos: depositAmount,
-          serviceName: serviceTitle,
-          clientName: fullName,
-          clientEmail: email,
-          clientPhone: phone
-        }),
-      });
-
-      const data = await readJsonResponse(response);
-
-      if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
-      } else {
-        alert('Failed to initialize payment with PayMongo. Please try again.');
-        setLoadingPayment(false);
+      const fresh = await api.getAvailableSlots(selectedDate, Number(serviceId));
+      const latestSlots = Array.isArray(fresh.slots) ? fresh.slots : [];
+      setSlots(latestSlots);
+      if (!latestSlots.some((slot) => slot.startTime === selectedTime && slot.available)) {
+        setSelectedTime('');
+        setFormError('That time is no longer available. Please select another one.');
+        return;
       }
-    } catch (err) {
-      console.error(err);
-      alert('Error connecting to payment server.');
-      setLoadingPayment(false);
+      setStep('confirm');
+    } catch (error) {
+      setFormError(`Could not verify the selected time: ${error.message}`);
+    } finally {
+      setCheckingSlot(false);
     }
   };
 
@@ -180,11 +221,6 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
     onClose();
   };
 
-  const isPastDay = (day) => {
-    const checkDate = new Date(currentYear, currentMonthIndex, day);
-    const todayZero = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    return checkDate < todayZero;
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-md animate-fadeIn">
@@ -220,7 +256,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                     <button 
                       type="button" 
                       onClick={prevMonth}
-                      disabled={currentYear === today.getFullYear() && currentMonthIndex === today.getMonth()}
+                      disabled={isCurrentMonth}
                       className={`p-1.5 ${isDarkMode ? 'hover:bg-[#39352F] text-[#F5F1EA]' : 'hover:bg-[#E8DFD1] text-[#2A1E1B]'} disabled:opacity-30 rounded-full transition-colors`}
                     >
                       <ChevronLeft className="w-5 h-5" />
@@ -259,7 +295,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                           type="button"
                           key={day}
                           disabled={disabled}
-                          onClick={() => setSelectedDay(day)}
+                          onClick={() => { setSelectedDay(day); setSelectedTime(''); }}
                           className={`py-2 rounded-full text-xs font-semibold transition-all ${
                             disabled 
                               ? `${isDarkMode ? 'text-[#6F6A63]' : 'text-gray-300'} cursor-not-allowed line-through` 
@@ -296,16 +332,19 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                   </div>
 
                   <div className="space-y-2 max-h-[290px] overflow-y-auto pr-1 custom-scrollbar">
-                    {timeSlots.map((slot) => {
-                      const isSelected = selectedTime === slot;
-                      const disabled = isTimePassed(slot);
+                    {loadingSlots && <p role="status" className={`text-xs text-center py-3 ${mutedText}`}>Checking real availability…</p>}
+                    {slotsError && <p role="alert" className="text-xs text-red-500">Could not load times: {slotsError}</p>}
+                    {!loadingSlots && !slotsError && !slots.length && <p className={`text-xs text-center py-3 ${mutedText}`}>No appointment times available for this date and service.</p>}
+                    {slots.map((slot) => {
+                      const isSelected = selectedTime === slot.startTime;
+                      const disabled = !slot.available || loadingSlots;
 
                       return (
                         <button
                           type="button"
-                          key={slot}
+                          key={slot.startTime}
                           disabled={disabled}
-                          onClick={() => setSelectedTime(slot)}
+                          onClick={() => setSelectedTime(slot.startTime)}
                           className={`w-full py-2.5 px-3 rounded-xl text-xs text-center font-medium transition-all ${
                             disabled
                               ? `${isDarkMode ? 'bg-[#302D29] text-[#817B72] border-[#403B34]' : 'bg-gray-100 text-gray-400 border-gray-200'} border cursor-not-allowed line-through`
@@ -314,7 +353,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                                 : `${isDarkMode ? 'bg-[#242220] text-[#F5F1EA] border-[#3A342B]' : 'bg-white text-[#2A1E1B] border-[#E8DFD1]'} border hover:border-[#C5A059]`
                           }`}
                         >
-                          {slot.split(' - ')[0]}
+                          {formatClock(slot.startTime)}{!slot.available ? ' (Unavailable)' : ''}
                         </button>
                       );
                     })}
@@ -338,9 +377,10 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                       onChange={handleCategoryChange}
                       className={`w-full px-3 py-2.5 rounded-xl border ${fieldStyle} text-xs font-medium focus:outline-none focus:border-[#C5A059]`}
                     >
-                      <option value="Hair">Hair Styling & Care</option>
-                      <option value="Nails">Nail Artistry & Spa</option>
-                      <option value="Bundle">Special Combo Deals</option>
+                      {!serviceGroups.length && <option value="">No services loaded</option>}
+                      {serviceGroups.map((group) => (
+                        <option key={group.id} value={String(group.id)}>{group.category}</option>
+                      ))}
                     </select>
                   </div>
 
@@ -349,14 +389,15 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                       Service
                     </label>
                     <select
-                      value={serviceTitle}
-                      onChange={(e) => setServiceTitle(e.target.value)}
+                      value={serviceId}
+                      onChange={(e) => { setServiceId(e.target.value); setSelectedTime(''); }}
                       required
                       className={`w-full px-3 py-2.5 rounded-xl border ${fieldStyle} text-xs font-medium focus:outline-none focus:border-[#C5A059]`}
                     >
-                      {SERVICES_BY_CATEGORY[category]?.map((srv) => (
-                        <option key={srv.id} value={srv.name}>
-                          {srv.name} ({srv.price})
+                      {!categoryServices.length && <option value="">No services available</option>}
+                      {categoryServices.map((service) => (
+                        <option key={service.id} value={String(service.id)}>
+                          {service.name} (₱{Number(service.price).toLocaleString('en-PH')})
                         </option>
                       ))}
                     </select>
@@ -405,7 +446,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
 
                   <div>
                     <label className={`block text-[10px] font-bold ${isDarkMode ? 'text-[#A9A39B]' : 'text-gray-500'} uppercase tracking-wider mb-1`}>
-                      Select Specialist
+                      Specialist Preference
                     </label>
                     <select 
                       value={stylist}
@@ -417,13 +458,20 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                       <option>Christian Angelo Javier (Lead Nail Sculptor)</option>
                       <option>Any Available Senior Specialist</option>
                     </select>
+                    <p className={`mt-1 text-[10px] ${mutedText}`}>
+                      This is a preference only. Available times are currently salon-wide;
+                      individual stylist availability will be linked in the next stage.
+                    </p>
                   </div>
 
+                  {servicesError && <p role="alert" className="text-xs text-red-500">Unable to load services: {servicesError}</p>}
+                  {formError && <p role="alert" className="text-xs text-red-500">{formError}</p>}
                   <button 
-                    type="submit" 
-                    className={`w-full mt-2 py-3.5 rounded-2xl ${primaryButton} font-serif font-bold text-xs tracking-widest uppercase transition-all shadow-md flex items-center justify-center gap-2 group`}
+                    type="submit"
+                    disabled={loadingServices || loadingSlots || checkingSlot || !currentServiceObj || !selectedSlot}
+                    className={`w-full mt-2 py-3.5 rounded-2xl ${primaryButton} disabled:opacity-50 disabled:cursor-not-allowed font-serif font-bold text-xs tracking-widest uppercase transition-all shadow-md flex items-center justify-center gap-2 group`}
                   >
-                    <span>Proceed to 50% Deposit</span>
+                    <span>{checkingSlot ? 'Verifying selected time…' : 'Review Appointment & 50% Deposit'}</span>
                     <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
                   </button>
                 </div>
@@ -446,7 +494,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                 50% Partial Payment
               </h3>
               <p className={`text-xs ${mutedText} max-w-xs mx-auto`}>
-                A 50% deposit is required to lock in your appointment schedule.
+                Review your selected service and time. Actual booking and test payment will be enabled in Stage 2.
               </p>
             </div>
 
@@ -454,6 +502,14 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
               <div className={`flex justify-between border-b ${isDarkMode ? 'border-[#3A342B]' : 'border-[#E8DFD1]'} pb-2`}>
                 <span className={mutedText}>Service:</span>
                 <span className={`font-semibold ${primaryText}`}>{serviceTitle}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className={mutedText}>Schedule:</span>
+                <span className={`font-semibold ${primaryText}`}>{selectedDate} at {formatClock(selectedTime)}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className={mutedText}>Specialist preference:</span>
+                <span className={`font-semibold ${primaryText} text-right`}>{stylist}</span>
               </div>
               <div className="flex justify-between">
                 <span className={mutedText}>Total Price:</span>
@@ -470,26 +526,20 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
             </div>
 
             <div className="flex flex-col gap-2 pt-2 max-w-xs mx-auto">
-              <button 
-                onClick={handlePayMongoCheckout}
-                disabled={loadingPayment}
-                className={`w-full py-3.5 rounded-2xl ${primaryButton} font-serif font-bold text-xs tracking-widest uppercase transition-all shadow-md flex items-center justify-center gap-2`}
+              <p className={`text-xs ${mutedText}`}>
+                Stage 1 preview only — no appointment has been created or paid for yet.
+              </p>
+              <button
+                type="button"
+                disabled
+                title="Payment integration is planned for Stage 2"
+                className={`w-full py-3.5 rounded-2xl ${primaryButton} disabled:opacity-50 disabled:cursor-not-allowed font-serif font-bold text-xs tracking-widest uppercase transition-all shadow-md flex items-center justify-center gap-2`}
               >
-                {loadingPayment ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Connecting PayMongo...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Pay ₱{depositAmount.toFixed(2)} via PayMongo</span>
-                  </>
-                )}
+                <span>PayMongo test payment — Stage 2</span>
               </button>
               
               <button 
                 onClick={() => setStep('form')}
-                disabled={loadingPayment}
                 className={`w-full py-2.5 rounded-2xl border ${isDarkMode ? 'bg-[#242220] border-[#3A342B] hover:bg-[#302D29] text-[#F5F1EA]' : 'bg-white border-[#E8DFD1] hover:bg-[#F6F0E6] text-[#2A1E1B]'} font-medium text-xs transition-colors`}
               >
                 Go Back & Edit
