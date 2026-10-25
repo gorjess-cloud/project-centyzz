@@ -4,7 +4,6 @@ import { getServiceImage } from '../utils/serviceImages';
 
 export default function ServicesPage({ serviceFilter, setServiceFilter, onOpenBooking, setActivePage, setAuthMode, currentUser, isDarkMode }) {
 
-export default function ServicesPage({ serviceFilter, setServiceFilter, onOpenBooking, isDarkMode }) {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -29,9 +28,6 @@ export default function ServicesPage({ serviceFilter, setServiceFilter, onOpenBo
       || String(service.category).toLowerCase().includes(String(serviceFilter).toLowerCase()),
   );
   const additionalServicesCount = Math.max(0, allServices.length - previewLimit);
-  const filteredGroups = serviceFilter === 'all'
-    ? groups
-    : groups.filter((group) => String(group.id) === String(serviceFilter) || String(group.category).toLowerCase() === String(serviceFilter).toLowerCase() || String(group.category).toLowerCase().includes(String(serviceFilter).toLowerCase()));
   const text = isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]';
 
   return (
@@ -59,11 +55,6 @@ export default function ServicesPage({ serviceFilter, setServiceFilter, onOpenBo
           {servicesToShow.map((service) => (
             <article key={service.id} className={`flex flex-col justify-between overflow-hidden rounded-2xl border shadow-sm ${isDarkMode ? 'border-[#2A2A2A] bg-[#1A1A1A]' : 'border-[#E8DFD1] bg-white'}`}>
               <img src={getServiceImage(service.name, service.category)} alt={service.name} loading="lazy" className="h-44 w-full object-cover" />
-        {!loading && !error && filteredGroups.every((group) => !group.services?.length) && <p className="text-center text-sm">No services are available in this category right now.</p>}
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4 lg:gap-6">
-          {filteredGroups.flatMap((group) => (group.services || []).map((service) => ({ ...service, category: group.category }))).map((service) => (
-            <article key={service.id} className={`flex flex-col justify-between overflow-hidden rounded-2xl border shadow-sm ${isDarkMode ? 'border-[#2A2A2A] bg-[#1A1A1A]' : 'border-[#E8DFD1] bg-white'}`}>
               <div className="p-4 sm:p-5">
                 <span className="text-[10px] font-bold uppercase text-[#C5A059]">{service.category}</span>
                 <h2 className={`mt-2 font-serif text-lg font-bold ${text}`}>{service.name}</h2>

@@ -27,16 +27,6 @@ const getServiceIcon = (service) => {
   return Scissors;
 };
 
-const formatPrice = (price) => `₱${Number(price).toLocaleString("en-PH")}`;
-
-const getServiceIcon = (service) => {
-  const searchable = `${service.category || ""} ${service.title || ""}`.toLowerCase();
-  if (/lash|brow|eye/.test(searchable)) return Eye;
-  if (/nail|mani|pedi/.test(searchable)) return Hand;
-  if (/skin|facial|wax|makeup|beauty/.test(searchable)) return Sparkles;
-  return Scissors;
-};
-
 export default function MemberServicesPage({
   user,
   isDarkMode,
@@ -92,7 +82,6 @@ export default function MemberServicesPage({
     setCartServices((items) => items.some((item) => String(item.id) === String(service.id))
       ? items.filter((item) => String(item.id) !== String(service.id))
       : [...items, { ...service, ...details }]);
-    if (window.matchMedia("(min-width: 1024px)").matches) setIsCartOpen(true);
     setIsCartOpen(true);
   };
 
@@ -351,40 +340,6 @@ export default function MemberServicesPage({
                           <p className={`mt-1 line-clamp-2 text-xs leading-relaxed sm:text-[10px] ${mutedText}`}>
                             {service.description || "Professional salon care tailored for a premium finishing look."}
                           </p>
-                        <div>
-                          <div className={`flex h-28 items-center justify-center overflow-hidden rounded-xl sm:h-32 ${isDarkMode ? "bg-[#30291E]" : "bg-[#F6F0E6]"}`} aria-hidden="true">
-                            <div className={`grid h-14 w-14 place-items-center rounded-full border ${isDarkMode ? "border-[#C5A059]/30 bg-[#1D1A16]" : "border-[#C5A059]/30 bg-white"}`}>
-                              <ServiceIcon className="h-7 w-7 text-[#C5A059] transition-transform duration-300 group-hover:scale-110" strokeWidth={1.6} />
-                            </div>
-                            {/* Orange '+' Add to Cart Button */}
-                            <button
-                              type="button"
-                              onClick={() => handleAddToCart(service, details)}
-                              className={`absolute right-2 top-2 flex min-h-11 min-w-11 items-center justify-center rounded-lg shadow-md transition-all duration-200 active:scale-90 ${
-                                isAdded
-                                  ? "bg-[#4A3928] text-white"
-                                  : "bg-[#C5A059] text-white hover:bg-[#A9823F]"
-                              }`}
-                              title="Add to cart"
-                            >
-                              {isAdded ? (
-                                <Check className="h-3.5 w-3.5" />
-                              ) : (
-                                <span className="text-sm font-bold leading-none">
-                                  +
-                                </span>
-                              )}
-                            </button>
-                          </div>
-
-                          <div className="mt-auto flex min-w-0 items-baseline justify-between gap-2 border-t border-inherit pt-2 sm:mt-3 sm:px-0.5 sm:pt-2.5">
-                            <span className="shrink-0 text-sm font-extrabold text-[#B48B43] sm:text-xs">
-                              {formatPrice(details.price)}
-                            </span>
-                            <span className={`truncate text-[10px] ${mutedText} sm:text-[9px]`}>
-                              {details.duration}
-                            </span>
-                          </div>
                         </div>
 
                         <button
@@ -442,14 +397,6 @@ export default function MemberServicesPage({
                   }`}
                 >
                   <div className="flex items-center justify-between border-b border-inherit pb-3">
-              <aside
-                className={`w-full shrink-0 rounded-2xl border p-4 shadow-xl transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 lg:w-72 lg:slide-in-from-right-4 ${
-                  isDarkMode
-                    ? "border-[#39342B] bg-[#211F1B]"
-                    : "border-[#E9E4D8] bg-[#FFFDF8]"
-                }`}
-              >
-                <div className="flex items-center justify-between border-b border-inherit pb-3">
                   <h2 className="text-xs font-bold">Current Cart</h2>
                   <button
                     type="button"
