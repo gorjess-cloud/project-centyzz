@@ -71,6 +71,8 @@ export const api = {
   
   register: (user) => post('/api/auth/register', user),
   verifyEmail: (verification) => post('/api/auth/verify-email', verification),
+  forgotPassword: (payload) => post('/api/auth/forgot-password', payload),
+  resetPassword: (payload) => post('/api/auth/reset-password', payload),
   getMyAppointments: (token) => get('/api/appointments/mine', token),
   getMyProfile: (token) => get('/api/auth/me', token),
   updateMyProfile: (token, profile) => patch('/api/auth/me', profile, token),
