@@ -85,7 +85,7 @@ export default function AuthPage({
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormMessage({ type: '', text: '' });
-    const normalizedEmail = email.trim();
+    const normalizedEmail = email.trim().toLowerCase();
 
     if (isSignup) {
       if (!firstName.trim() || !lastName.trim()) {
@@ -139,6 +139,8 @@ export default function AuthPage({
       
       // 2. FORGOT PASSWORD FLOW - REQUEST OTP
       if (isForgotPassword && !isResetOtpStep) {
+        setResetOtp('');
+        setNewPassword('');
         await api.forgotPassword({ email: normalizedEmail });
         setIsResetOtpStep(true);
         setFormMessage({ type: 'info', text: 'If that email is registered, an OTP code has been sent to reset your password.' });
@@ -147,12 +149,23 @@ export default function AuthPage({
 
       // 3. RESET PASSWORD FLOW - SUBMIT NEW PASSWORD + OTP
       if (isForgotPassword && isResetOtpStep) {
+        if (!/^\d{6}$/.test(resetOtp.trim())) {
+          setFormMessage({ type: 'error', text: 'Enter the 6-digit code sent to your email.' });
+          return;
+        }
+        if (newPassword.length < 6) {
+          setFormMessage({ type: 'error', text: 'Your new password must be at least 6 characters.' });
+          return;
+        }
         await api.resetPassword({
           email: normalizedEmail,
           otp: resetOtp.trim(),
           newPassword,
         });
         setFormMessage({ type: 'success', text: 'Password reset successfully! You can now log in.' });
+        setResetOtp('');
+        setNewPassword('');
+        setPassword('');
         setIsResetOtpStep(false);
         setMode?.('login');
         return;
@@ -572,7 +585,10 @@ export default function AuthPage({
                     <input
                       type="text"
                       value={resetOtp}
-                      onChange={(e) => setResetOtp(e.target.value)}
+                      onChange={(e) => setResetOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
                       placeholder="Enter 6-digit OTP code"
                       required
                       className={fieldClass}
@@ -587,6 +603,8 @@ export default function AuthPage({
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
+                      minLength={6}
+                      autoComplete="new-password"
                       placeholder="Enter your new password"
                       required
                       className={fieldClass}
