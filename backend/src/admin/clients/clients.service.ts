@@ -1,5 +1,5 @@
 // backend/src/admin/clients/clients.service.ts
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, InternalServerErrorException } from '@nestjs/common';
 import { db } from '../../prisma/db.js';
 
 @Injectable()
@@ -16,18 +16,10 @@ export class ClientsService {
     try {
       const ClientModel = this.getClientModel();
       if (!ClientModel) {
-        this.logger.error('Client model not found in db.orm.public');
-        return [];
+        throw new InternalServerErrorException('Client data model is unavailable.');
       }
 
       const allClients: any[] = await ClientModel.where({}).all();
-
-      console.log('--- CLIENTS NEON DB FETCH DIAGNOSTIC ---');
-      console.log(`Total client rows returned: ${allClients ? allClients.length : 0}`);
-      if (allClients && allClients.length > 0) {
-        console.log('Sample Client Row 1:', allClients[0]);
-      }
-      console.log('----------------------------------------');
 
       if (!allClients || !Array.isArray(allClients) || allClients.length === 0) {
         return [];
@@ -62,7 +54,7 @@ export class ClientsService {
           lastName,
           email: c.email || '',
           contactNumber: c.phone || 'N/A',
-          gender: c.gender || 'Female',
+          gender: c.gender || '',
           tier: (c.tier || 'REGULAR').toUpperCase() === 'VIP' ? 'VIP' : 'Regular',
           lastVisit: (c.lastVisit || c.last_visit)
             ? new Date(c.lastVisit || c.last_visit).toLocaleDateString('en-US', {
@@ -76,7 +68,7 @@ export class ClientsService {
           avgPerVisit: `₱ ${Math.round(totalSpendNum / Math.max(totalVisitsNum, 1)).toLocaleString()}`,
           clientSince: (c.createdAt || c.created_at)
             ? new Date(c.createdAt || c.created_at).getFullYear().toString()
-            : '2026',
+            : 'N/A',
           status: (c.isActive ?? c.is_active ?? true) ? 'Active' : 'Inactive',
           isArchived: !!(c.archivedAt || c.archived_at),
           notes: c.notes || 'No special notes provided.',
@@ -87,7 +79,7 @@ export class ClientsService {
       });
     } catch (error) {
       this.logger.error('Error fetching clients in service:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -110,7 +102,7 @@ export class ClientsService {
     const lastName = dto.lastName?.trim() || nameParts.slice(1).join(' ') || '';
 
     const email = (dto.email || '').toLowerCase().trim();
-    const phone = dto.contactNumber || dto.phone || '(+63) 9000000000';
+    const phone = dto.contactNumber || dto.phone || null;
     const gender = dto.gender || 'Female';
     const tier = (dto.tier || 'REGULAR').toUpperCase();
     const notes = dto.notes || '';

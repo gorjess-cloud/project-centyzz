@@ -81,7 +81,7 @@ export class GuestBookingService {
   private async service(client: PoolClient, serviceId: number) {
     if (!Number.isSafeInteger(serviceId) || serviceId < 1) throw new BadRequestException('Invalid service');
     const result = await client.query(`SELECT id, name, price::text AS price, duration_minutes AS duration
-      FROM public.services WHERE id = $1 AND is_active = TRUE`, [serviceId]);
+      FROM public.services WHERE id = $1 AND is_active = TRUE AND archived_at IS NULL`, [serviceId]);
     const service = result.rows[0] as { id: number; name: string; price: string; duration: number } | undefined;
     if (!service) throw new NotFoundException('Service is unavailable');
     return service;

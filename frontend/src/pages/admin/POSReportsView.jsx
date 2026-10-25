@@ -17,15 +17,16 @@ import {
 } from 'lucide-react';
 
 export default function POSReportsView({ currentUser, showHeaderActions = true }) {
-  const [selectedDate, setSelectedDate] = useState('August 20, 2026');
+  const [selectedDate, setSelectedDate] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [actualCashCount, setActualCashCount] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   // API Data States
   const [kpiData, setKpiData] = useState({
     totalSales: '₱0.00',
-    totalSalesGrowth: '+12.4% vs yesterday',
+    totalSalesGrowth: 'N/A',
     cashPayments: '₱0.00',
     cashShare: '0% of total',
     digitalPayments: '₱0.00',
@@ -41,7 +42,7 @@ export default function POSReportsView({ currentUser, showHeaderActions = true }
     openingCash: 5000,
     totalCashSales: 0,
     totalDigitalSales: 0,
-    voidedRefunded: '₱800.00 / ₱400.00',
+    voidedRefunded: '₱0.00 / ₱0.00',
     expectedCash: 5000,
     actualCashCount: 0,
     discrepancy: 0,
@@ -84,6 +85,7 @@ export default function POSReportsView({ currentUser, showHeaderActions = true }
         }
       }
     } catch (err) {
+      setLoadError(err.message || 'Unable to load POS report.');
       console.error('Error fetching POS report:', err);
     } finally {
       setIsLoading(false);
@@ -115,7 +117,9 @@ useEffect(() => {
           'Content-Type': 'application/json',
         },
       });
+      if (!res.ok) throw new Error(`Unable to load POS report (HTTP ${res.status}).`);
       if (res.ok && isSubscribed) {
+        setLoadError('');
         const data = await res.json();
         setKpiData(data.kpiData);
         setTransactions(data.transactions);
@@ -148,32 +152,7 @@ useEffect(() => {
   return () => {
     isSubscribed = false;
   };
-}, [selectedDate]);
-
-  const openingCash = closeoutInfo.openingCash;
-  const totalCashSales = closeoutInfo.totalCashSales;
-  const totalDigitalSales = closeoutInfo.totalDigitalSales;
-  const expectedCash = closeoutInfo.expectedCash;
-
-  const actualCashNum = parseFloat(actualCashCount.replace(/[^0-9.]/g, '')) || 0;
-  const discrepancy = actualCashCount !== '' ? actualCashNum - expectedCash : closeoutInfo.discrepancy;
-
-  const handleConfirmExportCSV = () => {
-    const headers = ["Txn ID,Time,Cashier,Service,Method,Amount,Status\n"];
-    const rows = transactions.map(t => 
-      `${t.txnId},${t.time},${t.cashier},"${t.service}",${t.method},₱${t.amount.toFixed(2)},${t.status}`
-    );
-    
-    const blob = new Blob([headers + rows.join("\n")], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Centyzz_POS_Report_${selectedDate.replace(/\s+/g, '_')}.csv`;
-    a.click();
-    setIsExportModalOpen(false);
-    showToast(`Successfully downloaded POS Transactions CSV for ${selectedDate}`);
-  };
-
+}, [selectedDate, currentUser?.accessToken]);
 
   const openingCash = closeoutInfo.openingCash;
   const totalCashSales = closeoutInfo.totalCashSales;
@@ -278,8 +257,8 @@ const handleConfirmExportCSV = () => {
 
 const handleViewReportInvoice = async (report) => {
   try {
-    const res = await fetch(`http://localhost:3000/api/admin/reports/pos?date=${encodeURIComponent(report.date)}`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+    const res = await fetch(`/api/admin/reports/pos?date=${encodeURIComponent(report.date)}`, {
+      headers: { 'Authorization': `Bearer ${currentUser?.accessToken}` },
     });
     
     if (res.ok) {
@@ -350,6 +329,7 @@ const handleViewReportInvoice = async (report) => {
       <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-xl font-bold text-[#2A1E1B] truncate">POS Reports</h1>
+          {loadError && <p role="alert" className="mt-2 text-xs text-red-700">{loadError}</p>}
           <p className="mt-0.5 text-xs text-[#8A8174] truncate">
             Analyze daily revenue, drawer closeouts, and transaction history
           </p>
@@ -358,17 +338,13 @@ const handleViewReportInvoice = async (report) => {
         <div className="flex flex-wrap items-center gap-3 shrink-0">
           <div className="flex items-center gap-2 border-r border-[#E7DFD4] pr-3">
             <div className="relative">
-              <select 
+              <input
+                type="date"
+                aria-label="POS report date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="appearance-none bg-[#F8F5F0] hover:bg-[#E7DFD4] border border-[#E7DFD4] text-[#2A1E1B] font-bold text-xs px-3.5 py-2 pr-8 rounded-xl outline-none cursor-pointer transition-colors shadow-2xs"
-              >
-                <option value="August 20, 2026">August 20, 2026</option>
-                <option value="August 19, 2026">August 19, 2026</option>
-                <option value="August 18, 2026">August 18, 2026</option>
-                <option value="August 17, 2026">August 17, 2026</option>
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 text-[#8A8174] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                className="bg-[#F8F5F0] hover:bg-[#E7DFD4] border border-[#E7DFD4] text-[#2A1E1B] font-bold text-xs px-3.5 py-2 rounded-xl outline-none cursor-pointer transition-colors shadow-2xs"
+              />
             </div>
 
             <button 
@@ -510,11 +486,6 @@ const handleViewReportInvoice = async (report) => {
                   <tr>
                     <td colSpan="7" className="p-8 text-center text-[#8A8174]">No transactions found for {selectedDate}.</td>
                   </tr>
-                  </tr>
-                ) : filteredTransactions.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="p-8 text-center text-[#8A8174]">No transactions found for {selectedDate}.</td>
-                  </tr>
                 ) : (
                   filteredTransactions.map((t) => (
                     <tr key={t.txnId} className="hover:bg-[#FDFBF7] transition-colors">
@@ -618,18 +589,6 @@ const handleViewReportInvoice = async (report) => {
               {closeoutInfo.isClosed ? 'Register Closed For Day' : 'Submit & Close Register'}
             </button>
 
-            <button
-              onClick={() => {
-                <p className="text-[11px] font-bold text-[#2A1E1B] mt-2">
-  Date: <span className="font-mono">{selectedReportForInvoice ? selectedReportForInvoice.date : selectedDate}</span>
-</p>
-                setIsInvoiceModalOpen(true);
-              }}
-              className="w-full py-2.5 rounded-xl border border-[#E7DFD4] bg-white hover:bg-[#F8F5F0] text-[#2A1E1B] font-bold text-xs transition-colors flex items-center justify-center gap-2"
-            >
-              <Printer size={14} />
-              <span>Print A4 Invoice Summary</span>
-            </button>
            <button
   onClick={() => {
     setSelectedReportForInvoice({
@@ -713,7 +672,6 @@ const handleViewReportInvoice = async (report) => {
                   <span className="text-base font-bold text-[#2A1E1B]">{report.date}</span>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setPendingDeleteReport(report)} className="px-4 py-2 rounded-xl border border-[#A29883] text-[#5C5243] hover:bg-[#F6F4EF] text-xs font-bold">Delete</button>
-                    <button onClick={() => handleDeleteReport(report.id, report.date)} className="px-4 py-2 rounded-xl border border-[#A29883] text-[#5C5243] hover:bg-[#F6F4EF] text-xs font-bold">Delete</button>
                     <button onClick={() => handleViewReportInvoice(report)} className="px-5 py-2 rounded-xl bg-[#675B4B] hover:bg-[#4A3F32] text-white text-xs font-bold shadow-2xs">View</button>
                   </div>
                 </div>

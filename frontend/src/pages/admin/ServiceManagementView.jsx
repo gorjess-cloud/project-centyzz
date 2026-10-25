@@ -30,7 +30,7 @@ const formatPromoDate = (date) => {
   });
 };
 
-export default function ServiceManagementView({ showHeaderActions = true }) {
+export default function ServiceManagementView({ currentUser, showHeaderActions = true }) {
   const getAuthToken = () => currentUser?.accessToken || '';
 
   // Active Promo Banner State
@@ -46,6 +46,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
   // Services Data from DB
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const [activeTab, setActiveTab] = useState('ACTIVE'); // 'ACTIVE' or 'ARCHIVED'
   const [searchQuery, setSearchQuery] = useState('');
@@ -139,14 +140,17 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
           },
         });
 
+        if (!response.ok) throw new Error(`Unable to load services (HTTP ${response.status}).`);
         if (response.ok) {
           const data = await response.json();
+          if (isMounted) setLoadError('');
           if (isMounted && Array.isArray(data)) {
             setServices(data);
           }
         }
       } catch (err) {
         console.error('Error fetching services:', err);
+        if (isMounted) setLoadError(err.message || 'Unable to load services.');
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -157,7 +161,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
     return () => {
       isMounted = false;
     };
-  }, [activeTab]);
+  }, [activeTab, currentUser?.accessToken]);
 
   const refreshServices = async () => {
     try {
@@ -174,8 +178,10 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
       if (response.ok) {
         const data = await response.json();
         if (Array.isArray(data)) setServices(data);
+        setLoadError('');
       }
     } catch (err) {
+      setLoadError(err.message || 'Unable to refresh services.');
       console.error('Refresh error:', err);
     }
   };
@@ -347,6 +353,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
     const cat = (category || 'HAIR').toUpperCase();
     if (cat === 'HAIR') {
       return (
+
         <span className="inline-flex items-center gap-1.5 bg-[#FDEBB6] text-[#8C6D23] text-[10px] font-bold tracking-wider px-3 py-1 rounded-full border border-[#F3DE9F]">
           <Sparkles className="h-3 w-3" /> HAIR
         </span>
@@ -368,6 +375,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
 
   return (
     <div className="w-full space-y-6 text-[#443523] pb-6">
+      {loadError && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-xs text-red-700">{loadError}</p>}
       
       {/* Toast Notification */}
       {toastMessage && (
@@ -608,9 +616,9 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
                                     setServiceForm({
                                       name: s.name,
                                       category: s.category,
-                                      price: s.price.replace('₱', '').replace(',', ''),
-                                      durationHours: s.duration.includes('hr') ? s.duration.split('hr')[0].trim() : '0',
-                                      durationMins: s.duration.includes('mins') ? s.duration.split('hr')[1]?.replace('mins', '').trim() || '30' : '0',
+                                      price: s.price.replace('₱', '').replace(/,/g, ''),
+                                      durationHours: String(Math.floor(Number(s.durationMinutes || 0) / 60)),
+                                      durationMins: String(Number(s.durationMinutes || 0) % 60),
                                       description: s.description
                                     });
                                     setActiveMenuId(null);

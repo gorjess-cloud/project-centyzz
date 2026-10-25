@@ -24,7 +24,7 @@ export class ReportsController {
 
   @Get('pos')
   async getPosReportData(@Query('date') date?: string) {
-    const selectedDate = date || 'August 20, 2026';
+    const selectedDate = date || new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
     return this.reportsService.getPosReportData(selectedDate);
   }
 

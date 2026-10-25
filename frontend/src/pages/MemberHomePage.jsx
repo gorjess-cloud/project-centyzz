@@ -72,7 +72,7 @@ export default function MemberHomePage({
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeSection, setActiveSection] = useState(initialSection);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useMemberSidebarState();
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+
   const [accountProfile, setAccountProfile] = useState(user || {});
   const [profileDraft, setProfileDraft] = useState({ firstName: user?.firstName || "", lastName: user?.lastName || "" });
   const [editingProfile, setEditingProfile] = useState(false);

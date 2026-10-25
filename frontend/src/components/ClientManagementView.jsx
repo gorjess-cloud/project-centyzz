@@ -98,12 +98,14 @@ export default function ClientManagementView({ currentUser, showHeaderActions = 
           },
         });
 
-        if (response.ok && isSubscribed) {
+        if (!response.ok) throw new Error(`Unable to load clients (HTTP ${response.status}).`);
+        if (isSubscribed) {
           const data = await response.json();
           setClients(data);
         }
       } catch (err) {
         console.error('Network error fetching clients:', err);
+        if (isSubscribed) showToast(err.message || 'Unable to load clients.');
       } finally {
         if (isSubscribed) setIsLoading(false);
       }
@@ -114,7 +116,7 @@ export default function ClientManagementView({ currentUser, showHeaderActions = 
     return () => {
       isSubscribed = false;
     };
-  }, [activeTab]);
+  }, [activeTab, currentUser?.accessToken]);
 
   const handleAddClientSubmit = async (e) => {
     e.preventDefault();
