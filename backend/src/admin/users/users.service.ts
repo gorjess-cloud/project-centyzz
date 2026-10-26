@@ -6,11 +6,14 @@ import {
   Logger 
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'node:crypto';
+import { ManagementSecurityService, generateTemporaryPin } from '../../auth/management-security.service.js';
 import { db } from '../../prisma/db.js';
 
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
+  constructor(private readonly security: ManagementSecurityService) {}
 
   // 1. Fetch Staff & Admin Users
  // Retrieve account records without logging credentials or tokens
@@ -51,18 +54,27 @@ export class UsersService {
       throw new BadRequestException('Role must be ADMIN or STAFF.');
     }
 
-    const existing = await db.orm.public.User.where({ email: dto.email.toLowerCase().trim() }).first();
+    const firstName = typeof dto.firstName === 'string' ? dto.firstName.trim() : '';
+    const lastName = typeof dto.lastName === 'string' ? dto.lastName.trim() : '';
+    const email = typeof dto.email === 'string' ? dto.email.toLowerCase().trim() : '';
+    if (!firstName || !lastName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new BadRequestException('First name, last name and a valid email are required.');
+    }
+    const existing = await db.orm.public.User.where({ email }).first();
     if (existing) {
       throw new BadRequestException('A user with this email address already exists.');
     }
 
-    const tempPassword = dto.tempPassword || Math.random().toString(36).slice(-8) + 'A1!';
-    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+    // Temporary credentials are generated server-side and displayed ONCE to the creator.
+    // Never use Math.random(), shared default credentials, or client-supplied passwords.
+    const tempPassword = `Tmp!${randomBytes(12).toString('base64url')}9Aa`;
+    const tempPin = generateTemporaryPin();
+    const hashedPassword = await bcrypt.hash(tempPassword, 12);
 
     const created = await db.orm.public.User.create({
-      firstName: dto.firstName.trim(),
-      lastName: dto.lastName.trim(),
-      email: dto.email.toLowerCase().trim(),
+      firstName,
+      lastName,
+      email,
       passwordHash: hashedPassword,
       role: targetRole,
       isActive: true,
@@ -70,8 +82,23 @@ export class UsersService {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
-    const { passwordHash, otpHash, resetPasswordToken, ...safeUser } = created;
-    return safeUser;
+    try {
+      await this.security.provision(created.id, tempPin);
+    } catch (error) {
+      // No account should remain usable without its management PIN.
+      await this.security.pool.query('DELETE FROM public."user" WHERE id=$1', [created.id]).catch(() => {});
+      throw error;
+    }
+    return {
+      id: created.id,
+      email: created.email,
+      role: targetRole,
+      firstName: created.firstName,
+      lastName: created.lastName,
+      temporaryPassword: tempPassword,
+      temporaryPin: tempPin,
+      mustCompleteSetup: true,
+    };
   }
 
   // 3. Update User Profile

@@ -15,16 +15,16 @@ import SettingsView from '../pages/admin/SettingsView'; // Fixed import path to 
 import ScheduleManagementView from '../pages/admin/ScheduleManagementView';
 import AccountManagementView from '../pages/admin/AccountManagementView'; // Fixed import path to point to pages/admin/
 
-export default function AdminLayout({ currentUser, onLogout }) {
+export default function AdminLayout({ currentUser, onLogout, onUserUpdated }) {
   const [activePage, setActivePage] = useState('dashboard');
   const { theme } = useWorkspaceTheme();
 
   if (currentUser?.role?.toUpperCase() === 'SUPERADMIN') {
-    return <SuperAdminLayout currentUser={currentUser} onLogout={onLogout} />;
+    return <SuperAdminLayout currentUser={currentUser} onLogout={onLogout} onUserUpdated={onUserUpdated} />;
   }
 
   if (currentUser?.role?.toUpperCase() === 'STAFF') {
-    return <StaffLayout currentUser={currentUser} onLogout={onLogout} />;
+    return <StaffLayout currentUser={currentUser} onLogout={onLogout} onUserUpdated={onUserUpdated} />;
   }
 
   return (
@@ -77,7 +77,7 @@ export default function AdminLayout({ currentUser, onLogout }) {
             <SettingsView />
           )}
 
-          {activePage === 'account' && <AccountManagementView currentUser={currentUser} />}
+          {activePage === 'account' && <AccountManagementView currentUser={currentUser} onUserUpdated={onUserUpdated} />}
         </div>
       </main>
     </div>

@@ -175,8 +175,9 @@ export default function AuthPage({
       const result = await api.login({ email: normalizedEmail, password });
       const user = result.data?.user;
       const accessToken = result.data?.accessToken;
+      const pinChallengeToken = result.data?.pinChallengeToken;
 
-      if (!user || !accessToken) {
+      if (!user || (!accessToken && !pinChallengeToken)) {
         throw new Error('Authentication failed. Server returned an invalid payload.');
       }
 
@@ -186,7 +187,7 @@ export default function AuthPage({
 
       if (isEmployee) {
         setPendingUser(user);
-        setPendingAccessToken(accessToken);
+        setPendingAccessToken(pinChallengeToken);
         setPin(Array(6).fill(''));
         setIsPinStep(true);
         setFormMessage({ type: 'info', text: 'Employee credentials verified. Please enter your 6-digit shift PIN.' });
@@ -216,7 +217,8 @@ export default function AuthPage({
       const user = result.data?.user;
       const accessToken = result.data?.accessToken;
 
-      if (!user || !accessToken) {
+      const pinChallengeToken = result.data?.pinChallengeToken;
+      if (!user || (!accessToken && !pinChallengeToken)) {
         throw new Error('Google sign-in failed. Invalid payload returned from backend.');
       }
 
@@ -225,7 +227,7 @@ export default function AuthPage({
 
       if (isEmployee) {
         setPendingUser(user);
-        setPendingAccessToken(accessToken);
+        setPendingAccessToken(pinChallengeToken);
         setPin(Array(6).fill(''));
         setIsPinStep(true);
         setFormMessage({ type: 'info', text: 'Google authentication verified. Please enter your 6-digit shift PIN.' });
@@ -290,10 +292,19 @@ export default function AuthPage({
       return;
     }
 
+    if (!pendingAccessToken) {
+      setFormMessage({ type: 'error', text: 'Verification session expired. Please sign in again.' });
+      return;
+    }
     setIsSubmitting(true);
     try {
-      onAuthenticated?.(pendingUser, pendingAccessToken);
+      const result = await api.verifyManagementPin(pendingAccessToken, enteredPin);
+      if (!result.data?.accessToken || !result.data?.user) throw new Error('PIN verification failed.');
+      setPendingAccessToken('');
+      setPin(Array(6).fill(''));
+      onAuthenticated?.(result.data.user, result.data.accessToken);
     } catch (error) {
+      setPin(Array(6).fill(''));
       setFormMessage({ type: 'error', text: error?.message || 'PIN verification failed. Please try again.' });
     } finally {
       setIsSubmitting(false);
@@ -711,9 +722,9 @@ export default function AuthPage({
                   ))}
                 </div>
 
-                <button className="text-[11px] text-[#C5A059] font-medium hover:underline">
-                  Forgot Pin?
-                </button>
+                <p className="text-[11px] text-[#C5A059] font-medium">
+                  Forgot your management PIN? Contact your system administrator.
+                </p>
               </div>
 
               {/* Numpad */}

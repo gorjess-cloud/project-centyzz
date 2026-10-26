@@ -15,7 +15,7 @@ const staffPages = [
   { id: 'settings', label: 'Settings' },
 ];
 
-export default function StaffLayout({ currentUser, onLogout }) {
+export default function StaffLayout({ currentUser, onLogout, onUserUpdated }) {
   const [activePage, setActivePage] = useState('pos');
   const { theme } = useWorkspaceTheme();
   return (
@@ -28,7 +28,7 @@ export default function StaffLayout({ currentUser, onLogout }) {
           {activePage === 'pos' && <StaffPOSView currentUser={currentUser} />}
           {activePage === 'schedule' && <StaffScheduleView currentUser={currentUser} />}
           {activePage === 'inventory' && <StaffInventoryView />}
-          {activePage === 'settings' && <StaffSettingsView currentUser={currentUser} />}
+          {activePage === 'settings' && <StaffSettingsView currentUser={currentUser} onUserUpdated={onUserUpdated} />}
         </div>
       </main>
     </div>

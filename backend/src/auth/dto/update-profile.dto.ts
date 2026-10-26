@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 
 export class UpdateProfileDto {
   @IsString()
@@ -10,4 +10,9 @@ export class UpdateProfileDto {
   @IsNotEmpty()
   @MaxLength(100)
   lastName: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\+?[\d\s()-]{7,20}$/)
+  phoneNumber?: string;
 }

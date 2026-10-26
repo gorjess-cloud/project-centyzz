@@ -1,6 +1,8 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
+import { db } from '../prisma/db.js';
+vi.mock('../prisma/db.js', () => ({ db: { orm: { public: { User: { where: vi.fn() } } } } }));
 
 describe('JwtAuthGuard', () => {
   const jwtService = {
@@ -16,7 +18,7 @@ describe('JwtAuthGuard', () => {
     vi.clearAllMocks();
     request.headers = {};
     request.user = undefined;
-    guard = new JwtAuthGuard(jwtService as unknown as JwtService);
+    guard = new JwtAuthGuard(jwtService as unknown as JwtService, { requireConfigured: vi.fn() } as any);
   });
 
   it('rejects requests without a bearer token', async () => {
@@ -27,7 +29,8 @@ describe('JwtAuthGuard', () => {
   });
 
   it('attaches the verified member to the request', async () => {
-    const user = { sub: 7, email: 'member@example.com', role: 'CUSTOMER' };
+    const user = { sub: 7, email: 'member@example.com', role: 'CUSTOMER', purpose: 'access' };
+    vi.mocked(db.orm.public.User.where).mockReturnValue({ first: async () => ({ id: 7, email: 'member@example.com', role: 'CUSTOMER', isActive: true }) } as any);
     request.headers.authorization = 'Bearer valid-token';
     jwtService.verifyAsync.mockResolvedValue(user);
 

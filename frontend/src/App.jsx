@@ -3,6 +3,8 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import BookingModal from './components/BookingModal';
 import AdminLayout from './components/AdminLayout';
+import FirstManagementSetupModal from './components/FirstManagementSetupModal';
+import ManagementSetupDashboardPreview from './components/ManagementSetupDashboardPreview';
 import { api } from './api/client.js'; // 👈 Fixed import path
 
 import ConfirmationModal from './components/ConfirmationModal';
@@ -39,7 +41,7 @@ export default function App() {
   const [confirmLogout, setConfirmLogout] = useState(false);
 
   useEffect(() => {
-    if (!memberUser?.accessToken) return undefined;
+    if (!memberUser?.accessToken || memberUser?.mustCompleteSetup) return undefined;
 
     let isCurrent = true;
 
@@ -57,7 +59,7 @@ export default function App() {
     return () => {
       isCurrent = false;
     };
-  }, [memberUser?.accessToken, appointmentsRefreshKey]);
+  }, [memberUser?.accessToken, memberUser?.mustCompleteSetup, appointmentsRefreshKey]);
 
   const handleOpenBooking = (service = null) => {
     if (memberUser) {
@@ -123,6 +125,13 @@ export default function App() {
     setActivePage(isEmployee ? 'admin' : 'home');
   };
 
+  const completeManagementSetup = (user, accessToken) => {
+    setMemberUser((previous) => ({
+      ...previous, ...user, accessToken, mustCompleteSetup: false,
+      name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+    }));
+  };
+
   const handleLogout = () => {
     setMemberUser(null);
     setMemberAppointments([]);
@@ -164,10 +173,15 @@ export default function App() {
       )}
 
       <main className="flex-1">
-        {isAdminDashboard && (
+        {isAdminDashboard && memberUser?.mustCompleteSetup && (
+          <ManagementSetupDashboardPreview role={memberUser.role} />
+        )}
+
+        {isAdminDashboard && !memberUser?.mustCompleteSetup && (
           <AdminLayout 
             currentUser={memberUser || { firstName: 'Millicent', lastName: 'Campillos', email: 'MillicentCampillos@example.com', role: 'ADMIN' }} 
             onLogout={requestLogout}
+            onUserUpdated={handleProfileUpdated}
           />
         )}
 
@@ -271,7 +285,7 @@ export default function App() {
             mode={authMode}
             setMode={setAuthMode}
             onBackToSalon={() => setActivePage('home')}
-            onPreviewDashboard={enterDemoDashboard}
+            onPreviewDashboard={undefined}
             onAuthenticated={enterMemberDashboard}
             isDarkMode={isDarkMode}
             setIsDarkMode={setIsDarkMode}
@@ -281,6 +295,14 @@ export default function App() {
 
       {!isAuthPage && !isMemberDashboard && !isAdminDashboard && (
         <Footer setActivePage={setActivePage} setServiceFilter={setServiceFilter} isDarkMode={isDarkMode} />
+      )}
+
+      {memberUser?.mustCompleteSetup && ['ADMIN', 'SUPERADMIN', 'STAFF'].includes(memberUser.role) && (
+        <FirstManagementSetupModal
+          user={memberUser}
+          onComplete={completeManagementSetup}
+          onLogout={handleLogout}
+        />
       )}
 
       {confirmLogout && <ConfirmationModal title="Log out?" message="Are you sure you want to log out of your account?" confirmLabel="Log out" danger onCancel={() => setConfirmLogout(false)} onConfirm={confirmAndLogout} />}
