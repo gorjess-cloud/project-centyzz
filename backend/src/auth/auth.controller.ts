@@ -10,6 +10,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { GoogleLoginDto } from './dto/google-login.dto.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
+import { ManagementPinDto, ManagementSetupDto, ManagementCredentialsDto } from './dto/management-security.dto.js';
 
 @Controller('api/auth')
 export class AuthController {
@@ -48,6 +49,29 @@ export class AuthController {
   @Post('google')
   googleLogin(@Body() googleLoginDto: GoogleLoginDto) {
     return this.authService.googleLogin(googleLoginDto.idToken);
+  }
+
+  // Management roles do NOT receive a normal session until PIN verification succeeds.
+  @Post('verify-management-pin')
+  verifyManagementPin(@Body() dto: ManagementPinDto) {
+    return this.authService.verifyManagementPin(dto.challengeToken, dto.pin);
+  }
+
+  @Post('complete-management-setup')
+  completeManagementSetup(@Body() dto: ManagementSetupDto) {
+    return this.authService.completeManagementSetup(dto.setupToken, dto);
+  }
+
+  @Post('check-action-pin')
+  @UseGuards(JwtAuthGuard)
+  checkActionPin(@Req() request: AuthenticatedRequest, @Body('pin') pin: string) {
+    return this.authService.checkActionPin(request.user.sub, pin);
+  }
+
+  @Patch('management-credentials')
+  @UseGuards(JwtAuthGuard)
+  updateManagementCredentials(@Req() request: AuthenticatedRequest, @Body() body: ManagementCredentialsDto) {
+    return this.authService.updateManagementCredentials(request.user.sub, body);
   }
 
   @Post('forgot-password')
