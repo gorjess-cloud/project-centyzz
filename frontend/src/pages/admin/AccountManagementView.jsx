@@ -1,4 +1,5 @@
 import HeaderActions from '../../components/workspace/HeaderActions';
+import { api } from '../../api/client.js';
 import { useState } from 'react';
 import { 
   User, 
@@ -12,7 +13,7 @@ import {
   History
 } from 'lucide-react';
 
-export default function AccountManagementView({ currentUser, showHeaderActions = true }) {
+export default function AccountManagementView({ currentUser, onUserUpdated, showHeaderActions = true }) {
   const [toastMessage, setToastMessage] = useState('');
 
   // Active sub-tab state
@@ -23,7 +24,7 @@ export default function AccountManagementView({ currentUser, showHeaderActions =
     firstName: currentUser?.firstName || 'Millicent',
     lastName: currentUser?.lastName || 'Campillos',
     email: currentUser?.email || 'MillicentCampillos@example.com',
-    contactNumber: currentUser?.contactNumber || '0912345678',
+    contactNumber: currentUser?.phoneNumber || currentUser?.contactNumber || '',
     role: currentUser?.role || 'ADMIN',
     avatarUrl: currentUser?.avatarUrl || ''
   });
@@ -55,29 +56,48 @@ export default function AccountManagementView({ currentUser, showHeaderActions =
     setTimeout(() => setToastMessage(''), 4000);
   };
 
-  const handleProfileSave = (e) => {
+  const handleProfileSave = async (e) => {
     e.preventDefault();
-    showToast('Successfully updated profile details!');
+    try {
+      const result = await api.updateMyProfile(currentUser?.accessToken, {
+        firstName: profileForm.firstName, lastName: profileForm.lastName,
+        phoneNumber: profileForm.contactNumber,
+      });
+      onUserUpdated?.(result.data);
+      showToast('Successfully updated profile details!');
+    } catch (error) { showToast(error.message || 'Unable to update profile'); }
   };
 
-  const handlePasswordChange = (e) => {
+  const handlePasswordChange = async (e) => {
     e.preventDefault();
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       showToast('Error: New passwords do not match.');
       return;
     }
-    showToast('Password successfully changed!');
-    setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    try {
+      await api.changeManagementCredentials(currentUser?.accessToken, {
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
+      showToast('Password successfully changed!');
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (error) { showToast(error.message || 'Unable to change password'); }
   };
 
-  const handlePinChange = (e) => {
+  const handlePinChange = async (e) => {
     e.preventDefault();
     if (pinForm.newPin !== pinForm.confirmPin) {
       showToast('Error: New PIN entries do not match.');
       return;
     }
-    showToast('Admin PIN updated successfully!');
-    setPinForm({ currentPin: '', newPin: '', confirmPin: '' });
+    try {
+      await api.changeManagementCredentials(currentUser?.accessToken, {
+        currentPin: pinForm.currentPin,
+        newPin: pinForm.newPin,
+      });
+      showToast('Management PIN updated successfully!');
+      setPinForm({ currentPin: '', newPin: '', confirmPin: '' });
+    } catch (error) { showToast(error.message || 'Unable to change PIN'); }
   };
 
   const initials = `${profileForm.firstName.charAt(0)}${profileForm.lastName.charAt(0)}`.toUpperCase();
@@ -315,7 +335,7 @@ export default function AccountManagementView({ currentUser, showHeaderActions =
                 <h3 className="text-sm font-bold text-[#2A1E1B] uppercase tracking-wider mb-1 flex items-center gap-2">
                   <Lock className="h-4 w-4 text-[#C5A059]" /> Admin Security PIN
                 </h3>
-                <p className="text-xs text-[#8A8174]">This 4-digit PIN is required when performing high-security actions (e.g., adding users, deactivating accounts).</p>
+                <p className="text-xs text-[#8A8174]">Your six-digit PIN is required for login and sensitive management actions.</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:w-3/4">
@@ -323,7 +343,7 @@ export default function AccountManagementView({ currentUser, showHeaderActions =
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Current PIN</label>
                   <input
                     type="password"
-                    maxLength={4}
+                    maxLength={6}
                     placeholder="••••"
                     value={pinForm.currentPin}
                     onChange={(e) => setPinForm({ ...pinForm, currentPin: e.target.value })}
@@ -335,7 +355,7 @@ export default function AccountManagementView({ currentUser, showHeaderActions =
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">New PIN</label>
                   <input
                     type="password"
-                    maxLength={4}
+                    maxLength={6}
                     placeholder="••••"
                     value={pinForm.newPin}
                     onChange={(e) => setPinForm({ ...pinForm, newPin: e.target.value })}
@@ -347,7 +367,7 @@ export default function AccountManagementView({ currentUser, showHeaderActions =
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Confirm PIN</label>
                   <input
                     type="password"
-                    maxLength={4}
+                    maxLength={6}
                     placeholder="••••"
                     value={pinForm.confirmPin}
                     onChange={(e) => setPinForm({ ...pinForm, confirmPin: e.target.value })}

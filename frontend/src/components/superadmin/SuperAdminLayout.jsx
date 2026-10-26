@@ -26,7 +26,7 @@ const demoUser = {
   role: 'SUPERADMIN', isDemo: true,
 };
 
-export default function SuperAdminLayout({ currentUser = demoUser, onLogout = () => { window.location.href = '/'; } }) {
+export default function SuperAdminLayout({ currentUser = demoUser, onUserUpdated, onLogout = () => { window.location.href = '/'; } }) {
   const [activePage, setActivePage] = useState('dashboard');
   const [mobileOpen, setMobileOpen] = useState(false);
   const { theme } = useWorkspaceTheme();
@@ -47,7 +47,7 @@ export default function SuperAdminLayout({ currentUser = demoUser, onLogout = ()
     inventory: <InventoryManagementView />,
     schedule: <ScheduleManagementView />,
     settings: <SettingsView />,
-    account: <AccountManagementView currentUser={currentUser} />,
+    account: <AccountManagementView currentUser={currentUser} onUserUpdated={onUserUpdated} />,
     roles: <RolePermissions />,
     audit: <AuditTable full />,
   };

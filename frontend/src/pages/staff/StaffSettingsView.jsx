@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { Pencil, Check, Camera, Eye, EyeOff, Crop, Upload, ZoomIn, ZoomOut, ShieldCheck } from 'lucide-react';
 import { Toast, useToast, Modal, ConfirmModal, card, input } from '../../components/staff/ui';
+import { api } from '../../api/client.js';
 
 const lbl = 'mb-1.5 block text-[10px] font-bold uppercase tracking-wide text-[#443523]';
 const primary = 'flex items-center justify-center gap-2 rounded-lg bg-[#4A3928] px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#2A1E1B] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40';
@@ -28,7 +29,7 @@ function Field({ label, value, onChange, disabled, pencil, type = 'text', placeh
   );
 }
 
-export default function StaffSettingsView({ currentUser }) {
+export default function StaffSettingsView({ currentUser, onUserUpdated }) {
   const [tab, setTab] = useState('personal');
   const [editing, setEditing] = useState(false);
   const [credentialsEditing, setCredentialsEditing] = useState(false);
@@ -41,12 +42,32 @@ export default function StaffSettingsView({ currentUser }) {
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const drag = useRef(null);
-  const [p, setP] = useState({ first: currentUser?.firstName || 'Jessica', last: currentUser?.lastName || 'Palma', mi: '', sex: 'Female', birthday: '', contact: '' });
+  const [p, setP] = useState({ first: currentUser?.firstName || 'Jessica', last: currentUser?.lastName || 'Palma', mi: '', sex: 'Female', birthday: '', contact: currentUser?.phoneNumber || '' });
   const [c, setC] = useState({ email: currentUser?.email || 'jessestaff@example.com', otp: '', old: '', next: '', repeat: '' });
   const sp = (k) => (v) => setP({ ...p, [k]: v });
   const sc = (k) => (v) => setC({ ...c, [k]: v });
   const mismatch = c.next && c.repeat && c.next !== c.repeat;
-  const cancel = () => setC({ ...c, otp: '', old: '', next: '', repeat: '' });
+  const cancel = () => setC((previous) => ({ ...previous, otp: '', old: '', next: '', repeat: '' }));
+  const saveProfile = async () => {
+    try {
+      const result = await api.updateMyProfile(currentUser?.accessToken, {
+        firstName: p.first, lastName: p.last, phoneNumber: p.contact,
+      });
+      onUserUpdated?.(result.data);
+      setEditing(false);
+      say('Profile updated');
+    } catch (error) { say(error.message || 'Profile update failed'); }
+  };
+  const changePassword = async () => {
+    if (c.next !== c.repeat) return say('Passwords do not match');
+    try {
+      await api.changeManagementCredentials(currentUser?.accessToken, {
+        currentPassword: c.old, newPassword: c.next,
+      });
+      say('Password updated');
+      cancel();
+    } catch (error) { say(error.message || 'Password change failed'); }
+  };
   const initials = (p.first[0] || '') + (p.last[0] || '');
   const pickPhoto = (e) => {
     const f = e.target.files?.[0];
@@ -123,7 +144,7 @@ export default function StaffSettingsView({ currentUser }) {
             <div><h2 className="text-xl font-bold text-[#2A1E1B]">Personal information</h2><p className="mt-1 text-xs text-[#8A8174]">Your details help the team recognize and contact you.</p></div>
             <div className="flex gap-2">
               {editing && <button onClick={() => setConfirm({ message: 'Discard your profile changes?', action: () => setEditing(false) })} className={secondary}>Cancel Changes</button>}
-              <button onClick={() => { if (editing) setConfirm({ message: 'Save your profile changes?', action: () => { say('Profile updated'); setEditing(false); } }); else setEditing(true); }} className={editing ? primary : secondary}>{editing ? <><Check size={14} /> Save Changes</> : 'Edit Profile'}</button>
+              <button onClick={() => { if (editing) setConfirm({ message: 'Save your profile changes?', action: () => { saveProfile(); } }); else setEditing(true); }} className={editing ? primary : secondary}>{editing ? <><Check size={14} /> Save Changes</> : 'Edit Profile'}</button>
             </div>
           </div>
           {editing && <div className="mb-5 flex items-start gap-3 rounded-xl border border-[#E7DAB8] bg-[#FBF7E9] px-4 py-3 text-xs text-[#746342]"><Pencil size={15} className="mt-0.5 shrink-0" /><span><strong className="block">Editing your profile</strong>Update the fields below, then save your changes when you’re done.</span></div>}
@@ -147,7 +168,7 @@ export default function StaffSettingsView({ currentUser }) {
               <div className="mb-5 flex items-start gap-3 rounded-xl border border-[#E7DAB8] bg-[#FBF7E9] px-4 py-3 text-xs text-[#746342]"><ShieldCheck size={15} className="mt-0.5 shrink-0" /><span><strong className="block">Credential update in progress</strong>Use the one-time code to verify your email update. Password changes require your current password.</span></div>
               <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
                 <Field label="Email address" value={c.email} onChange={sc('email')} pencil />
-                <button onClick={() => say('OTP sent to your email')} className={`${primary} py-3`}>Send OTP</button>
+                <button onClick={() => say('Email change verification is not available yet. No OTP was sent.')} className={`${primary} py-3`}>Send OTP</button>
                 <Field label="OTP verification code" value={c.otp} onChange={sc('otp')} placeholder="Enter the code sent to your email" className="sm:col-span-2" />
               </div>
               <div className="mt-6 rounded-[1.5rem] bg-[#EEEEEE] p-5 sm:px-8 sm:py-6">
@@ -159,7 +180,7 @@ export default function StaffSettingsView({ currentUser }) {
                   <Field label="Repeat new password" type="password" value={c.repeat} onChange={sc('repeat')} placeholder="Confirm your new password" />
                 </div>
                 {mismatch && <p role="alert" className="mt-3 text-xs font-bold text-rose-600">Passwords do not match.</p>}
-                <div className="mt-5 flex justify-end"><button disabled={!!mismatch || !c.old || !c.next || !c.repeat} onClick={() => setConfirm({ message: 'Submit this password change request?', action: () => { say('Password change requested'); cancel(); } })} className={primary}><Check size={14} /> Request Password Change</button></div>
+                <div className="mt-5 flex justify-end"><button disabled={!!mismatch || !c.old || !c.next || !c.repeat} onClick={() => setConfirm({ message: 'Submit this password change request?', action: () => { changePassword(); } })} className={primary}><Check size={14} /> Request Password Change</button></div>
               </div>
             </> : <div className="space-y-5">
               <Field label="Email address" value={c.email} disabled onChange={() => {}} />

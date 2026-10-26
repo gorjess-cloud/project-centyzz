@@ -68,6 +68,10 @@ export const api = {
   login: (credentials) => post('/api/auth/login', credentials),
 
   googleLogin: (idToken) => post('/api/auth/google', { idToken }),
+  verifyManagementPin: (challengeToken, pin) => post('/api/auth/verify-management-pin', { challengeToken, pin }),
+  completeManagementSetup: (setupToken, data) => post('/api/auth/complete-management-setup', { setupToken, ...data }),
+  verifyActionPin: (token, pin) => post('/api/auth/check-action-pin', { pin }, token),
+  changeManagementCredentials: (token, data) => patch('/api/auth/management-credentials', data, token),
   
   register: (user) => post('/api/auth/register', user),
   verifyEmail: (verification) => post('/api/auth/verify-email', verification),
