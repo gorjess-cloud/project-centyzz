@@ -17,7 +17,27 @@ import {
   RotateCcw,
   ChevronLeft,
   ChevronRight,
+  Copy,
+  Check,
 } from 'lucide-react';
+
+// The credentials are shown once, so copy them without putting them in storage.
+function CredentialCopyValue({ value, label, copied, onCopy, mono = false }) {
+  return (
+    <span className="group inline-flex min-w-0 max-w-full items-center gap-1.5 align-middle">
+      <span className={`min-w-0 break-all font-bold ${mono ? 'font-mono' : ''}`}>{value}</span>
+      <button
+        type="button"
+        aria-label={`Copy ${label}`}
+        title={copied ? 'Copied!' : `Copy ${label}`}
+        onClick={() => onCopy(label, value)}
+        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#736457] opacity-50 transition-all hover:bg-[#F1ECE4] hover:text-[#2A1E1B] focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#A87C43] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+      >
+        {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+    </span>
+  );
+}
 
 export default function UserManagementView({ currentUser, showHeaderActions = true }) {
   const loggedInRole = (currentUser?.role || 'ADMIN').toUpperCase();
@@ -47,6 +67,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
   const [pinError, setPinError] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
   const [createdCredentials, setCreatedCredentials] = useState(null);
+  const [copiedCredentialField, setCopiedCredentialField] = useState(null);
 
   const [toastMessage, setToastMessage] = useState('');
 
@@ -63,6 +84,17 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 4000);
+  };
+
+  const handleCopyCredential = async (field, value) => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
+      await navigator.clipboard.writeText(value);
+      setCopiedCredentialField(field);
+      setTimeout(() => setCopiedCredentialField((current) => current === field ? null : current), 1800);
+    } catch {
+      showToast('Could not copy automatically. Please select and copy the value manually.');
+    }
   };
 
   // -------------------------------------------------------------
@@ -232,6 +264,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
         if (response.ok) {
           const result = await response.json();
           if (!result.temporaryPassword || !result.temporaryPin) throw new Error('Account created but temporary credentials were not returned. Contact the system administrator.');
+          setCopiedCredentialField(null);
           setCreatedCredentials({ email: result.email, password: result.temporaryPassword, pin: result.temporaryPin });
           setIsAddUserOpen(false);
           setNewUserForm({ firstName: '', lastName: '', email: '', role: 'STAFF', tempPassword: '' });
@@ -829,10 +862,10 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
         <div role="dialog" aria-modal="true" aria-label="One-time management credentials" className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-md space-y-4 rounded-xl bg-white p-6 text-[#2A1E1B] shadow-2xl">
             <h3 className="text-lg font-bold">Account created — save credentials now</h3>
-            <p className="text-sm">These unique temporary credentials are shown only once. Share them securely with the new user. They must change their password, PIN, name and phone number at first login.</p>
-            <p className="text-sm">Email: <strong>{createdCredentials.email}</strong></p>
-            <p className="text-sm">Temporary password: <code className="break-all font-bold">{createdCredentials.password}</code></p>
-            <p className="text-sm">Temporary PIN: <code className="font-bold">{createdCredentials.pin}</code></p>
+            <p className="text-sm">These initial credentials are shown only once. The temporary PIN is unique to this account; the initial password may be shared across newly created accounts. Share both securely. The user must change their password, PIN, name and phone number at first login.</p>
+            <p className="text-sm leading-relaxed">Email: <CredentialCopyValue label="email" value={createdCredentials.email} copied={copiedCredentialField === 'email'} onCopy={handleCopyCredential} /></p>
+            <p className="text-sm leading-relaxed">Temporary password: <CredentialCopyValue label="password" mono value={createdCredentials.password} copied={copiedCredentialField === 'password'} onCopy={handleCopyCredential} /></p>
+            <p className="text-sm leading-relaxed">Temporary PIN: <CredentialCopyValue label="PIN" mono value={createdCredentials.pin} copied={copiedCredentialField === 'PIN'} onCopy={handleCopyCredential} /></p>
             <button type="button" onClick={() => setCreatedCredentials(null)} className="rounded-lg bg-[#3A342B] px-4 py-2 text-sm text-white">I've saved these credentials</button>
           </div>
         </div>

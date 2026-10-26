@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'node:crypto';
-import { ManagementSecurityService, generateTemporaryPin } from '../../auth/management-security.service.js';
+import { ManagementSecurityService, generateTemporaryPin, validPassword } from '../../auth/management-security.service.js';
 import { db } from '../../prisma/db.js';
 
 @Injectable()
@@ -65,9 +65,14 @@ export class UsersService {
       throw new BadRequestException('A user with this email address already exists.');
     }
 
-    // Temporary credentials are generated server-side and displayed ONCE to the creator.
-    // Never use Math.random(), shared default credentials, or client-supplied passwords.
-    const tempPassword = `Tmp!${randomBytes(12).toString('base64url')}9Aa`;
+    // An explicitly configured initial password is allowed for onboarding only.
+    // The creator still receives a unique temporary PIN for each account.
+    // First login requires changing the password, PIN, name and phone number.
+    const configuredPassword = process.env.MANAGEMENT_DEFAULT_PASSWORD;
+    if (configuredPassword && !validPassword(configuredPassword)) {
+      throw new BadRequestException('Configured management default password does not meet policy.');
+    }
+    const tempPassword = configuredPassword || `Tmp!${randomBytes(12).toString('base64url')}9Aa`;
     const tempPin = generateTemporaryPin();
     const hashedPassword = await bcrypt.hash(tempPassword, 12);
 
