@@ -58,7 +58,7 @@ export default function PromosPage({ setActivePage, setAuthMode, isDarkMode }) {
       <div className="mx-auto max-w-7xl space-y-7 px-4 sm:space-y-10 sm:px-6 lg:space-y-12 lg:px-8">
         <div className="mx-auto max-w-3xl space-y-2 text-center sm:space-y-3">
           <span className="text-xs font-bold text-[#C5A059] uppercase tracking-widest">Exclusive Combos</span>
-          <h1 className={`text-2xl leading-tight sm:text-5xl font-serif font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>
+          <h1 className={`text-2xl leading-tight sm:text-5xl font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>
             Bundle it. More Services <span className="italic font-normal text-[#C5A059]">for less.</span>
           </h1>
         </div>
@@ -71,9 +71,9 @@ export default function PromosPage({ setActivePage, setAuthMode, isDarkMode }) {
             <div key={promo.id} className={`flex flex-col justify-between rounded-2xl border p-5 shadow-md sm:rounded-3xl sm:p-6 ${isDarkMode ? 'bg-[#1A1A1A] border-[#2A2A2A]' : 'bg-white border-[#E8DFD1]'}`}>
               <div className="space-y-4">
                 <span className="inline-block px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-xs">{promo.savings}</span>
-                <h3 className={`text-xl font-serif font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>{promo.title}</h3>
+                <h3 className={`text-xl font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>{promo.title}</h3>
                 <div className="flex items-baseline gap-2">
-                  <span className={`text-3xl font-serif font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>{promo.bundlePrice}</span>
+                  <span className={`text-3xl font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>{promo.bundlePrice}</span>
                   {promo.originalPrice && <span className="text-sm text-gray-400 line-through">{promo.originalPrice}</span>}
                 </div>
                 <p className={`text-xs ${isDarkMode ? 'text-[#D6D0C8]' : 'text-gray-600'}`}>{promo.description}</p>
@@ -186,7 +186,7 @@ export default function PromosPage({ setActivePage, setAuthMode, isDarkMode }) {
             <div className={`h-24 bg-gradient-to-r border-t relative overflow-hidden flex items-center justify-center ${isDarkMode ? 'from-[#3B3020] via-[#39262A] to-[#28263A] border-[#3A342B]' : 'from-amber-200 via-rose-200 to-indigo-200 border-[#E8DFD1]'}`}>
               <div className={`absolute inset-0 opacity-20 ${isDarkMode ? 'bg-[radial-gradient(#F5F1EA_1px,transparent_1px)]' : 'bg-[radial-gradient(#2A1E1B_1px,transparent_1px)]'} [background-size:12px_12px]`} />
               <div className="relative z-10 text-center px-4">
-                <p className={`font-serif italic text-xs font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>✨ Centy'Zz Loyalty Perks ✨</p>
+                <p className={`italic text-xs font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>✨ Centy'Zz Loyalty Perks ✨</p>
                 <p className={`text-[10px] mt-0.5 ${isDarkMode ? 'text-[#D6D0C8]' : 'text-[#2A1E1B]/70'}`}>Register now to claim your bundle & earn reward points instantly.</p>
               </div>
             </div>

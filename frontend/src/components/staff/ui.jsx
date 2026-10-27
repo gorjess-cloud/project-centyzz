@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { X, CheckCircle2, Inbox } from 'lucide-react';
+import useModalScrollLock from '../../hooks/useModalScrollLock';
 
 export const peso = (n) => '₱' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 });
 
@@ -96,36 +98,40 @@ export function EmptyState({ icon: Icon = Inbox, title, hint, children }) {
 
 /* Accessible modal: Esc and backdrop click close it; slides up as a sheet on phones. */
 export function Modal({ title, onClose, children, size = 'max-w-xl' }) {
+  useModalScrollLock(true);
   useEffect(() => {
     const h = (e) => e.key === 'Escape' && onClose?.();
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
-  return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-[#2A1E1B]/45 backdrop-blur-[2px] sm:items-center sm:p-4"
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#2A1E1B]/45 p-4 backdrop-blur-[2px]"
       onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div role="dialog" aria-modal="true" aria-label={title}
-        className={`pop-in max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border border-[#E7DFD4] bg-[#FFFDF8] p-5 shadow-2xl sm:rounded-2xl ${size}`}>
+        className={`pop-in max-h-[92vh] w-full overflow-y-auto rounded-2xl border border-[#E7DFD4] bg-[#FFFDF8] p-5 shadow-2xl ${size}`}>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-bold text-[#2A1E1B]">{title}</h2>
           <button type="button" aria-label="Close" onClick={onClose} className={`rounded-full p-1.5 text-[#8A8174] transition hover:bg-[#F6F0E6] ${focus}`}><X size={16} /></button>
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 export function ConfirmModal({ message, onCancel, onConfirm, confirmLabel = 'Yes', danger = false }) {
-  return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-[#2A1E1B]/40 sm:items-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onCancel?.()}>
-      <div role="alertdialog" aria-modal="true" className="w-full rounded-t-[2rem] border border-[#B9B07A] bg-[#FFFDF2] px-6 pb-6 pt-6 shadow-xl sm:max-w-xl sm:rounded-[2rem] sm:px-10">
+  useModalScrollLock(true);
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#2A1E1B]/40 p-4" onMouseDown={(e) => e.target === e.currentTarget && onCancel?.()}>
+      <div role="alertdialog" aria-modal="true" className="w-full max-w-xl rounded-[2rem] border border-[#B9B07A] bg-[#FFFDF2] px-6 pb-6 pt-6 shadow-xl sm:px-10">
         <p className="text-xl font-medium text-[#514633]">{message}</p>
         <div className="mt-16 flex justify-end gap-2">
           <button type="button" onClick={onCancel} className="min-w-32 rounded-full border border-[#817565] bg-white px-6 py-2.5 text-sm font-bold text-[#6D6253] hover:bg-[#F8F5F0]">Cancel</button>
           <button type="button" onClick={onConfirm} className={`min-w-32 rounded-full px-6 py-2.5 text-sm font-bold text-white ${danger ? 'bg-[#7A6C5B] hover:bg-[#5C5043]' : 'bg-[#4A3928] hover:bg-[#2A1E1B]'}`}>{confirmLabel}</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
