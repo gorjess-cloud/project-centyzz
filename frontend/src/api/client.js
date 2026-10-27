@@ -94,6 +94,7 @@ export const api = {
     patch(`/api/appointments/${encodeURIComponent(id)}/staff-status`, { status }, token),
   validatePromo: (promoCode) => post('/api/promos/validate', { promoCode }),
   getGuestStylists: () => get('/api/appointments/stylists'),
+  getPublicStylists: () => get('/api/appointments/stylists'),
   getGuestAvailableSlots: (date, serviceId, stylistId) =>
     get(`/api/appointments/guest-availability?date=${encodeURIComponent(date)}&service_id=${encodeURIComponent(serviceId)}&stylist_id=${encodeURIComponent(stylistId)}`),
   createGuestCheckout: (booking) => post('/api/appointments/guest-checkout', booking),
@@ -105,4 +106,6 @@ export const api = {
     get(`/api/appointments/available-slots?date=${encodeURIComponent(date)}&service_id=${encodeURIComponent(serviceId)}`),
   createMyAppointment: (token, appointment) =>
     post('/api/appointments/mine', appointment, token),
+  createMyStylistAppointment: (token, appointment) =>
+    post('/api/appointments/mine-stylist', appointment, token),
 };

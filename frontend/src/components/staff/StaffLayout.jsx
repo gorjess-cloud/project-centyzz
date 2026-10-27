@@ -2,6 +2,7 @@ import { useState } from 'react';
 import StaffSidebar from './StaffSidebar';
 import { MotionStyles } from './ui';
 import StaffPOSView from '../../pages/staff/StaffPOSView';
+import StaffDashboardView from '../../pages/staff/StaffDashboardView';
 import StaffScheduleView from '../../pages/staff/StaffScheduleView';
 import StaffInventoryView from '../../pages/staff/StaffInventoryView';
 import StaffSettingsView from '../../pages/staff/StaffSettingsView';
@@ -9,6 +10,7 @@ import { useWorkspaceTheme } from '../workspace/WorkspaceContext';
 import { WorkspaceNavigationContext } from '../workspace/WorkspaceContext';
 
 const staffPages = [
+  { id: 'dashboard', label: 'Dashboard' },
   { id: 'pos', label: 'POS' },
   { id: 'schedule', label: 'Schedule' },
   { id: 'inventory', label: 'Inventory' },
@@ -16,7 +18,7 @@ const staffPages = [
 ];
 
 export default function StaffLayout({ currentUser, onLogout, onUserUpdated }) {
-  const [activePage, setActivePage] = useState('pos');
+  const [activePage, setActivePage] = useState('dashboard');
   const { theme } = useWorkspaceTheme();
   return (
     <WorkspaceNavigationContext.Provider value={{ items: staffPages, navigate: setActivePage }}>
@@ -25,6 +27,7 @@ export default function StaffLayout({ currentUser, onLogout, onUserUpdated }) {
       <StaffSidebar activePage={activePage} setActivePage={setActivePage} currentUser={currentUser} onLogout={onLogout} />
       <main className="min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
+          {activePage === 'dashboard' && <StaffDashboardView currentUser={currentUser} navigate={setActivePage} />}
           {activePage === 'pos' && <StaffPOSView currentUser={currentUser} />}
           {activePage === 'schedule' && <StaffScheduleView currentUser={currentUser} />}
           {activePage === 'inventory' && <StaffInventoryView />}

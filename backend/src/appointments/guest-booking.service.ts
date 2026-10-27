@@ -27,6 +27,7 @@ type BookingInput = {
   customerEmail: string;
   customerPhone: string;
 };
+type MemberBookingInput = Pick<BookingInput, 'serviceId' | 'stylistId' | 'appointmentDate' | 'startTime'>;
 type DbAppointment = {
   id: number; reference_code: string; customer_name: string; customer_email: string;
   appointment_date: string; start_time: string; end_time: string;
@@ -71,12 +72,20 @@ export class GuestBookingService {
     return start;
   }
   async stylists() {
-    const result = await pool.query(`SELECT st.id, u."firstName", u."lastName"
+    const result = await pool.query(`SELECT st.id, u."firstName", u."lastName",
+        st.job_title AS "jobTitle", st.biography, st.hired_on AS "hiredOn"
       FROM public.staff st JOIN public."user" u ON u.id = st.user_id
       WHERE st.is_active = TRUE AND st.archived_at IS NULL
         AND u.role = 'STAFF' AND u."isActive" = TRUE AND u.archived_at IS NULL
+        AND st.job_title ILIKE '%stylist%'
       ORDER BY u."firstName", u."lastName"`);
-    return result.rows.map((row: {id: string; firstName: string; lastName: string}) => ({ id: row.id, name: `${row.firstName} ${row.lastName}`.trim() }));
+    return result.rows.map((row: {id: string; firstName: string; lastName: string; jobTitle: string | null; biography: string | null; hiredOn: string | null}) => ({
+      id: row.id,
+      name: `${row.firstName} ${row.lastName}`.trim(),
+      jobTitle: row.jobTitle?.trim() || 'Stylist',
+      biography: row.biography?.trim() || '',
+      hiredOn: row.hiredOn,
+    }));
   }
   private async service(client: PoolClient, serviceId: number) {
     if (!Number.isSafeInteger(serviceId) || serviceId < 1) throw new BadRequestException('Invalid service');
@@ -204,6 +213,40 @@ export class GuestBookingService {
     }
     await pool.query(`UPDATE public.appointments SET status='CANCELLED', payment_status='FAILED' WHERE id=$1 AND status='AWAITING_DEPOSIT'`, [booking.id]);
     throw new ServiceUnavailableException('Configure PayMongo TEST credentials or explicitly enable local demo checkout');
+  }
+  async createMemberAppointment(input: MemberBookingInput, userId: number, email: string) {
+    const start = this.checkStart(input.appointmentDate, input.startTime);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await this.lockDate(client, input.appointmentDate);
+      const account = await client.query(`SELECT id, "firstName", "lastName", email
+        FROM public."user" WHERE id=$1 AND lower(email)=lower($2) AND "isActive"=TRUE
+          AND "emailVerified"=TRUE AND archived_at IS NULL`, [userId, email]);
+      if (!account.rowCount) throw new ForbiddenException('An active verified account is required');
+      const service = await this.service(client, input.serviceId);
+      const specialist = await this.stylist(client, input.stylistId);
+      const duration = Number(service.duration);
+      const end = start + duration;
+      if (!Number.isSafeInteger(duration) || duration <= 0 || end > 1260) throw new BadRequestException('Service does not fit this slot');
+      if (this.overlapping(await this.existing(client, input.appointmentDate), input.stylistId, start, end)) {
+        throw new ConflictException('That time was just reserved. Choose another available time.');
+      }
+      const name = `${account.rows[0].firstName} ${account.rows[0].lastName}`.trim();
+      const created = await client.query(`INSERT INTO public.appointments
+        (user_id, service_id, customer_name, customer_email, appointment_date, start_time, end_time, status, staff_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,'PENDING',$8)
+        RETURNING id, reference_code`, [userId, input.serviceId, name, account.rows[0].email,
+        input.appointmentDate, input.startTime, hhmm(end), input.stylistId]);
+      await client.query('COMMIT');
+      return { success: true, data: { id: created.rows[0].id, referenceCode: created.rows[0].reference_code,
+        serviceId: input.serviceId, serviceName: service.name, appointmentDate: input.appointmentDate,
+        startTime: input.startTime, endTime: hhmm(end), stylistId: specialist.id,
+        stylistName: `${specialist.firstName} ${specialist.lastName}`.trim(), status: 'PENDING' } };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally { client.release(); }
   }
   async completeDemo(id: number, token: string) {
     if (process.env.NODE_ENV === 'production' || process.env.PAYMONGO_DEMO_ENABLED !== 'true') {

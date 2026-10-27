@@ -195,10 +195,10 @@ export default function StaffPOSView({ onSale }) {
               const Icon = s.icon; const n = qtyOf(s.id);
               return (
                 <button key={s.id} onClick={() => change(s, 1)} aria-label={`Add ${s.name}, ${peso(s.price)}`}
-                  className={`${card} group relative flex h-44 touch-manipulation flex-col p-4 text-left transition hover:-translate-y-0.5 hover:border-[#C5A059] hover:shadow-md active:scale-95 lg:h-52 ${n > 0 ? 'border-[#C5A059] ring-2 ring-[#C5A059]/30' : ''}`}>
-                  <span className="pr-7 text-sm font-bold text-[#4A3928]">{s.name}</span>
-                  {n > 0 && <span className="pop-in absolute right-3 top-3 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#4A3928] px-1.5 text-[11px] font-bold text-white">{n}</span>}
-                  <span className="m-auto flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-[#F6F0E6] text-[#4A3928] transition group-hover:bg-[#EBDBC8] lg:h-20 lg:w-20">{s.image ? <img src={s.image} alt="" loading="lazy" className="h-full w-full object-cover" /> : <Icon size={36} strokeWidth={1.5} />}</span>
+                  className={`${card} group relative flex h-64 touch-manipulation flex-col overflow-hidden p-0 text-left transition hover:-translate-y-0.5 hover:border-[#C5A059] hover:shadow-md active:scale-95 lg:h-72 ${n > 0 ? 'border-[#C5A059] ring-2 ring-[#C5A059]/30' : ''}`}>
+                  <span className="line-clamp-2 px-3.5 pt-3 text-sm font-bold leading-snug text-[#4A3928]">{s.name}</span>
+                  {n > 0 && <span className="pop-in absolute right-3 top-3 z-10 flex h-7 min-w-7 items-center justify-center rounded-full bg-[#4A3928] px-2 text-[11px] font-bold text-white shadow">{n}</span>}
+                  <span className="flex h-36 w-full shrink-0 items-center justify-center overflow-hidden bg-[#F6F0E6] text-[#4A3928] transition group-hover:bg-[#EBDBC8] lg:h-44">{s.image ? <img src={s.image} alt={s.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" /> : <Icon size={42} strokeWidth={1.5} />}</span>
                   <span className="self-end rounded-full bg-[#F6F0E6] px-3 py-1 text-sm font-bold text-[#8B5E3C]">₱ {s.price.toLocaleString()}</span>
                 </button>
               );

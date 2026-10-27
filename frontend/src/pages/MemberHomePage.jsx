@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import useMemberSidebarState from "../hooks/useMemberSidebarState";
+import MemberSidebar from "../components/MemberSidebar";
 import {
   Bell,
   CalendarDays,
@@ -71,7 +71,7 @@ export default function MemberHomePage({
   const [month, setMonth] = useState(() => new Date());
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeSection, setActiveSection] = useState(initialSection);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useMemberSidebarState();
+
 
   const [accountProfile, setAccountProfile] = useState(user || {});
   const [profileDraft, setProfileDraft] = useState({ firstName: user?.firstName || "", lastName: user?.lastName || "" });
@@ -260,139 +260,21 @@ export default function MemberHomePage({
     <div
       className={`min-h-screen pb-24 lg:pb-0 lg:flex ${surface} transition-colors duration-300`}
     >
-      {/* Desktop Sidebar (Compact) */}
-      <aside
-        className={`relative hidden lg:flex shrink-0 flex-col border-r lg:sticky lg:top-0 lg:h-screen transition-all duration-300 ease-in-out ${
-          isSidebarCollapsed ? "w-20" : "w-48"
-        } ${sidebarSurface}`}
-      >
-        {/* Toggle Collapse Button */}
-        <button
-          type="button"
-          onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-          className="absolute -right-3 top-6 flex h-6 w-6 items-center justify-center rounded-full border bg-white text-xs shadow-md transition-transform hover:scale-110 active:scale-95 border-[#E9E4D8] text-[#443523] z-20"
-          aria-label="Toggle Sidebar"
-        >
-          <span
-            className={`transition-transform duration-300 ${isSidebarCollapsed ? "rotate-180" : ""}`}
-          >
-            ‹
-          </span>
-        </button>
-
-        {/* Logo Section */}
-        <div className="flex h-16 items-center justify-center px-4 border-b border-inherit">
-          <div className="flex items-center gap-3">
-            <img
-              src="/logo.png"
-              alt="Centy'zz Salon"
-              className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-[#C5A059]/20"
-            />
-            {!isSidebarCollapsed && (
-              <div className="min-w-0 transition-opacity duration-300">
-                <span className="text-xs font-bold leading-tight block truncate">
-                  Centy'zz
-                </span>
-                <span className="text-[10px] text-[#8A8174] block truncate">
-                  Hair & Beauty
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Member Profile Badge */}
-        <div className="flex flex-col items-center justify-center border-b border-inherit py-4 px-2 text-center transition-all duration-300">
-          <div
-            role="img"
-            aria-label={`${fullName} profile`}
-            className={`flex items-center justify-center rounded-full border-2 border-[#C5A059] bg-[#4A3928] font-semibold text-white transition-all duration-300 ${
-              isSidebarCollapsed ? "h-9 w-9 text-[10px]" : "mb-2 h-12 w-12 text-xs"
-            }`}
-          >
-            {profilePhoto ? <img src={profilePhoto} alt="" className="h-full w-full rounded-full object-cover" /> : (initials || "M")}
-          </div>
-          {!isSidebarCollapsed && (
-            <div className="w-full px-2">
-              <span className="inline-block rounded-full bg-[#E8D9C2]/50 px-2 py-0.5 text-[9px] font-medium text-[#6F4C25] mb-1">
-                Exclusive Member
-              </span>
-              <p className="text-xs font-bold truncate">{fullName}</p>
-              <p className={`text-[9px] truncate ${mutedText}`}>{user?.email || "Email not provided"}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Navigation Items */}
-        <nav
-          aria-label="Member navigation"
-          className="flex flex-1 flex-col gap-1.5 p-3"
-        >
-          {[
-            {
-              id: "home",
-              label: "Home",
-              icon: Home,
-              action: () => {
-                setActiveSection("home");
-                setActivePage("home");
-              },
-            },
-            {
-              id: "services",
-              label: "Services",
-              icon: Scissors,
-              action: openServices,
-            },
-            {
-              id: "booking",
-              label: "Booking",
-              icon: CalendarDays,
-              action: openBookings,
-            }, // <-- Updated
-            {
-              id: "account",
-              label: "Account",
-              icon: UserRound,
-              action: () => setActivePage("member-account"),
-            },
-          ].map((item) => {
-            const Icon = item.icon;
-            const isActive = activeSection === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={item.action}
-                className={`group flex items-center justify-center lg:justify-start gap-3 rounded-xl px-3 py-2.5 text-xs font-medium transition-all duration-200 active:scale-95 ${
-                  isActive
-                    ? "bg-[#4A3928] text-white shadow-sm"
-                    : "hover:bg-[#C5A059]/15 hover:text-[#4A3928]"
-                }`}
-                title={isSidebarCollapsed ? item.label : undefined}
-              >
-                <Icon className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:scale-110" />
-                {!isSidebarCollapsed && (
-                  <span className="truncate">{item.label}</span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Logout Button */}
-        <div className="p-3 border-t border-inherit">
-          <button
-            type="button"
-            onClick={onLogout}
-            className="flex w-full items-center justify-center lg:justify-start gap-3 rounded-xl px-3 py-2.5 text-xs font-medium text-red-600/80 hover:bg-red-500/10 transition-all duration-200 active:scale-95"
-            title={isSidebarCollapsed ? "Log Out" : undefined}
-          >
-            <LogOut className="h-4 w-4 shrink-0" />
-            {!isSidebarCollapsed && <span className="truncate">Log Out</span>}
-          </button>
-        </div>
-      </aside>
+      <MemberSidebar
+        user={user}
+        activePage={activeSection === "account" ? "member-account" : "home"}
+        setActivePage={(page) => {
+          if (page === "member-account") {
+            setActiveSection("account");
+            setActivePage("member-account");
+          } else {
+            setActiveSection("home");
+            setActivePage(page);
+          }
+        }}
+        onLogout={onLogout}
+        isDarkMode={isDarkMode}
+      />
 
       {/* Main Content */}
       <main className="min-w-0 flex-1 px-3 py-4 transition-all duration-300 sm:px-6 sm:py-5 lg:px-8">
@@ -746,66 +628,7 @@ export default function MemberHomePage({
         </div>
       </main>
 
-      {/* Floating Oval Bottom Navigation Bar (Mobile Only) */}
-      <div className="fixed bottom-3 left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 lg:hidden">
-        <nav
-          aria-label="Mobile Navigation"
-          className="flex items-center justify-around rounded-full border border-white/10 bg-[#4A3928]/95 px-2 py-1.5 text-white shadow-xl backdrop-blur-md transition-all duration-300"
-        >
-          {[
-            {
-              id: "home",
-              label: "Home",
-              icon: Home,
-              action: () => {
-                setActiveSection("home");
-                setActivePage("home");
-              },
-            },
-            {
-              id: "services",
-              label: "Services",
-              icon: Scissors,
-              action: openServices,
-            },
-            {
-              id: "booking",
-              label: "Booking",
-              icon: CalendarDays,
-              action: openBookings,
-            }, // <-- Updated
-            {
-              id: "account",
-              label: "Account",
-              icon: UserRound,
-              action: () => setActivePage("member-account"),
-            },
-          ].map((item) => {
-            const Icon = item.icon;
-            const isActive = activeSection === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={item.action}
-                className={`relative flex min-h-11 min-w-[3.5rem] flex-col items-center justify-center rounded-full px-1 text-[10px] transition-all duration-200 active:scale-90 ${
-                  isActive
-                    ? "text-[#F1E7C6] font-bold"
-                    : "text-white/70 hover:text-white"
-                }`}
-              >
-                <Icon
-                  className={`h-5 w-5 transition-transform duration-200 ${isActive ? "scale-110" : ""}`}
-                />
-                <span className="mt-0.5 text-[9px]">{item.label}</span>
-                {isActive && (
-                  <span className="absolute -bottom-1 h-1 w-1 rounded-full bg-[#F1E7C6]" />
-                )}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+      
 
       {photoModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) { setPhotoModal(false); setCropSource(""); } }}>

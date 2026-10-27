@@ -5,13 +5,13 @@ import {
   Check,
   Clock,
   Home,
-  LogOut,
   Moon,
   Scissors,
   Sun,
   UserRound,
 } from 'lucide-react';
 import { api } from '../api/client.js';
+import MemberSidebar from '../components/memberSidebar';
 
 const getSalonDate = () => new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Manila',
@@ -49,14 +49,11 @@ export default function MemberBookScheduler({
     [serviceGroups],
   );
   const fullName = user?.fullName || user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Member';
-  const initials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
-  const profilePhoto = (() => { try { return localStorage.getItem(`centyzz-member-avatar:${user?.id ?? user?.email ?? 'member'}`) || ''; } catch { return ''; } })();
   const selectedServices = selectedServiceIds.map((id) => services.find((item) => String(item.id) === String(id))).filter(Boolean);
   const isLoadingSlots = selectedServiceIds.some((id) => !availability[`${appointmentDate}:${id}`]);
 
   const surface = isDarkMode ? 'bg-[#171512] text-[#F5F1EA]' : 'bg-[#F6F4EF] text-[#443523]';
   const cardSurface = isDarkMode ? 'border-[#39342B] bg-[#211F1B]' : 'border-[#E9E4D8] bg-white';
-  const sidebarSurface = isDarkMode ? 'border-[#39342B] bg-[#1D1A16]' : 'border-[#E9E4D8] bg-[#FFFDF8]';
   const mutedText = isDarkMode ? 'text-[#C9C1B5]' : 'text-[#8A8174]';
   const inputSurface = isDarkMode
     ? 'border-[#39342B] bg-[#2A2723] text-[#F5F1EA]'
@@ -149,35 +146,13 @@ export default function MemberBookScheduler({
 
   return (
     <div className={`min-h-screen pb-24 lg:flex lg:pb-0 ${surface}`}>
-      <aside className={`relative hidden w-20 shrink-0 flex-col border-r lg:sticky lg:top-0 lg:flex lg:h-screen ${sidebarSurface}`}>
-        <div className="flex h-16 items-center justify-center border-b border-inherit">
-          <img src="/logo.png" alt="Centy'zz Salon" className="h-10 w-10 rounded-full object-cover" />
-        </div>
-        <div className="flex justify-center border-b border-inherit py-4">
-          <div aria-label={`${fullName} profile`} role="img" className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#C5A059] bg-[#4A3928] text-[10px] font-semibold text-white">
-            {profilePhoto ? <img src={profilePhoto} alt="" className="h-full w-full rounded-full object-cover" /> : (initials || 'M')}
-          </div>
-        </div>
-        <nav aria-label="Member navigation" className="flex flex-1 flex-col gap-1.5 p-3">
-          {[
-            { label: 'Home', icon: Home, page: 'home' },
-            { label: 'Services', icon: Scissors, page: 'member-services' },
-            { label: 'Bookings', icon: CalendarDays, page: 'member-bookings' },
-            { label: 'Account', icon: UserRound, page: 'member-account' },
-          ].map((item) => {
-            const Icon = item.icon;
-            const active = item.page === 'member-bookings';
-            return (
-              <button key={item.page} type="button" title={item.label} aria-current={active ? 'page' : undefined} onClick={() => setActivePage(item.page)} className={`flex h-10 items-center justify-center rounded-lg transition-colors ${active ? 'bg-[#4A3928] text-white' : 'text-[#8A8174] hover:bg-[#C5A059]/15 hover:text-[#4A3928]'}`}>
-                <Icon className="h-4 w-4" />
-              </button>
-            );
-          })}
-        </nav>
-        <button type="button" onClick={onLogout} aria-label="Log out" className="mb-3 flex h-10 items-center justify-center text-red-600/80 hover:bg-red-500/10">
-          <LogOut className="h-4 w-4" />
-        </button>
-      </aside>
+      <MemberSidebar
+        user={user}
+        activePage="member-bookings"
+        setActivePage={setActivePage}
+        onLogout={onLogout}
+        isDarkMode={isDarkMode}
+      />
 
       <main className="min-w-0 flex-1 px-3 py-4 sm:px-6 sm:py-5 lg:px-8">
         <div className="mx-auto max-w-5xl">
@@ -210,7 +185,7 @@ export default function MemberBookScheduler({
                       <fieldset key={group.id} className="space-y-1.5">
                         <legend className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[#C5A059]">{group.category}</legend>
                         {(group.services || []).map((item) => (
-                          <option key={item.id} value={item.id}>{item.name} · ₱{Number(item.price).toFixed(2)}</option>
+                          <label key={item.id} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-xs hover:bg-[#C5A059]/10"><input type="checkbox" checked={selectedServiceIds.includes(String(item.id))} onChange={() => setSelectedServiceIds((ids) => ids.includes(String(item.id)) ? ids.filter((id) => id !== String(item.id)) : [...ids, String(item.id)])} className="accent-[#4A3928]" /><span>{item.name} ? PHP {Number(item.price).toFixed(2)}</span></label>
                         ))}
                       </fieldset>
                     ))}
@@ -267,13 +242,13 @@ export default function MemberBookScheduler({
                 <dl className={`mt-4 space-y-3 text-xs ${mutedText}`}>
                   <div className="flex justify-between gap-3"><dt>Member</dt><dd className="text-right font-medium">{fullName}</dd></div>
                   <div className="flex justify-between gap-3"><dt>Email</dt><dd className="break-all text-right font-medium">{user?.email || 'Not provided'}</dd></div>
-                  <div className="flex justify-between gap-3"><dt>Service</dt><dd className="text-right font-medium">{service?.name || 'Not selected'}</dd></div>
+                  <div className="flex justify-between gap-3"><dt>Services</dt><dd className="max-w-[65%] text-right font-medium">{selectedServices.map((item) => item.name).join(', ') || 'Not selected'}</dd></div>
                   <div className="flex justify-between gap-3"><dt>Date</dt><dd className="text-right font-medium">{formatDate(appointmentDate)}</dd></div>
-                  <div className="flex justify-between gap-3"><dt>Time</dt><dd className="text-right font-medium">{selectedTime || 'Not selected'}</dd></div>
+                  {selectedServices.map((item) => <div key={item.id} className="flex justify-between gap-3"><dt>{item.name}</dt><dd className="text-right font-medium">{selectedTimes[item.id] || 'Choose a time'}</dd></div>)}
                 </dl>
-                {service && <p className="mt-4 border-t border-inherit pt-3 text-sm font-bold">₱{Number(service.price).toFixed(2)}</p>}
+                {selectedServices.length > 0 && <p className="mt-4 border-t border-inherit pt-3 text-sm font-bold">Total: PHP {selectedServices.reduce((sum, item) => sum + Number(item.price || 0), 0).toFixed(2)}</p>}
               </section>
-              <button type="submit" disabled={isSubmitting || isLoadingServices || !service || !selectedTime} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#4A3928] px-4 py-3 text-xs font-semibold text-white transition-colors hover:bg-[#725334] disabled:cursor-not-allowed disabled:opacity-50">
+              <button type="submit" disabled={isSubmitting || isLoadingServices || !selectedServices.length || selectedServices.some((item) => !selectedTimes[item.id])} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#4A3928] px-4 py-3 text-xs font-semibold text-white transition-colors hover:bg-[#725334] disabled:cursor-not-allowed disabled:opacity-50">
                 {isSubmitting ? 'Saving appointment...' : <><Check className="h-4 w-4" /> Confirm appointment</>}
               </button>
             </aside>

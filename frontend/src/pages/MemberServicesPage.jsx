@@ -1,23 +1,18 @@
 import { useEffect, useState } from "react";
-import useMemberSidebarState from "../hooks/useMemberSidebarState";
+import MemberSidebar from "../components/MemberSidebar";
 import { getServiceImage } from "../utils/serviceImages";
 import {
-  CalendarDays,
   Check,
   Eye,
   Hand,
-  Home,
-  LogOut,
   Scissors,
   Search,
   ShoppingBag,
   Sparkles,
-  UserRound,
   X,
 } from "lucide-react";
 import { api } from "../api/client";
-
-const formatPrice = (price) => `₱${Number(price).toLocaleString("en-PH")}`;
+import MemberCheckoutModal from "../components/MemberCheckoutModal";
 
 const getServiceIcon = (service) => {
   const searchable = `${service.category || ""} ${service.title || ""}`.toLowerCase();
@@ -27,36 +22,30 @@ const getServiceIcon = (service) => {
   return Scissors;
 };
 
+const formatPrice = (price) => `₱${Number(price).toLocaleString("en-PH")}`;
+
 export default function MemberServicesPage({
   user,
   isDarkMode,
   setActivePage,
-  onOpenBooking,
   onLogout,
 }) {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useMemberSidebarState();
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [serviceGroups, setServiceGroups] = useState([]);
   const [servicesLoading, setServicesLoading] = useState(true);
   const [servicesError, setServicesError] = useState("");
   const [cartServices, setCartServices] = useState([]);
 
-  // Cart panel is hidden by default (false)
+  // Cart panel / modal state
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-
-  const fullName = user?.fullName || user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Member";
-  const initials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
-  const profilePhoto = (() => { try { return localStorage.getItem(`centyzz-member-avatar:${user?.id ?? user?.email ?? "member"}`) || ""; } catch { return ""; } })();
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
   const cardSurface = isDarkMode
     ? "border-[#39342B] bg-[#211F1B]"
     : "border-[#E9E4D8] bg-white";
   const mutedText = isDarkMode ? "text-[#C9C1B5]" : "text-[#8A8174]";
-  const sidebarSurface = isDarkMode
-    ? "border-[#39342B] bg-[#1D1A16]"
-    : "border-[#E9E4D8] bg-[#FFFDF8]";
   const today = new Date();
 
   useEffect(() => {
@@ -66,6 +55,17 @@ export default function MemberServicesPage({
       .finally(() => { if (current) setServicesLoading(false); });
     return () => { current = false; };
   }, []);
+
+  useEffect(() => {
+    if (!isCartOpen) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsCartOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isCartOpen]);
 
   const serviceList = serviceGroups.flatMap((group) => (group.services || []).map((service) => ({ ...service, title: service.name, category: group.category })));
   const serviceFilters = [{ id: "all", label: "All services" }, ...serviceGroups.map((group) => ({ id: group.category, label: group.category }))];
@@ -79,146 +79,86 @@ export default function MemberServicesPage({
   });
 
   const handleAddToCart = (service, details) => {
-    setCartServices((items) => items.some((item) => String(item.id) === String(service.id))
-      ? items.filter((item) => String(item.id) !== String(service.id))
-      : [...items, { ...service, ...details }]);
-    setIsCartOpen(true);
+    const isAlreadyInCart = cartServices.some((item) => String(item.id) === String(service.id));
+    if (isAlreadyInCart) {
+      setCartServices((items) => items.filter((item) => String(item.id) !== String(service.id)));
+    } else {
+      setCartServices((items) => [...items, { ...service, ...details }]);
+      setIsCartOpen(true);
+    }
   };
 
   const openBooking = () => {
-    if (cartServices.length) onOpenBooking(cartServices);
+    if (cartServices.length) {
+      setIsCartOpen(false);
+      setIsCheckoutOpen(true);
+    }
   };
 
-  const desktopNav = [
-    {
-      id: "home",
-      label: "Home",
-      icon: Home,
-      action: () => setActivePage("home"),
-    },
-    {
-      id: "services",
-      label: "Services",
-      icon: Scissors,
-      action: () => setActivePage("member-services"),
-    },
-    {
-      id: "booking",
-      label: "Booking",
-      icon: CalendarDays,
-      action: () => setActivePage("member-bookings"),
-    },
-    {
-      id: "account",
-      label: "Account",
-      icon: UserRound,
-      action: () => setActivePage("member-account"),
-    },
-  ];
+  const renderCartItemsList = () => (
+    <ul className="max-h-64 space-y-3 overflow-y-auto pr-1">
+      {cartServices.map((item) => {
+        const ItemIcon = getServiceIcon(item);
+        return (
+          <li key={item.id} className="flex items-center gap-3">
+            <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${isDarkMode ? "bg-[#30291E]" : "bg-[#F6F0E6]"}`}>
+              <ItemIcon className="h-5 w-5 text-[#C5A059]" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-bold">{item.title}</p>
+              <p className="mt-0.5 text-xs font-bold text-[#B48B43]">{formatPrice(item.price)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCartServices((items) => items.filter((service) => String(service.id) !== String(item.id)))}
+              className="min-h-11 px-2 text-[10px] text-red-500 hover:underline"
+              aria-label={`Remove ${item.title}`}
+            >
+              Remove
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  const renderCartSummary = () => (
+    <div className={`mt-6 space-y-2 border-t pt-4 text-[11px] ${isDarkMode ? "border-[#39342B]" : "border-[#EAE1CE]"}`}>
+      <div className="flex justify-between">
+        <span className={mutedText}>Subtotal</span>
+        <span>{formatPrice(cartServices.reduce((sum, item) => sum + Number(item.price || 0), 0))}</span>
+      </div>
+      <div className="flex justify-between">
+        <span className={mutedText}>Discount</span>
+        <span>{formatPrice(0)}</span>
+      </div>
+      <div className="flex justify-between border-t border-inherit pt-2 font-bold text-xs">
+        <span>Total</span>
+        <span>{formatPrice(cartServices.reduce((sum, item) => sum + Number(item.price || 0), 0))}</span>
+      </div>
+
+      <button
+        type="button"
+        onClick={openBooking}
+        className="mt-4 min-h-11 w-full rounded-full bg-[#C5A059] py-2.5 text-xs font-bold text-white shadow-md transition-all duration-200 hover:bg-[#A9823F] active:scale-95"
+      >
+        Proceed to Booking
+      </button>
+    </div>
+  );
 
   return (
     <div
       className={`min-h-screen pb-24 transition-colors duration-300 lg:flex lg:pb-0 ${isDarkMode ? "bg-[#171512] text-[#F5F1EA]" : "bg-[#F6F4EF] text-[#443523]"}`}
     >
-      {/* Sidebar */}
-      <aside
-        className={`relative hidden shrink-0 flex-col border-r transition-all duration-300 ease-in-out lg:sticky lg:top-0 lg:flex lg:h-screen ${
-          isSidebarCollapsed ? "w-20" : "w-48"
-        } ${sidebarSurface}`}
-      >
-        <button
-          type="button"
-          onClick={() => setIsSidebarCollapsed((collapsed) => !collapsed)}
-          className={`absolute -right-3 top-6 z-20 flex h-6 w-6 items-center justify-center rounded-full border text-xs shadow-md transition-transform hover:scale-110 active:scale-95 ${isDarkMode ? "border-[#51493B] bg-[#29251E] text-[#F1E7C6]" : "border-[#E9E4D8] bg-white text-[#443523]"}`}
-          aria-label="Toggle Sidebar"
-        >
-          <span
-            className={`transition-transform duration-300 ${isSidebarCollapsed ? "rotate-180" : ""}`}
-          >
-            ‹
-          </span>
-        </button>
-
-        <div className="flex h-16 items-center justify-center border-b border-inherit px-4">
-          <div className="flex items-center gap-3">
-            <img
-              src="/logo.png"
-              alt="Centy'zz Salon"
-              className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-[#C5A059]/20"
-            />
-            {!isSidebarCollapsed && (
-              <div className="min-w-0">
-                <span className="block truncate text-xs font-bold">
-                  Centy'zz
-                </span>
-                <span className={`block truncate text-[10px] ${mutedText}`}>
-                  Hair & Beauty
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex flex-col items-center justify-center border-b border-inherit px-2 py-4 text-center">
-          <div
-            role="img"
-            aria-label={`${fullName} profile`}
-            className={`flex items-center justify-center rounded-full border-2 border-[#C5A059] bg-[#4A3928] font-semibold text-white transition-all duration-300 ${isSidebarCollapsed ? "h-9 w-9 text-[10px]" : "mb-2 h-12 w-12 text-xs"}`}
-          >
-            {profilePhoto ? <img src={profilePhoto} alt="" className="h-full w-full rounded-full object-cover" /> : (initials || "M")}
-          </div>
-          {!isSidebarCollapsed && (
-            <div className="w-full px-2">
-              <span className={`mb-1 inline-block rounded-full px-2 py-0.5 text-[9px] font-medium ${isDarkMode ? "bg-[#3A3023] text-[#D9B66C]" : "bg-[#E8D9C2]/50 text-[#6F4C25]"}`}>
-                Exclusive Member
-              </span>
-              <p className="truncate text-xs font-bold">{fullName}</p>
-              <p className={`truncate text-[9px] ${mutedText}`}>{user?.email || "Email not provided"}</p>
-            </div>
-          )}
-        </div>
-
-        <nav
-          aria-label="Member navigation"
-          className="flex flex-1 flex-col gap-1.5 p-3"
-        >
-          {desktopNav.map((item) => {
-            const Icon = item.icon;
-            const active = item.id === "services";
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={item.action}
-                title={isSidebarCollapsed ? item.label : undefined}
-                aria-current={active ? "page" : undefined}
-                className={`group flex items-center justify-center gap-3 rounded-xl px-3 py-2.5 text-xs font-medium transition-all duration-200 active:scale-95 lg:justify-start ${
-                  active
-                    ? "bg-[#4A3928] text-white shadow-sm"
-                    : isDarkMode ? "text-[#C9C1B5] hover:bg-[#C5A059]/15 hover:text-[#F1E7C6]" : "text-[#63513B] hover:bg-[#C5A059]/15 hover:text-[#4A3928]"
-                }`}
-              >
-                <Icon className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110" />
-                {!isSidebarCollapsed && (
-                  <span className="truncate">{item.label}</span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="border-t border-inherit p-3">
-          <button
-            type="button"
-            onClick={onLogout}
-            title={isSidebarCollapsed ? "Log Out" : undefined}
-            className="flex w-full items-center justify-center gap-3 rounded-xl px-3 py-2.5 text-xs font-medium text-red-600/80 transition-all hover:bg-red-500/10 active:scale-95 lg:justify-start"
-          >
-            <LogOut className="h-4 w-4 shrink-0" />
-            {!isSidebarCollapsed && <span>Log Out</span>}
-          </button>
-        </div>
-      </aside>
+      {/* Sidebar matching other sides */}
+      <MemberSidebar
+        user={user}
+        activePage="member-services"
+        setActivePage={setActivePage}
+        onLogout={onLogout}
+        isDarkMode={isDarkMode}
+      />
 
       {/* Main Container */}
       <main className="min-w-0 flex-1 px-3 py-4 sm:px-6 sm:py-5 lg:px-8">
@@ -259,7 +199,7 @@ export default function MemberServicesPage({
                 <Search className="h-4 w-4" />
               </button>
 
-              {/* Shopping Cart Button - Clicking this toggles the cart panel */}
+              {/* Shopping Cart Button */}
               <button
                 type="button"
                 onClick={() => setIsCartOpen((prev) => !prev)}
@@ -318,7 +258,6 @@ export default function MemberServicesPage({
                 >
                   {filteredServices.map((service) => {
                     const serviceImage = getServiceImage(service.title, service.category);
-                    const ServiceIcon = getServiceIcon(service);
                     const details = {
                       title: service.title,
                       price: service.price,
@@ -327,11 +266,17 @@ export default function MemberServicesPage({
                     const isAdded = cartServices.some((item) => String(item.id) === String(service.id));
 
                     return (
-                      <article
+                      <button
                         key={service.id}
-                        className={`group relative flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl border p-3 transition-all duration-300 hover:shadow-md sm:flex-col sm:items-stretch sm:justify-between sm:p-2.5 sm:hover:-translate-y-1 ${cardSurface}`}
+                        type="button"
+                        onClick={() => handleAddToCart(service, details)}
+                        aria-pressed={isAdded}
+                        aria-label={`${isAdded ? "Remove" : "Add"} ${details.title} ${isAdded ? "from" : "to"} cart`}
+                        className={`group relative flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl border p-3 text-left transition-all duration-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A059] sm:flex-col sm:items-stretch sm:justify-between sm:p-2.5 sm:hover:-translate-y-1 ${cardSurface} ${isAdded ? "border-[#C5A059] ring-2 ring-[#C5A059]/30" : ""}`}
                       >
-                        <img src={serviceImage} alt={details.title} loading="lazy" className="h-20 w-20 shrink-0 rounded-xl object-cover sm:h-32 sm:w-full" />
+                        <img src={serviceImage} alt="" loading="lazy" className="h-20 w-20 shrink-0 rounded-xl object-cover sm:h-32 sm:w-full" />
+
+                        {isAdded && <span className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-[#4A3928] text-white shadow sm:right-3 sm:top-3"><Check className="h-4 w-4" /></span>}
 
                         <div className="flex min-w-0 flex-1 flex-col self-stretch sm:flex-1">
                           <h2 className="line-clamp-2 pr-12 text-sm font-bold leading-snug sm:min-h-[32px] sm:pr-0 sm:text-xs">
@@ -342,19 +287,6 @@ export default function MemberServicesPage({
                           </p>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleAddToCart(service, details)}
-                          className={`absolute right-3 top-3 flex min-h-11 min-w-11 items-center justify-center rounded-lg shadow-md transition-all duration-200 active:scale-90 sm:right-2 sm:top-2 ${
-                            isAdded
-                              ? "bg-[#4A3928] text-white"
-                              : "bg-[#C5A059] text-white hover:bg-[#A9823F]"
-                          }`}
-                          title={isAdded ? "Remove from cart" : "Add to cart"}
-                          aria-label={`${isAdded ? "Remove" : "Add"} ${details.title} ${isAdded ? "from" : "to"} cart`}
-                        >
-                          {isAdded ? <Check className="h-3.5 w-3.5" /> : <span className="text-sm font-bold leading-none">+</span>}
-                        </button>
                         <div className="mt-3 flex items-baseline justify-between border-t border-inherit pt-2.5 px-0.5">
                           <span className="text-xs font-extrabold text-[#B48B43]">
                             {formatPrice(details.price)}
@@ -363,7 +295,7 @@ export default function MemberServicesPage({
                             {details.duration}
                           </span>
                         </div>
-                      </article>
+                      </button>
                     );
                   })}
                 </div>
@@ -378,25 +310,18 @@ export default function MemberServicesPage({
               )}
             </section>
 
-            {/* Current Cart: inline on desktop, overlay drawer on mobile */}
+            {/* Desktop Cart: inline panel beside services grid */}
             {isCartOpen && (
-              <div className="fixed inset-0 z-[60] lg:contents">
-                <button
-                  type="button"
-                  onClick={() => setIsCartOpen(false)}
-                  className="absolute inset-0 bg-black/40 backdrop-blur-[1px] lg:hidden"
-                  aria-label="Close current cart"
-                />
-                <aside
-                  id="member-services-cart"
-                  aria-label="Current Cart"
-                  className={`absolute inset-y-0 right-0 z-[61] flex h-full w-full max-w-md flex-col overflow-y-auto border-l p-5 shadow-2xl animate-in fade-in slide-in-from-right duration-200 lg:relative lg:inset-auto lg:z-auto lg:h-auto lg:w-72 lg:max-w-none lg:flex-none lg:rounded-2xl lg:border lg:p-4 lg:shadow-xl lg:animate-none ${
-                    isDarkMode
-                      ? "border-[#39342B] bg-[#211F1B]"
-                      : "border-[#E9E4D8] bg-[#FFFDF8]"
-                  }`}
-                >
-                  <div className="flex items-center justify-between border-b border-inherit pb-3">
+              <aside
+                id="member-services-cart"
+                aria-label="Current Cart"
+                className={`hidden lg:flex lg:relative lg:h-auto lg:w-72 lg:flex-none lg:flex-col lg:rounded-2xl lg:border lg:p-4 lg:shadow-xl ${
+                  isDarkMode
+                    ? "border-[#39342B] bg-[#211F1B]"
+                    : "border-[#E9E4D8] bg-[#FFFDF8]"
+                }`}
+              >
+                <div className="flex items-center justify-between border-b border-inherit pb-3">
                   <h2 className="text-xs font-bold">Current Cart</h2>
                   <button
                     type="button"
@@ -410,44 +335,8 @@ export default function MemberServicesPage({
 
                 {cartServices.length ? (
                   <div className="py-4">
-                    <ul className="max-h-64 space-y-3 overflow-y-auto">
-                      {cartServices.map((item) => {
-                        const ItemIcon = getServiceIcon(item);
-                        return <li key={item.id} className="flex items-center gap-3">
-                          <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${isDarkMode ? "bg-[#30291E]" : "bg-[#F6F0E6]"}`}><ItemIcon className="h-5 w-5 text-[#C5A059]" /></div>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-xs font-bold">{item.title}</p>
-                            <p className="mt-0.5 text-xs font-bold text-[#B48B43]">{formatPrice(item.price)}</p>
-                          </div>
-                          <button type="button" onClick={() => setCartServices((items) => items.filter((service) => String(service.id) !== String(item.id)))} className="min-h-11 px-2 text-[10px] text-red-500 hover:underline" aria-label={`Remove ${item.title}`}>Remove</button>
-                        </li>;
-                      })}
-                    </ul>
-
-                    <div
-                      className={`mt-6 space-y-2 border-t pt-4 text-[11px] ${isDarkMode ? "border-[#39342B]" : "border-[#EAE1CE]"}`}
-                    >
-                      <div className="flex justify-between">
-                        <span className={mutedText}>Subtotal</span>
-                        <span>{formatPrice(cartServices.reduce((sum, item) => sum + Number(item.price || 0), 0))}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className={mutedText}>Discount</span>
-                        <span>{formatPrice(0)}</span>
-                      </div>
-                      <div className="flex justify-between border-t border-inherit pt-2 font-bold text-xs">
-                        <span>Total</span>
-                        <span>{formatPrice(cartServices.reduce((sum, item) => sum + Number(item.price || 0), 0))}</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={openBooking}
-                        className="mt-4 min-h-11 w-full rounded-full bg-[#C5A059] py-2.5 text-xs font-bold text-white shadow-md transition-all duration-200 hover:bg-[#A9823F] active:scale-95"
-                      >
-                        Proceed to Booking
-                      </button>
-                    </div>
+                    {renderCartItemsList()}
+                    {renderCartSummary()}
                   </div>
                 ) : (
                   <div className="py-10 text-center">
@@ -460,36 +349,87 @@ export default function MemberServicesPage({
                   </div>
                 )}
               </aside>
-              </div>
             )}
           </div>
         </div>
       </main>
 
-      {/* Floating Oval Bottom Nav Bar (Mobile Only) */}
-      <nav
-        aria-label="Mobile Navigation"
-        className="fixed bottom-3 left-1/2 z-50 flex w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 items-center justify-around rounded-full border border-white/10 bg-[#4A3928]/95 px-2 py-1.5 text-white shadow-xl backdrop-blur-md lg:hidden"
-      >
-        {desktopNav.map((item) => {
-          const Icon = item.icon;
-          const active = item.id === "services";
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={item.action}
-              aria-current={active ? "page" : undefined}
-              className={`flex min-h-11 min-w-[3.5rem] flex-col items-center justify-center rounded-full px-1 text-[10px] transition-all duration-200 ${
-                active ? "font-bold text-[#F1E7C6]" : "text-white/70"
-              }`}
-            >
-              <Icon className="h-5 w-5" />
-              <span className="mt-0.5 text-[9px]">{item.label}</span>
-            </button>
-          );
-        })}
-      </nav>
+      {/* Mobile Cart Modal: renders as a centered dialog instead of a full-screen drawer */}
+      {isCartOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4 lg:hidden"
+          role="presentation"
+        >
+          {/* Backdrop overlay */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-200"
+            onClick={() => setIsCartOpen(false)}
+            aria-hidden="true"
+          />
+
+          {/* Modal Container */}
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mobile-cart-title"
+            className={`relative z-10 flex max-h-[85vh] w-full max-w-sm sm:max-w-md flex-col rounded-2xl border p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200 ${
+              isDarkMode
+                ? "border-[#39342B] bg-[#211F1B] text-[#F5F1EA]"
+                : "border-[#E9E4D8] bg-[#FFFDF8] text-[#443523]"
+            }`}
+          >
+            <div className="flex items-center justify-between border-b border-inherit pb-3">
+              <div className="flex items-center gap-2">
+                <h2 id="mobile-cart-title" className="text-sm font-bold">Current Cart</h2>
+                {cartServices.length > 0 && (
+                  <span className="rounded-full bg-[#C5A059] px-2 py-0.5 text-[10px] font-bold text-white">
+                    {cartServices.length} {cartServices.length === 1 ? "item" : "items"}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCartOpen(false)}
+                className={`rounded-full p-1.5 transition-colors ${
+                  isDarkMode ? "text-[#C9C1B5] hover:bg-white/10" : "text-[#8A8174] hover:bg-black/5"
+                }`}
+                aria-label="Close cart modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {cartServices.length ? (
+              <div className="py-4 overflow-y-auto">
+                {renderCartItemsList()}
+                {renderCartSummary()}
+              </div>
+            ) : (
+              <div className="py-10 text-center">
+                <ShoppingBag
+                  className={`mx-auto h-8 w-8 ${mutedText} opacity-40`}
+                />
+                <p className={`mt-2 text-xs ${mutedText}`}>
+                  Your cart is currently empty.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isCheckoutOpen && <MemberCheckoutModal
+        isOpen={isCheckoutOpen}
+        onClose={() => setIsCheckoutOpen(false)}
+        services={cartServices}
+        user={user}
+        isDarkMode={isDarkMode}
+        onComplete={() => {
+          setCartServices([]);
+          setIsCheckoutOpen(false);
+          setActivePage("member-bookings");
+        }}
+      />}
     </div>
   );
 }

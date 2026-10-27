@@ -1,5 +1,5 @@
 import { useState } from "react";
-import useMemberSidebarState from "../hooks/useMemberSidebarState";
+import MemberSidebar from "../components/memberSidebar";
 import {
   Bell,
   CalendarDays,
@@ -31,7 +31,6 @@ export function LegacyMemberBookCheckout({
   onAddItem,
   onProceedToPayment,
 }) {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useMemberSidebarState();
   const [addressType, setAddressType] = useState("home");
   const [scheduleDelivery, setScheduleDelivery] = useState(false);
   const [coupon, setCoupon] = useState("");
@@ -61,90 +60,13 @@ export function LegacyMemberBookCheckout({
   return (
     <div className={`min-h-screen pb-24 lg:pb-0 lg:flex ${surface} transition-colors duration-300`}>
       {/* Sidebar matching other pages */}
-      <aside
-        className={`relative hidden lg:flex shrink-0 flex-col border-r lg:sticky lg:top-0 lg:h-screen transition-all duration-300 ease-in-out ${
-          isSidebarCollapsed ? "w-20" : "w-48"
-        } ${sidebarSurface}`}
-      >
-        <button
-          type="button"
-          onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-          className="absolute -right-3 top-6 flex h-6 w-6 items-center justify-center rounded-full border bg-white text-xs shadow-md transition-transform hover:scale-110 active:scale-95 border-[#E9E4D8] text-[#443523] z-20"
-          aria-label="Toggle Sidebar"
-        >
-          <span className={`transition-transform duration-300 ${isSidebarCollapsed ? "rotate-180" : ""}`}>
-            ‹
-          </span>
-        </button>
-
-        <div className="flex h-16 items-center justify-center px-4 border-b border-inherit">
-          <div className="flex items-center gap-3">
-            <img
-              src="/logo.png"
-              alt="Salon Logo"
-              className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-[#C5A059]/20"
-            />
-            {!isSidebarCollapsed && (
-              <div className="min-w-0 transition-opacity duration-300">
-                <span className="text-xs font-bold leading-tight block truncate">Centy'zz</span>
-                <span className="text-[10px] text-[#8A8174] block truncate">Hair & Beauty</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex flex-col items-center justify-center border-b border-inherit py-4 px-2 text-center transition-all duration-300">
-          <div
-            className={`flex items-center justify-center rounded-full border-2 border-[#C5A059] bg-[#4A3928] font-semibold text-white transition-all duration-300 ${
-              isSidebarCollapsed ? "h-9 w-9 text-[10px]" : "mb-2 h-12 w-12 text-xs"
-            }`}
-          >
-            {initials || "M"}
-          </div>
-          {!isSidebarCollapsed && (
-            <div className="w-full px-2">
-              <span className="inline-block rounded-full bg-[#E8D9C2]/50 px-2 py-0.5 text-[9px] font-medium text-[#6F4C25] mb-1">
-                Exclusive Member
-              </span>
-              <p className="text-xs font-bold truncate">{fullName}</p>
-              <p className={`text-[9px] truncate ${mutedText}`}>{user?.email || "Email not provided"}</p>
-            </div>
-          )}
-        </div>
-
-        <nav aria-label="Member navigation" className="flex flex-1 flex-col gap-1.5 p-3">
-          {[
-            { id: "home", label: "Home", icon: Home, action: () => setActivePage("home") },
-            { id: "services", label: "Services", icon: Scissors, action: () => setActivePage("member-services") },
-            { id: "booking", label: "Booking", icon: CalendarDays, action: () => setActivePage("member-bookings") },
-            { id: "account", label: "Account", icon: UserRound, action: () => setActivePage("member-account") },
-          ].map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={item.action}
-                className="group flex items-center justify-center lg:justify-start gap-3 rounded-xl px-3 py-2.5 text-xs font-medium hover:bg-[#C5A059]/15 hover:text-[#443523] transition-all duration-200 active:scale-95"
-              >
-                <Icon className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:scale-110" />
-                {!isSidebarCollapsed && <span className="truncate">{item.label}</span>}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="p-3 border-t border-inherit">
-          <button
-            type="button"
-            onClick={onLogout}
-            className="flex w-full items-center justify-center lg:justify-start gap-3 rounded-xl px-3 py-2.5 text-xs font-medium text-red-600/80 hover:bg-red-500/15 transition-all duration-200 active:scale-95"
-          >
-            <LogOut className="h-4 w-4 shrink-0" />
-            {!isSidebarCollapsed && <span className="truncate">Log Out</span>}
-          </button>
-        </div>
-      </aside>
+      <MemberSidebar
+        user={user}
+        activePage="member-bookings"
+        setActivePage={setActivePage}
+        onLogout={onLogout}
+        isDarkMode={isDarkMode}
+      />
 
       {/* Main Checkout Content */}
       <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">

@@ -21,7 +21,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthenticatedRequest } from '../auth/jwt-auth.guard.js';
 import { AppointmentsService } from './appointments.service.js';
-import { CreateAppointmentDto } from './dto/create-appointment.dto.js';
+import { CreateAppointmentDto, CreateMemberStylistAppointmentDto } from './dto/create-appointment.dto.js';
 import { GuestCheckoutDto, DemoFinishDto } from './dto/guest-booking.dto.js';
 import { GuestBookingService } from './guest-booking.service.js';
 
@@ -113,6 +113,17 @@ export class AppointmentsController {
       appointment,
       request.user.sub,
       request.user.email,
+    );
+  }
+
+  @Post('mine-stylist')
+  @UseGuards(JwtAuthGuard)
+  createMineWithStylist(
+    @Body() appointment: CreateMemberStylistAppointmentDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.guestBookings.createMemberAppointment(
+      appointment, request.user.sub, request.user.email,
     );
   }
 

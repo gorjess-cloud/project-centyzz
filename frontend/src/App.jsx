@@ -91,19 +91,6 @@ export default function App() {
   const isMemberDashboard = Boolean(memberUser)
     && ['home', 'member-services', 'member-bookings', 'member-book', 'member-account'].includes(activePage);
 
-  const enterDemoDashboard = (user) => {
-    setMemberAppointments([]);
-    setAppointmentsError('');
-    setIsLoadingAppointments(false);
-
-    const role = (user?.role || 'CLIENT').toUpperCase();
-    const isEmployee = ['ADMIN', 'SUPERADMIN', 'STAFF'].includes(role);
-
-    const userData = { ...user, role: isEmployee ? role : 'CLIENT', isDemo: true };
-    setMemberUser(userData);
-    setActivePage(isEmployee ? 'admin' : 'home');
-  };
-
   const enterMemberDashboard = (user, accessToken) => {
     setIsBookingOpen(false);
     setMemberAppointments([]);
