@@ -1,0 +1,28 @@
+import { BarChart3, FileText, LayoutDashboard, Scissors, Settings2, ShieldCheck, ShieldUser, Users, UserRound } from 'lucide-react';
+
+export const superadminNavigationGroups = [
+  {
+    label: 'Workspace',
+    items: [
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { id: 'users', label: 'Users', icon: Users },
+      { id: 'services', label: 'Services', icon: Scissors },
+      { id: 'clients', label: 'Clients', icon: UserRound },
+      { id: 'reports', label: 'Reports', icon: BarChart3 },
+      { id: 'logs', label: 'Logs', icon: FileText },
+    ],
+  },
+  {
+    label: 'System management',
+    items: [
+      { id: 'settings', label: 'Settings', icon: Settings2 },
+      { id: 'roles', label: 'Permission Controls', icon: ShieldUser },
+      { id: 'audit', label: 'System Audit Logs', icon: ShieldCheck },
+    ],
+  },
+];
+
+export const superadminPages = [
+  ...superadminNavigationGroups.flatMap(group => group.items),
+  { id: 'account', label: 'My account' },
+];

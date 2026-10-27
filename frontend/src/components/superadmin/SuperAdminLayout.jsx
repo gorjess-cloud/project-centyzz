@@ -2,13 +2,13 @@ import { useRef, useState } from 'react';
 import SuperAdminSidebar from './SuperAdminSidebar';
 import { useWorkspaceTheme, WorkspaceNavigationContext } from '../workspace/WorkspaceContext';
 import { superadminPages } from './superadminNavigation';
-import Overview, { AuditTable } from './Overview';
-import RolePermissions from './RolePermissions';
+import Overview from './Overview';
 import SuperadminUserManagementView from '../../pages/superadmin/UserManagementView';
 import ServiceManagementView from '../../pages/admin/ServiceManagementView';
 import ClientManagementView from '../ClientManagementView';
-import POSReportsView from '../../pages/admin/POSReportsView';
-import OperationalLogsView from '../../pages/admin/OperationalLogsView';
+import SuperadminPOSReportsView from '../../pages/superadmin/POSReportsView';
+import SuperadminOperationalLogsView from '../../pages/superadmin/OperationalLogsView';
+import SuperadminSystemAuditLogsView from '../../pages/superadmin/SystemAuditLogsView';
 import InventoryManagementView from '../../pages/admin/InventoryManagementView';
 import ScheduleManagementView from '../../pages/admin/ScheduleManagementView';
 import SuperAdminSettings from './SuperAdminSettings';
@@ -59,14 +59,15 @@ export default function SuperAdminLayout({ currentUser = demoUser, onUserUpdated
     users: <SuperadminUserManagementView currentUser={currentUser} />,
     services: <ServiceManagementView currentUser={currentUser} />,
     clients: <ClientManagementView currentUser={currentUser} />,
-    reports: <POSReportsView currentUser={currentUser} />,
-    logs: <OperationalLogsView />,
+    reports: <SuperadminPOSReportsView currentUser={currentUser} />,
+    logs: <SuperadminOperationalLogsView currentUser={currentUser} />,
     inventory: <InventoryManagementView />,
     schedule: <ScheduleManagementView />,
     settings: <SuperAdminSettings maintenance={maintenance} onSaveMaintenance={saveMaintenancePreview} />,
     account: <AccountManagementView currentUser={currentUser} onUserUpdated={onUserUpdated} />,
-    roles: <RolePermissions />,
     audit: <AuditTable full token={currentUser?.accessToken} preview={preview} />,
+
+    audit: <SuperadminSystemAuditLogsView currentUser={currentUser} />,
   };
 
   return (
