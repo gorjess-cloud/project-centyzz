@@ -68,9 +68,22 @@ export const api = {
   login: (credentials) => post('/api/auth/login', credentials),
 
   googleLogin: (idToken) => post('/api/auth/google', { idToken }),
+  verifyManagementPin: (challengeToken, pin) => post('/api/auth/verify-management-pin', { challengeToken, pin }),
+  completeManagementSetup: (setupToken, data) => post('/api/auth/complete-management-setup', { setupToken, ...data }),
+  verifyActionPin: (token, pin) => post('/api/auth/check-action-pin', { pin }, token),
+  changeManagementCredentials: (token, data) => patch('/api/auth/management-credentials', data, token),
   
   register: (user) => post('/api/auth/register', user),
   verifyEmail: (verification) => post('/api/auth/verify-email', verification),
+  forgotPassword: (payload) => post('/api/auth/forgot-password', payload),
+  resetPassword: (payload) => post('/api/auth/reset-password', payload),
+  getSuperadminDashboardSummary: (token) => get('/api/superadmin/dashboard/summary', token),
+  getSuperadminAuditLogs: (token, { page = 1, limit = 10, search = '', action = '' } = {}) => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (search) params.set('search', search);
+    if (action) params.set('action', action);
+    return get(`/api/superadmin/logs?${params.toString()}`, token);
+  },
   getMyAppointments: (token) => get('/api/appointments/mine', token),
   getMyProfile: (token) => get('/api/auth/me', token),
   updateMyProfile: (token, profile) => patch('/api/auth/me', profile, token),
@@ -80,6 +93,14 @@ export const api = {
   updateStaffAppointmentStatus: (token, id, status) =>
     patch(`/api/appointments/${encodeURIComponent(id)}/staff-status`, { status }, token),
   validatePromo: (promoCode) => post('/api/promos/validate', { promoCode }),
+  getGuestStylists: () => get('/api/appointments/stylists'),
+  getGuestAvailableSlots: (date, serviceId, stylistId) =>
+    get(`/api/appointments/guest-availability?date=${encodeURIComponent(date)}&service_id=${encodeURIComponent(serviceId)}&stylist_id=${encodeURIComponent(stylistId)}`),
+  createGuestCheckout: (booking) => post('/api/appointments/guest-checkout', booking),
+  finishGuestDemo: (appointmentId, token) =>
+    post(`/api/appointments/guest-demo/${encodeURIComponent(appointmentId)}/complete`, { token }),
+  getGuestCheckoutStatus: (reference, token) =>
+    get(`/api/appointments/guest-checkout-status?reference=${encodeURIComponent(reference)}&token=${encodeURIComponent(token)}`),
   getAvailableSlots: (date, serviceId) =>
     get(`/api/appointments/available-slots?date=${encodeURIComponent(date)}&service_id=${encodeURIComponent(serviceId)}`),
   createMyAppointment: (token, appointment) =>

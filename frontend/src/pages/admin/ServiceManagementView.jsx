@@ -1,4 +1,5 @@
 import HeaderActions from '../../components/workspace/HeaderActions';
+import ConfirmationModal from '../../components/ConfirmationModal';
 import { useState, useEffect } from 'react';
 import { 
   Search, 
@@ -29,8 +30,8 @@ const formatPromoDate = (date) => {
   });
 };
 
-export default function ServiceManagementView({ showHeaderActions = true }) {
-  const getAuthToken = () => localStorage.getItem('token') || localStorage.getItem('accessToken') || '';
+export default function ServiceManagementView({ currentUser, showHeaderActions = true }) {
+  const getAuthToken = () => currentUser?.accessToken || '';
 
   // Active Promo Banner State
   const [activePromo, setActivePromo] = useState({
@@ -45,12 +46,14 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
   // Services Data from DB
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const [activeTab, setActiveTab] = useState('ACTIVE'); // 'ACTIVE' or 'ARCHIVED'
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [selectedServiceIds, setSelectedServiceIds] = useState([]);
   const [activeMenuId, setActiveMenuId] = useState(null);
+  const [pendingServiceAction, setPendingServiceAction] = useState(null);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -105,7 +108,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
   useEffect(() => {
     const loadPromoFromApi = async () => {
       try {
-        const response = await fetch('http://localhost:3000/api/admin/promos', {
+        const response = await fetch('/api/admin/promos', {
           headers: { 'Authorization': `Bearer ${getAuthToken()}` },
         });
         if (response.ok) {
@@ -130,21 +133,24 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
         const isArchivedParam = activeTab === 'ARCHIVED';
         const token = getAuthToken();
 
-        const response = await fetch(`http://localhost:3000/api/admin/services?archived=${isArchivedParam}`, {
+        const response = await fetch(`/api/admin/services?archived=${isArchivedParam}`, {
           headers: {
             'Content-Type': 'application/json',
             ...(token ? { 'Authorization': `Bearer ${token}` } : {})
           },
         });
 
+        if (!response.ok) throw new Error(`Unable to load services (HTTP ${response.status}).`);
         if (response.ok) {
           const data = await response.json();
+          if (isMounted) setLoadError('');
           if (isMounted && Array.isArray(data)) {
             setServices(data);
           }
         }
       } catch (err) {
         console.error('Error fetching services:', err);
+        if (isMounted) setLoadError(err.message || 'Unable to load services.');
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -155,14 +161,14 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
     return () => {
       isMounted = false;
     };
-  }, [activeTab]);
+  }, [activeTab, currentUser?.accessToken]);
 
   const refreshServices = async () => {
     try {
       const isArchivedParam = activeTab === 'ARCHIVED';
       const token = getAuthToken();
 
-      const response = await fetch(`http://localhost:3000/api/admin/services?archived=${isArchivedParam}`, {
+      const response = await fetch(`/api/admin/services?archived=${isArchivedParam}`, {
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -172,8 +178,10 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
       if (response.ok) {
         const data = await response.json();
         if (Array.isArray(data)) setServices(data);
+        setLoadError('');
       }
     } catch (err) {
+      setLoadError(err.message || 'Unable to refresh services.');
       console.error('Refresh error:', err);
     }
   };
@@ -211,7 +219,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
   const handleSavePromoSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:3000/api/admin/promos', {
+      const response = await fetch('/api/admin/promos', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
@@ -248,8 +256,8 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
 
     try {
       const url = editingService 
-        ? `http://localhost:3000/api/admin/services/${editingService.id}`
-        : 'http://localhost:3000/api/admin/services';
+        ? `/api/admin/services/${editingService.id}`
+        : '/api/admin/services';
       
       const method = editingService ? 'PATCH' : 'POST';
 
@@ -282,7 +290,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
   // -------------------------------------------------------------
   const handleToggleStatus = async (targetService) => {
     try {
-      const response = await fetch(`http://localhost:3000/api/admin/services/${targetService.id}/status`, {
+      const response = await fetch(`/api/admin/services/${targetService.id}/status`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
@@ -306,7 +314,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
   // -------------------------------------------------------------
   const handleToggleArchive = async (targetService) => {
     try {
-      const response = await fetch(`http://localhost:3000/api/admin/services/${targetService.id}/archive`, {
+      const response = await fetch(`/api/admin/services/${targetService.id}/archive`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
@@ -325,10 +333,27 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
     }
   };
 
+  const requestServiceAction = (service, actionType) => {
+    const isRestore = actionType === "archive" && service.isArchived;
+    const isDeactivation = actionType === "status" && service.status === "ACTIVE";
+    const actionLabel = actionType === "archive" ? (isRestore ? "Restore" : "Archive") : (isDeactivation ? "Set inactive" : "Set active");
+    const consequence = actionType === "archive"
+      ? (isRestore ? "It will be available in the service catalog again." : "It will be removed from the public and member service catalogs.")
+      : (isDeactivation ? "Clients will no longer be able to book this service." : "Clients will be able to book this service again.");
+    setActiveMenuId(null);
+    setPendingServiceAction({
+      title: `${actionLabel} service?`,
+      message: `${actionLabel} ${service.name}? ${consequence}`,
+      confirmLabel: actionLabel,
+      danger: !isRestore && (actionType === "archive" || isDeactivation),
+      action: () => actionType === "archive" ? handleToggleArchive(service) : handleToggleStatus(service),
+    });
+  };
   const renderCategoryBadge = (category) => {
     const cat = (category || 'HAIR').toUpperCase();
     if (cat === 'HAIR') {
       return (
+
         <span className="inline-flex items-center gap-1.5 bg-[#FDEBB6] text-[#8C6D23] text-[10px] font-bold tracking-wider px-3 py-1 rounded-full border border-[#F3DE9F]">
           <Sparkles className="h-3 w-3" /> HAIR
         </span>
@@ -350,6 +375,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
 
   return (
     <div className="w-full space-y-6 text-[#443523] pb-6">
+      {loadError && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-xs text-red-700">{loadError}</p>}
       
       {/* Toast Notification */}
       {toastMessage && (
@@ -590,9 +616,9 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
                                     setServiceForm({
                                       name: s.name,
                                       category: s.category,
-                                      price: s.price.replace('₱', '').replace(',', ''),
-                                      durationHours: s.duration.includes('hr') ? s.duration.split('hr')[0].trim() : '0',
-                                      durationMins: s.duration.includes('mins') ? s.duration.split('hr')[1]?.replace('mins', '').trim() || '30' : '0',
+                                      price: s.price.replace('₱', '').replace(/,/g, ''),
+                                      durationHours: String(Math.floor(Number(s.durationMinutes || 0) / 60)),
+                                      durationMins: String(Number(s.durationMinutes || 0) % 60),
                                       description: s.description
                                     });
                                     setActiveMenuId(null);
@@ -605,7 +631,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
                                 </button>
 
                                 <button
-                                  onClick={() => handleToggleStatus(s)}
+                                  onClick={() => requestServiceAction(s, "status")}
                                   className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium border-t border-[#E9E4D8]"
                                 >
                                   {s.status === 'ACTIVE' ? <UserX className="h-3.5 w-3.5 text-red-500" /> : <UserCheck className="h-3.5 w-3.5 text-emerald-600" />}
@@ -613,7 +639,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
                                 </button>
 
                                 <button
-                                  onClick={() => handleToggleArchive(s)}
+                                  onClick={() => requestServiceAction(s, "archive")}
                                   className="w-full px-3.5 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 font-semibold border-t border-[#E9E4D8]"
                                 >
                                   <Archive className="h-3.5 w-3.5" />
@@ -623,7 +649,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
                             ) : (
                               <>
                                 <button
-                                  onClick={() => handleToggleArchive(s)}
+                                  onClick={() => requestServiceAction(s, "archive")}
                                   className="w-full px-3.5 py-2 text-xs text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 font-semibold"
                                 >
                                   <RotateCcw className="h-3.5 w-3.5" />
@@ -912,6 +938,7 @@ export default function ServiceManagementView({ showHeaderActions = true }) {
         </div>
       )}
 
+      {pendingServiceAction && <ConfirmationModal title={pendingServiceAction.title} message={pendingServiceAction.message} confirmLabel={pendingServiceAction.confirmLabel} danger={pendingServiceAction.danger} onCancel={() => setPendingServiceAction(null)} onConfirm={() => { pendingServiceAction.action(); setPendingServiceAction(null); }} />}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import useMemberSidebarState from "../hooks/useMemberSidebarState";
 import {
   Bell,
   CalendarDays,
@@ -30,7 +31,7 @@ export function LegacyMemberBookCheckout({
   onAddItem,
   onProceedToPayment,
 }) {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useMemberSidebarState();
   const [addressType, setAddressType] = useState("home");
   const [scheduleDelivery, setScheduleDelivery] = useState(false);
   const [coupon, setCoupon] = useState("");

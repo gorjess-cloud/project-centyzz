@@ -12,6 +12,7 @@ export default function StaffScheduleView({ currentUser }) {
   const [appointments, setAppointments] = useState([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [appointmentsError, setAppointmentsError] = useState('');
+  const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0);
   const [promo, setPromo] = useState('');
   const [promoApplied, setPromoApplied] = useState(false);
   const [promoValue, setPromoValue] = useState(0);
@@ -26,12 +27,14 @@ export default function StaffScheduleView({ currentUser }) {
       setAppointmentsLoading(false);
       return undefined;
     }
+    setAppointmentsLoading(true);
+    setAppointmentsError('');
     api.getStaffAppointments(currentUser.accessToken)
       .then((result) => { if (current) setAppointments(result.data ?? []); })
       .catch((error) => { if (current) setAppointmentsError(error.message); })
       .finally(() => { if (current) setAppointmentsLoading(false); });
     return () => { current = false; };
-  }, [currentUser?.accessToken]);
+  }, [currentUser?.accessToken, appointmentsRefreshKey]);
 
   const subtotal = appt ? appt.items.reduce((s, i) => s + i.price, 0) : 0;
   const discount = promoApplied ? Math.min(promoType.includes('PERCENT') ? subtotal * promoValue / 100 : promoValue, subtotal) : 0;
@@ -55,7 +58,7 @@ export default function StaffScheduleView({ currentUser }) {
       ...found,
       code: found.referenceCode || String(found.id),
       guest: found.customerName,
-      items: found.service ? [{ name: found.service.name, note: found.notes || '', staff: '—', price: Number(found.service.price) }] : [],
+      items: found.service ? [{ name: found.service.name, note: found.notes || '', staff: found.stylistName || 'Unassigned', price: Number(found.service.price) }] : [],
     } : null);
   };
   const apply = async () => {
@@ -80,7 +83,7 @@ export default function StaffScheduleView({ currentUser }) {
       reset();
     } catch (error) { say(error.message); }
   };
-  const pay = () => setConfirm({ message: `Confirm payment of ${peso(total)}?`, action: () => changeAppointmentStatus('CONFIRMED', `Payment of ${peso(total)} processed`) });
+  const pay = () => setConfirm({ message: `Confirm marking this appointment as CONFIRMED? (Payment must be verified separately.)`, action: () => changeAppointmentStatus('CONFIRMED', `Appointment confirmed; no payment was charged by this action`) });
   const noShow = () => setConfirm({ message: `Mark appointment #${appt.code} as a no-show?`, action: () => changeAppointmentStatus('NO_SHOW', `#${appt.code} marked as No Show`) });
   const row = 'flex justify-between text-xs text-[#443523]';
 
@@ -88,6 +91,26 @@ export default function StaffScheduleView({ currentUser }) {
     <div className="fade-in flex min-h-[calc(100vh-2.5rem)] flex-col">
       <h1 className="text-2xl font-bold text-[#2A1E1B]">Appointments</h1>
       <p className="mb-6 mt-0.5 text-xs text-[#8A8174]">Scan client appointment receipt or look up guest</p>
+
+      <section className={`${card} mb-4 p-4`} aria-label="Assigned appointments">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-bold text-[#2A1E1B]">{['ADMIN', 'SUPERADMIN'].includes(currentUser?.role) ? 'Salon Appointments' : 'My Assigned Appointments'}</h2>
+          <div className="flex items-center gap-3"><span className="text-[11px] text-[#8A8174]">{appointments.length} appointments</span><button type="button" onClick={() => setAppointmentsRefreshKey((n) => n + 1)} className="text-xs font-bold text-[#8B5E3C] hover:underline">Refresh</button></div>
+        </div>
+        {appointmentsLoading ? <p className="text-xs text-[#8A8174]">Loading appointments…</p>
+          : appointmentsError ? <p role="alert" className="text-xs text-red-600">{appointmentsError}</p>
+          : !appointments.length ? <p className="text-xs text-[#8A8174]">No appointments assigned yet.</p>
+          : <div className="max-h-60 space-y-2 overflow-y-auto">
+            {appointments.filter((item) => !['CANCELLED', 'NO_SHOW'].includes(item.status)).slice(0, 30).map((item) => (
+              <button type="button" key={item.id} onClick={() => { setCode(item.referenceCode || String(item.id)); lookup(item.referenceCode || String(item.id)); }}
+                className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-[#E7DFD4] bg-white p-3 text-left transition hover:bg-[#F6F0E6]">
+                <span><strong className="block text-xs text-[#2A1E1B]">{item.customerName} · {item.service?.name || 'Service'}</strong>
+                  <span className="text-[11px] text-[#8A8174]">{item.appointmentDate} · {String(item.startTime).slice(0, 5)} · {item.stylistName || 'Unassigned'}</span></span>
+                <span className="text-[10px] text-[#8B5E3C]">{item.status} · {item.paymentStatus === 'DEMO_PAID' ? 'Demo deposit' : item.paymentStatus === 'TEST_PAID' ? 'Test deposit' : 'No deposit recorded'}</span>
+              </button>
+            ))}
+          </div>}
+      </section>
 
       <div className="flex flex-col gap-3 md:flex-row">
         <div className={`${card} flex flex-1 items-center gap-3 px-4 transition focus-within:border-[#C5A059] focus-within:ring-2 focus-within:ring-[#C5A059]/20`}>
@@ -109,7 +132,7 @@ export default function StaffScheduleView({ currentUser }) {
               <span className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-[#C5A059] bg-[#4A3928] text-xs font-bold text-[#C5A059]">{initials(appt.guest)}</span>
               <div>
                 <p className="text-sm font-bold text-[#2A1E1B]">{appt.guest}</p>
-                <p className="text-[11px] text-[#8A8174]">Loaded appointment</p>
+                <p className="text-[11px] text-[#8A8174]">Assigned to {appt.stylistName || 'Unassigned'} · Deposit: {appt.paymentStatus === 'DEMO_PAID' ? 'Demo only' : appt.paymentStatus === 'TEST_PAID' ? 'PayMongo test' : 'Not recorded'}</p>
               </div>
               <Badge tone="gold">#{appt.code}</Badge>
             </div>
@@ -152,7 +175,7 @@ export default function StaffScheduleView({ currentUser }) {
           <div className="flex items-center justify-between border-t border-[#E7DFD4] pt-2 text-sm font-bold text-[#2A1E1B]"><span>Total Due</span><span className="font-mono text-xl text-[#8B5E3C]">{peso(total)}</span></div>
         </div>
         <div className="flex flex-col gap-2 md:col-span-2 md:flex-row xl:col-span-1 xl:flex-col">
-          <button disabled={!appt} onClick={pay} className="flex items-center justify-center gap-2 rounded-lg bg-[#4A3928] px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#2A1E1B] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"><CreditCard size={14} /> Process Payment ({peso(total)})</button>
+          <button disabled={!appt} onClick={pay} className="flex items-center justify-center gap-2 rounded-lg bg-[#4A3928] px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#2A1E1B] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"><CreditCard size={14} /> Confirm Appointment</button>
           <button disabled={!appt} onClick={noShow} className="flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-5 py-2.5 text-xs font-bold text-red-600 transition hover:bg-red-500 hover:text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"><Trash2 size={14} /> Mark as “No Show”</button>
         </div>
       </div>

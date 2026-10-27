@@ -6,38 +6,34 @@ import {
   Logger 
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'node:crypto';
+import { ManagementSecurityService, generateTemporaryPin, validPassword } from '../../auth/management-security.service.js';
 import { db } from '../../prisma/db.js';
 
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
+  constructor(private readonly security: ManagementSecurityService) {}
 
   // 1. Fetch Staff & Admin Users
- // Temporary diagnostic fetcher - returns ALL users from Neon DB
+ // Retrieve account records without logging credentials or tokens
   async getUsers(isArchived = false) {
     try {
       const allUsers: any[] = await db.orm.public.User.where({}).all();
       
-      console.log('--- NEON DB FETCH DIAGNOSTIC ---');
-      console.log(`Total rows returned from Neon: ${allUsers ? allUsers.length : 0}`);
-      if (allUsers && allUsers.length > 0) {
-        console.log('Sample Row 1:', allUsers[0]);
-      }
-      console.log('--------------------------------');
-
       if (!allUsers || allUsers.length === 0) {
         return [];
       }
 
-      return allUsers.map((u) => ({
+      return allUsers.filter((u) => Boolean(u.archivedAt ?? u.archived_at) === isArchived).map((u) => ({
         id: u.id,
         firstName: u.firstName || u.first_name || '',
         lastName: u.lastName || u.last_name || '',
         fullName: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
         email: u.email,
         role: String(u.role || 'STAFF').toUpperCase(),
-        status: u.isActive || u.is_active ? 'ACTIVE' : 'INACTIVE',
-        isActive: !!(u.isActive || u.is_active),
+        status: (u.isActive ?? u.is_active ?? false) ? 'ACTIVE' : 'INACTIVE',
+        isActive: !!(u.isActive ?? u.is_active),
         isArchived: !!(u.archivedAt || u.archived_at),
         dateCreated: u.createdAt || u.created_at ? new Date(u.createdAt || u.created_at).toLocaleDateString('en-US', {
           month: 'short',
@@ -46,8 +42,8 @@ export class UsersService {
         }) : 'N/A',
       }));
     } catch (error) {
-      console.error('Error fetching users in service:', error);
-      return [];
+      this.logger.error('Error fetching users in service:', error);
+      throw error;
     }
   }
 
@@ -58,18 +54,32 @@ export class UsersService {
       throw new BadRequestException('Role must be ADMIN or STAFF.');
     }
 
-    const existing = await db.orm.public.User.where({ email: dto.email.toLowerCase().trim() }).first();
+    const firstName = typeof dto.firstName === 'string' ? dto.firstName.trim() : '';
+    const lastName = typeof dto.lastName === 'string' ? dto.lastName.trim() : '';
+    const email = typeof dto.email === 'string' ? dto.email.toLowerCase().trim() : '';
+    if (!firstName || !lastName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new BadRequestException('First name, last name and a valid email are required.');
+    }
+    const existing = await db.orm.public.User.where({ email }).first();
     if (existing) {
       throw new BadRequestException('A user with this email address already exists.');
     }
 
-    const tempPassword = dto.tempPassword || Math.random().toString(36).slice(-8) + 'A1!';
-    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+    // An explicitly configured initial password is allowed for onboarding only.
+    // The creator still receives a unique temporary PIN for each account.
+    // First login requires changing the password, PIN, name and phone number.
+    const configuredPassword = process.env.MANAGEMENT_DEFAULT_PASSWORD;
+    if (configuredPassword && !validPassword(configuredPassword)) {
+      throw new BadRequestException('Configured management default password does not meet policy.');
+    }
+    const tempPassword = configuredPassword || `Tmp!${randomBytes(12).toString('base64url')}9Aa`;
+    const tempPin = generateTemporaryPin();
+    const hashedPassword = await bcrypt.hash(tempPassword, 12);
 
-    return await db.orm.public.User.create({
-      firstName: dto.firstName.trim(),
-      lastName: dto.lastName.trim(),
-      email: dto.email.toLowerCase().trim(),
+    const created = await db.orm.public.User.create({
+      firstName,
+      lastName,
+      email,
       passwordHash: hashedPassword,
       role: targetRole,
       isActive: true,
@@ -77,6 +87,23 @@ export class UsersService {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
+    try {
+      await this.security.provision(created.id, tempPin);
+    } catch (error) {
+      // No account should remain usable without its management PIN.
+      await this.security.pool.query('DELETE FROM public."user" WHERE id=$1', [created.id]).catch(() => {});
+      throw error;
+    }
+    return {
+      id: created.id,
+      email: created.email,
+      role: targetRole,
+      firstName: created.firstName,
+      lastName: created.lastName,
+      temporaryPassword: tempPassword,
+      temporaryPin: tempPin,
+      mustCompleteSetup: true,
+    };
   }
 
   // 3. Update User Profile
@@ -89,7 +116,11 @@ export class UsersService {
     if (dto.lastName) updateData.lastName = dto.lastName.trim();
     if (dto.email) updateData.email = dto.email.toLowerCase().trim();
 
-    return await db.orm.public.User.where({ id }).update(updateData);
+    if (String(user.role).toUpperCase() === 'SUPERADMIN') {
+      throw new ForbiddenException('Superadmin accounts cannot be modified here.');
+    }
+    await db.orm.public.User.where({ id }).update(updateData);
+    return { id, updated: true };
   }
 
   // 4. Update Role
@@ -101,11 +132,15 @@ export class UsersService {
 
     const user = await db.orm.public.User.where({ id }).first();
     if (!user) throw new NotFoundException('User not found.');
+    if (String(user.role).toUpperCase() === 'SUPERADMIN') {
+      throw new ForbiddenException('Superadmin accounts cannot be modified here.');
+    }
 
-    return await db.orm.public.User.where({ id }).update({ 
+    await db.orm.public.User.where({ id }).update({
       role: normalizedRole,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     });
+    return { id, role: normalizedRole };
   }
 
   // 5. Toggle Status
@@ -116,11 +151,16 @@ export class UsersService {
 
     const user: any = await db.orm.public.User.where({ id }).first();
     if (!user) throw new NotFoundException('User not found.');
+    if (String(user.role).toUpperCase() === 'SUPERADMIN') {
+      throw new ForbiddenException('Superadmin accounts cannot be deactivated here.');
+    }
 
-    return await db.orm.public.User.where({ id }).update({
-      isActive: !user.isActive,
-      updatedAt: new Date().toISOString()
+    const isActive = !user.isActive;
+    await db.orm.public.User.where({ id }).update({
+      isActive,
+      updatedAt: new Date().toISOString(),
     });
+    return { id, isActive };
   }
 
   // 6. Toggle Archive
@@ -131,14 +171,18 @@ export class UsersService {
 
     const user: any = await db.orm.public.User.where({ id }).first();
     if (!user) throw new NotFoundException('User not found.');
+    if (String(user.role).toUpperCase() === 'SUPERADMIN') {
+      throw new ForbiddenException('Superadmin accounts cannot be archived here.');
+    }
 
     const isCurrentlyArchived = !!(user.archivedAt ?? user.archived_at);
 
-    return await db.orm.public.User.where({ id }).update({
+    await db.orm.public.User.where({ id }).update({
       archivedAt: isCurrentlyArchived ? null : new Date().toISOString(),
       archivedBy: isCurrentlyArchived ? null : currentUserId,
       archiveReason: isCurrentlyArchived ? null : 'Archived via Admin Dashboard',
       updatedAt: new Date().toISOString(),
     });
+    return { id, isArchived: !isCurrentlyArchived };
   }
 }

@@ -1,168 +1,152 @@
-import { 
-  Injectable, 
-  NotFoundException, 
-  BadRequestException, 
-  Logger 
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleDestroy,
 } from '@nestjs/common';
-import { db } from '../../prisma/db.js';
+import pg from 'pg';
 
+/** Admin service management uses the same numeric services table as booking. */
 @Injectable()
-export class ServicesService {
+export class ServicesService implements OnModuleDestroy {
   private readonly logger = new Logger(ServicesService.name);
+  private readonly pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 
-  // Helper to map category_id numbers to category names for your UI badges
-  private getCategoryName(categoryId: number): string {
-    switch (Number(categoryId)) {
-      case 1: return 'HAIR';
-      case 2: return 'NAILS';
-      case 3: return 'SKIN'; // or spa/combos
-      default: return 'HAIR';
+  async onModuleDestroy(): Promise<void> {
+    await this.pool.end();
+  }
+
+  private async query(sql: string, params: unknown[] = []): Promise<any[]> {
+    const result = await this.pool.query(sql, params);
+    return result.rows;
+  }
+
+  private formattedService(s: any) {
+    const minutes = Number(s.duration_minutes || 0);
+    const hours = Math.floor(minutes / 60);
+    const remainder = minutes % 60;
+    const duration = hours ? `${hours} hr${hours > 1 ? 's' : ''}${remainder ? ` ${remainder} mins` : ''}` : `${minutes} mins`;
+    const amount = Number(s.price || 0);
+    return {
+      id: s.id,
+      category: String(s.category_name || '').toUpperCase(),
+      name: s.name,
+      duration,
+      durationMinutes: minutes,
+      price: `₱${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      status: s.is_active ? 'ACTIVE' : 'INACTIVE',
+      isArchived: s.archived_at != null,
+      description: s.description || '',
+      dateCreated: s.created_at
+        ? new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : 'N/A',
+    };
+  }
+
+  private async serviceById(id: number) {
+    const rows = await this.query('SELECT id FROM public.services WHERE id=$1', [id]);
+    if (!rows.length) throw new NotFoundException('Service not found.');
+  }
+
+  private async categoryId(name: unknown): Promise<number> {
+    const category = String(name || '').trim();
+    if (!category) throw new BadRequestException('Service category is required.');
+    const rows = await this.query(
+      'SELECT id FROM public.service_categories WHERE UPPER(TRIM(name)) = UPPER($1) LIMIT 1',
+      [category],
+    );
+    if (!rows.length) throw new BadRequestException(`Service category "${category}" does not exist.`);
+    return rows[0].id;
+  }
+
+  private price(value: unknown): number {
+    const cleaned = String(value ?? '').replace(/[₱,\s]/g, '');
+    if (!/^\d+(\.\d{1,2})?$/.test(cleaned) || Number(cleaned) <= 0 || !Number.isFinite(Number(cleaned))) {
+      throw new BadRequestException('Service price must be a positive amount with at most two decimal places.');
     }
+    return Number(cleaned);
   }
 
-  private getCategoryId(categoryName: string): number {
-    const cat = String(categoryName || 'HAIR').toUpperCase();
-    if (cat === 'HAIR') return 1;
-    if (cat === 'NAILS') return 2;
-    if (cat === 'SKIN') return 3;
-    return 1;
+  private duration(dto: any): number {
+    const hours = Number(dto.durationHours ?? 0);
+    const minutes = Number(dto.durationMins ?? 0);
+    if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || minutes < 0 || minutes > 59 || hours * 60 + minutes <= 0) {
+      throw new BadRequestException('Service duration must be greater than zero and use valid hours/minutes.');
+    }
+    return hours * 60 + minutes;
   }
 
-  // 1. Fetch Services (Active or Archived)
   async getServices(isArchived = false) {
     try {
-      const allServices: any[] = await db.orm.public.Service.where({}).all();
-      
-      if (!allServices || allServices.length === 0) {
-        return [];
-      }
-
-      const filtered = allServices.filter(s => {
-        const archived = !!(s.archivedAt || s.archived_at);
-        return isArchived ? archived : !archived;
-      });
-
-      return filtered.map((s) => {
-        const isActive = s.isActive ?? s.is_active ?? true;
-        const archivedAt = s.archivedAt || s.archived_at;
-        const durationMins = s.durationMinutes || s.duration_minutes || 30;
-        
-        // Format duration nicely for your UI (e.g., 60 mins -> "1 hr")
-        let durationStr = `${durationMins} mins`;
-        if (durationMins >= 60) {
-          const hrs = Math.floor(durationMins / 60);
-          const mins = durationMins % 60;
-          durationStr = mins > 0 ? `${hrs} hr ${mins} mins` : `${hrs} hr${hrs > 1 ? 's' : ''}`;
-        }
-
-        const rawPrice = s.price || '0';
-        const formattedPrice = String(rawPrice).includes('₱') ? rawPrice : `₱${Number(String(rawPrice).replace(/,/g, '')).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-
-        const createdAtVal = s.createdAt || s.created_at;
-
-        return {
-          id: s.id,
-          category: this.getCategoryName(s.categoryId || s.category_id || 1),
-          name: s.name,
-          duration: durationStr,
-          durationMinutes: durationMins,
-          price: formattedPrice,
-          status: isActive ? 'ACTIVE' : 'INACTIVE',
-          isArchived: !!archivedAt,
-          description: s.description || '',
-          dateCreated: createdAtVal ? new Date(createdAtVal).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-          }) : 'N/A',
-        };
-      });
+      const rows = await this.query(
+        `SELECT s.*, sc.name AS category_name FROM public.services s
+         LEFT JOIN public.service_categories sc ON sc.id = s.category_id
+         WHERE ${isArchived ? 's.archived_at IS NOT NULL' : 's.archived_at IS NULL'}
+         ORDER BY s.id ASC`,
+      );
+      return rows.map((row) => this.formattedService(row));
     } catch (error) {
-      this.logger.error('Error fetching services:', error);
-      return [];
+      this.logger.error('Failed to load admin services', error instanceof Error ? error.stack : String(error));
+      throw error; // Never display a database failure as an empty service catalog.
     }
   }
 
-  // 2. Create Service
   async createService(dto: any) {
-    if (!dto.name || !dto.price) {
-      throw new BadRequestException('Service name and price are required.');
+    const name = String(dto?.name || '').trim();
+    if (!name || name.length > 150) throw new BadRequestException('Service name must be 1–150 characters.');
+    const categoryId = await this.categoryId(dto?.category);
+    const price = this.price(dto?.price);
+    const duration = this.duration(dto || {});
+    try {
+      const rows = await this.query(
+        `INSERT INTO public.services (category_id, name, description, price, duration_minutes, is_active, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,true,NOW(),NOW()) RETURNING *`,
+        [categoryId, name, String(dto?.description || '').trim() || null, price, duration],
+      );
+      return rows[0];
+    } catch (error: any) {
+      if (error?.code === '23505') throw new BadRequestException('A service with this name already exists.');
+      throw error;
     }
-
-    const existing = await db.orm.public.Service.where({ name: dto.name.trim() }).first();
-    if (existing) {
-      throw new BadRequestException('A service with this name already exists.');
-    }
-
-    const hours = parseInt(dto.durationHours || '1', 10);
-    const mins = parseInt(dto.durationMins || '0', 10);
-    const totalMinutes = (hours * 60) + mins || 30;
-
-    const rawPriceNum = String(dto.price).replace(/[^\d.]/g, '');
-
-    const payload: any = {
-      category_id: this.getCategoryId(dto.category),
-      name: dto.name.trim(),
-      description: dto.description ? dto.description.trim() : null,
-      price: rawPriceNum,
-      duration_minutes: totalMinutes,
-      is_active: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    return await db.orm.public.Service.create(payload);
   }
 
-  // 3. Update Service
-  async updateService(numberId: number, dto: any) {
-    const service = await db.orm.public.Service.where({ id: numberId }).first();
-    if (!service) throw new NotFoundException('Service not found.');
-
-    const updateData: any = { updated_at: new Date().toISOString() };
-    if (dto.name) updateData.name = dto.name.trim();
-    if (dto.category) updateData.category_id = this.getCategoryId(dto.category);
-    if (dto.price) {
-      updateData.price = String(dto.price).replace(/[^\d.]/g, '');
+  async updateService(id: number, dto: any) {
+    await this.serviceById(id);
+    const name = String(dto?.name || '').trim();
+    if (!name || name.length > 150) throw new BadRequestException('Service name must be 1–150 characters.');
+    const categoryId = await this.categoryId(dto?.category);
+    const price = this.price(dto?.price);
+    const duration = this.duration(dto || {});
+    try {
+      const rows = await this.query(
+        `UPDATE public.services SET category_id=$1, name=$2, description=$3,
+         price=$4, duration_minutes=$5, updated_at=NOW() WHERE id=$6 RETURNING *`,
+        [categoryId, name, String(dto?.description || '').trim() || null, price, duration, id],
+      );
+      return rows[0];
+    } catch (error: any) {
+      if (error?.code === '23505') throw new BadRequestException('A service with this name already exists.');
+      throw error;
     }
-    if (dto.durationHours !== undefined || dto.durationMins !== undefined) {
-      const hours = parseInt(dto.durationHours || '0', 10);
-      const mins = parseInt(dto.durationMins || '0', 10);
-      updateData.duration_minutes = (hours * 60) + mins || 30;
-    }
-    if (dto.description !== undefined) updateData.description = dto.description.trim();
-
-    return await db.orm.public.Service.where({ id: numberId }).update(updateData);
   }
 
-  // 4. Toggle Status (Active / Inactive)
-  async toggleServiceStatus(numberId: number) {
-    const service: any = await db.orm.public.Service.where({ id: numberId }).first();
-    if (!service) throw new NotFoundException('Service not found.');
-
-    const currentActive = service.isActive ?? service.is_active ?? true;
-
-    const updateData: any = {
-      is_active: !currentActive,
-      updated_at: new Date().toISOString()
-    };
-
-    return await db.orm.public.Service.where({ id: numberId }).update(updateData);
+  async toggleServiceStatus(id: number) {
+    const rows = await this.query(
+      'UPDATE public.services SET is_active=NOT is_active, updated_at=NOW() WHERE id=$1 AND archived_at IS NULL RETURNING *',
+      [id],
+    );
+    if (!rows.length) throw new NotFoundException('Active service not found.');
+    return rows[0];
   }
 
-  // 5. Toggle Archive
-  async toggleServiceArchive(numberId: number) {
-    const service: any = await db.orm.public.Service.where({ id: numberId }).first();
-    if (!service) throw new NotFoundException('Service not foundLinkClicked');
-
-    const archivedAt = service.archivedAt || service.archived_at;
-    const isCurrentlyArchived = !!archivedAt;
-
-    const updateData: any = {
-      archived_at: isCurrentlyArchived ? null : new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    return await db.orm.public.Service.where({ id: numberId }).update(updateData);
+  async toggleServiceArchive(id: number) {
+    const rows = await this.query(
+      `UPDATE public.services SET archived_at=CASE WHEN archived_at IS NULL THEN NOW() ELSE NULL END,
+       updated_at=NOW() WHERE id=$1 RETURNING *`,
+      [id],
+    );
+    if (!rows.length) throw new NotFoundException('Service not found.');
+    return rows[0];
   }
 }

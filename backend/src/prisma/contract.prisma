@@ -103,17 +103,17 @@ model ServiceCategory {
 }
 
 model Service {
-  id          String   @id @default(uuid())
-  category    String   // e.g., HAIR, NAILS, SKIN
-  name        String   @unique
-  duration    String   // e.g., "1 hr", "45 mins"
-  price       String   // e.g., "₱1,800.00"
-  status      String   @default("ACTIVE") // ACTIVE or INACTIVE
-  isArchived  Boolean  @default(false)
-  description String?
-  dateCreated String   // e.g., "Aug 16, 2026"
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              Int               @id @default(autoincrement())
+  categoryId      Int               @map("category_id")
+  name            VarChar(150)      @unique
+  description     String?
+  price           Decimal           @db.Decimal(10, 2)
+  durationMinutes Int               @map("duration_minutes")
+  isActive        Boolean           @default(true) @map("is_active")
+  createdAt       TimestamptzString @default(now()) @map("created_at")
+  updatedAt       TimestamptzString @default(now()) @map("updated_at")
+  appointments    Appointment[]
+  category        ServiceCategory   @relation(fields: [categoryId], references: [id])
 
   @@map("services")
 }

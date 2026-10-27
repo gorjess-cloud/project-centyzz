@@ -1,4 +1,5 @@
 import { useState } from "react";
+import useMemberSidebarState from "../hooks/useMemberSidebarState";
 import {
   Bell,
   CalendarDays,
@@ -29,7 +30,7 @@ export default function MemberBookingsPage({
   appointmentsError,
 }) {
   const [showNotifications, setShowNotifications] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useMemberSidebarState();
   const [activeTab, setActiveTab] = useState("upcoming");
   const [pastFilter, setPastFilter] = useState("completed");
   const [selectedBooking, setSelectedBooking] = useState(null);

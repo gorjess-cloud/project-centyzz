@@ -1,7 +1,12 @@
 import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, ParseIntPipe, Req } from '@nestjs/common';
 import { ClientsService } from './clients.service.js';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
+import { RolesGuard } from '../../auth/roles.guard.js';
+import { Roles } from '../../auth/roles.decorator.js';
 
 @Controller('api/admin/clients')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN', 'SUPERADMIN')
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
@@ -28,7 +33,7 @@ export class ClientsController {
 
   @Patch(':id/archive')
   async toggleArchive(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
-    return this.clientsService.toggleClientArchive(id, req.user?.id);
+  return this.clientsService.toggleClientArchive(id, req.user.sub);
   }
 
   @Post(':id/bookings')

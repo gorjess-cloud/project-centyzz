@@ -1,4 +1,5 @@
 import HeaderActions from '../../components/workspace/HeaderActions';
+import ConfirmationModal from '../../components/ConfirmationModal';
 import { useState } from 'react';
 import { 
   Search, 
@@ -133,6 +134,7 @@ export default function ScheduleManagementView({ showHeaderActions = true }) {
   const [isAddStaffModalOpen, setIsAddStaffModalOpen] = useState(false);
   const [isEditScheduleModalOpen, setIsEditScheduleModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
+  const [pendingVoidAppointment, setPendingVoidAppointment] = useState(null);
   const [archiveTargetStaff, setArchiveTargetStaff] = useState(null);
   const [deleteTargetStaff, setDeleteTargetStaff] = useState(null);
 
@@ -839,7 +841,7 @@ export default function ScheduleManagementView({ showHeaderActions = true }) {
                 <div className="flex items-center gap-3 pt-6">
                   <button
                     type="button"
-                    onClick={() => handleVoidAppointment(selectedAppointment.id)}
+                    onClick={() => setPendingVoidAppointment(selectedAppointment)}
                     className="w-1/2 py-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 text-xs font-bold transition-all"
                   >
                     Void Appointment
@@ -933,6 +935,7 @@ export default function ScheduleManagementView({ showHeaderActions = true }) {
         </div>
       )}
 
+      {pendingVoidAppointment && <ConfirmationModal title="Void appointment?" message={`This will void appointment #${pendingVoidAppointment.id} for ${pendingVoidAppointment.clientName}. This cannot be undone.`} confirmLabel="Void appointment" danger onCancel={() => setPendingVoidAppointment(null)} onConfirm={() => { handleVoidAppointment(pendingVoidAppointment.id); setPendingVoidAppointment(null); }} />}
     </div>
   );
 }

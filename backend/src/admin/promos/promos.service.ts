@@ -12,7 +12,8 @@ export class PromosService {
       if (!promos || promos.length === 0) {
         return null;
       }
-      const p = promos.find(item => item.isActive || item.is_active) || promos[0];
+      const p = promos.find(item => item.isActive ?? item.is_active);
+      if (!p) return null;
       return {
         id: p.id,
         title: p.code || 'SPECIAL PROMO',
@@ -20,13 +21,13 @@ export class PromosService {
         discountText: (p.discountType || p.discount_type) === 'PERCENTAGE' ? `${p.discountValue || p.discount_value}% off` : `₱${p.discountValue || p.discount_value} off`,
         discountType: p.discountType || p.discount_type,
         discountValue: p.discountValue || p.discount_value,
-        startDate: (p.startsAt || p.starts_at) ? String(p.startsAt || p.starts_at).split('T')[0] : '2026-08-15',
-        endDate: (p.expiresAt || p.expires_at) ? String(p.expiresAt || p.expires_at).split('T')[0] : '2026-08-31',
+        startDate: (p.startsAt || p.starts_at) ? String(p.startsAt || p.starts_at).split('T')[0] : '',
+        endDate: (p.expiresAt || p.expires_at) ? String(p.expiresAt || p.expires_at).split('T')[0] : '',
         status: 'ACTIVE',
       };
     } catch (error) {
       this.logger.error('Error fetching promo:', error);
-      return null;
+      throw error;
     }
   }
 
@@ -45,21 +46,21 @@ export class PromosService {
     const payload: any = {
       code: dto.title.toUpperCase().trim(),
       description: dto.appliesTo ? dto.appliesTo.trim() : 'Promo Discount',
-      discount_type: discountType,
-      discount_value: discountValue,
-      min_purchase: '0.00',
-      starts_at: dto.startDate ? new Date(dto.startDate).toISOString() : null,
-      expires_at: dto.endDate ? new Date(dto.endDate).toISOString() : null,
-      is_active: true,
-      updated_at: new Date().toISOString(),
+      discountType,
+      discountValue,
+      minPurchase: '0.00',
+      startsAt: dto.startDate ? new Date(dto.startDate).toISOString() : null,
+      expiresAt: dto.endDate ? new Date(dto.endDate).toISOString() : null,
+      isActive: true,
+      updatedAt: new Date().toISOString(),
     };
 
     if (existing) {
       return await db.orm.public.Promo.where({ id: existing.id }).update(payload);
     } else {
-      payload.usage_limit = 100;
-      payload.usage_count = 0;
-      payload.created_at = new Date().toISOString();
+      payload.usageLimit = 100;
+      payload.usageCount = 0;
+      payload.createdAt = new Date().toISOString();
       return await db.orm.public.Promo.create(payload);
     }
   }

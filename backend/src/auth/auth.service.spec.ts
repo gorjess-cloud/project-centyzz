@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { EmailService } from '../email/email.service.js';
 import { AuthService } from './auth.service.js';
+import { ManagementSecurityService } from './management-security.service.js';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -12,6 +13,7 @@ describe('AuthService', () => {
         AuthService,
         { provide: JwtService, useValue: {} },
         { provide: EmailService, useValue: {} },
+        { provide: ManagementSecurityService, useValue: {} },
       ],
     }).compile();
 

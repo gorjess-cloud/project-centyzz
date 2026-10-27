@@ -3,9 +3,10 @@ import { UsersService } from './users.service.js';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
 import { RolesGuard } from '../../auth/roles.guard.js';
 import { Roles } from '../../auth/roles.decorator.js';
+import { ManagementActionPinGuard } from './management-action-pin.guard.js';
 
 @Controller('api/admin/users')
-//@UseGuards(JwtAuthGuard, RolesGuard) 
+@UseGuards(JwtAuthGuard, RolesGuard) 
 @Roles('ADMIN', 'SUPERADMIN')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -18,28 +19,33 @@ export class UsersController {
   }
 
   @Post()
+  @UseGuards(ManagementActionPinGuard)
   async createUser(@Body() dto: any) {
     return this.usersService.createUser(dto);
   }
 
   @Patch(':id')
+  @UseGuards(ManagementActionPinGuard)
   async updateUser(@Param('id', ParseIntPipe) id: number, @Body() dto: any) {
     return this.usersService.updateUser(id, dto);
   }
 
   @Patch(':id/role')
+  @UseGuards(ManagementActionPinGuard)
   @Roles('SUPERADMIN') // Strictly restricts role modifications to SUPERADMIN only
   async updateRole(@Param('id', ParseIntPipe) id: number, @Body('role') role: string) {
     return this.usersService.updateUserRole(id, role);
   }
 
   @Patch(':id/status')
+  @UseGuards(ManagementActionPinGuard)
   async toggleStatus(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
-    return this.usersService.toggleUserStatus(id, req.user?.id);
+    return this.usersService.toggleUserStatus(id, req.user?.sub);
   }
 
   @Patch(':id/archive')
+  @UseGuards(ManagementActionPinGuard)
   async toggleArchive(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
-    return this.usersService.toggleUserArchive(id, req.user?.id);
+    return this.usersService.toggleUserArchive(id, req.user?.sub);
   }
 }

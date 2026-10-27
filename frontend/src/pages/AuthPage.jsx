@@ -85,7 +85,7 @@ export default function AuthPage({
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormMessage({ type: '', text: '' });
-    const normalizedEmail = email.trim();
+    const normalizedEmail = email.trim().toLowerCase();
 
     if (isSignup) {
       if (!firstName.trim() || !lastName.trim()) {
@@ -136,9 +136,11 @@ export default function AuthPage({
         setFormMessage({ type: 'info', text: 'Registration successful. Check your email for the verification code.' });
         return;
       }
-
+      
       // 2. FORGOT PASSWORD FLOW - REQUEST OTP
       if (isForgotPassword && !isResetOtpStep) {
+        setResetOtp('');
+        setNewPassword('');
         await api.forgotPassword({ email: normalizedEmail });
         setIsResetOtpStep(true);
         setFormMessage({ type: 'info', text: 'If that email is registered, an OTP code has been sent to reset your password.' });
@@ -147,12 +149,23 @@ export default function AuthPage({
 
       // 3. RESET PASSWORD FLOW - SUBMIT NEW PASSWORD + OTP
       if (isForgotPassword && isResetOtpStep) {
+        if (!/^\d{6}$/.test(resetOtp.trim())) {
+          setFormMessage({ type: 'error', text: 'Enter the 6-digit code sent to your email.' });
+          return;
+        }
+        if (newPassword.length < 6) {
+          setFormMessage({ type: 'error', text: 'Your new password must be at least 6 characters.' });
+          return;
+        }
         await api.resetPassword({
           email: normalizedEmail,
           otp: resetOtp.trim(),
           newPassword,
         });
         setFormMessage({ type: 'success', text: 'Password reset successfully! You can now log in.' });
+        setResetOtp('');
+        setNewPassword('');
+        setPassword('');
         setIsResetOtpStep(false);
         setMode?.('login');
         return;
@@ -162,8 +175,9 @@ export default function AuthPage({
       const result = await api.login({ email: normalizedEmail, password });
       const user = result.data?.user;
       const accessToken = result.data?.accessToken;
+      const pinChallengeToken = result.data?.pinChallengeToken;
 
-      if (!user || !accessToken) {
+      if (!user || (!accessToken && !pinChallengeToken)) {
         throw new Error('Authentication failed. Server returned an invalid payload.');
       }
 
@@ -173,7 +187,7 @@ export default function AuthPage({
 
       if (isEmployee) {
         setPendingUser(user);
-        setPendingAccessToken(accessToken);
+        setPendingAccessToken(pinChallengeToken);
         setPin(Array(6).fill(''));
         setIsPinStep(true);
         setFormMessage({ type: 'info', text: 'Employee credentials verified. Please enter your 6-digit shift PIN.' });
@@ -203,7 +217,8 @@ export default function AuthPage({
       const user = result.data?.user;
       const accessToken = result.data?.accessToken;
 
-      if (!user || !accessToken) {
+      const pinChallengeToken = result.data?.pinChallengeToken;
+      if (!user || (!accessToken && !pinChallengeToken)) {
         throw new Error('Google sign-in failed. Invalid payload returned from backend.');
       }
 
@@ -212,7 +227,7 @@ export default function AuthPage({
 
       if (isEmployee) {
         setPendingUser(user);
-        setPendingAccessToken(accessToken);
+        setPendingAccessToken(pinChallengeToken);
         setPin(Array(6).fill(''));
         setIsPinStep(true);
         setFormMessage({ type: 'info', text: 'Google authentication verified. Please enter your 6-digit shift PIN.' });
@@ -277,10 +292,19 @@ export default function AuthPage({
       return;
     }
 
+    if (!pendingAccessToken) {
+      setFormMessage({ type: 'error', text: 'Verification session expired. Please sign in again.' });
+      return;
+    }
     setIsSubmitting(true);
     try {
-      onAuthenticated?.(pendingUser, pendingAccessToken);
+      const result = await api.verifyManagementPin(pendingAccessToken, enteredPin);
+      if (!result.data?.accessToken || !result.data?.user) throw new Error('PIN verification failed.');
+      setPendingAccessToken('');
+      setPin(Array(6).fill(''));
+      onAuthenticated?.(result.data.user, result.data.accessToken);
     } catch (error) {
+      setPin(Array(6).fill(''));
       setFormMessage({ type: 'error', text: error?.message || 'PIN verification failed. Please try again.' });
     } finally {
       setIsSubmitting(false);
@@ -572,7 +596,10 @@ export default function AuthPage({
                     <input
                       type="text"
                       value={resetOtp}
-                      onChange={(e) => setResetOtp(e.target.value)}
+                      onChange={(e) => setResetOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
                       placeholder="Enter 6-digit OTP code"
                       required
                       className={fieldClass}
@@ -587,6 +614,8 @@ export default function AuthPage({
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
+                      minLength={6}
+                      autoComplete="new-password"
                       placeholder="Enter your new password"
                       required
                       className={fieldClass}
@@ -693,9 +722,9 @@ export default function AuthPage({
                   ))}
                 </div>
 
-                <button className="text-[11px] text-[#C5A059] font-medium hover:underline">
-                  Forgot Pin?
-                </button>
+                <p className="text-[11px] text-[#C5A059] font-medium">
+                  Forgot your management PIN? Contact your system administrator.
+                </p>
               </div>
 
               {/* Numpad */}
@@ -826,7 +855,7 @@ export default function AuthPage({
                 </div>
               </div>
 
-              {!isSignup && !isForgotPassword && (
+              {!isForgotPassword && (
                 <div className="flex justify-center">
                   <GoogleLogin
                     onSuccess={handleGoogleSuccess}

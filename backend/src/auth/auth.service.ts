@@ -15,6 +15,7 @@ import { RegisterDto } from './dto/register.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { OAuth2Client } from 'google-auth-library';
+import { ManagementSecurityService, isManagementRole } from './management-security.service.js';
 
 @Injectable()
 export class AuthService {
@@ -24,6 +25,7 @@ export class AuthService {
   constructor(
   private readonly jwtService: JwtService,
   private readonly emailService: EmailService,
+  private readonly managementSecurity: ManagementSecurityService,
 ) {}
 
 private normalizeAccountRole(role: string): string {
@@ -39,10 +41,12 @@ async getMyProfile(userId: number) {
   if (!user || !user.isActive) {
     throw new UnauthorizedException('Account unavailable');
   }
+  const management = isManagementRole(user.role) ? await this.managementSecurity.get(user.id) : null;
   return {
     success: true,
     data: {
       id: user.id,
+      phoneNumber: management?.phone_number || '',
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
@@ -64,6 +68,9 @@ async updateMyProfile(userId: number, profile: UpdateProfileDto) {
     throw new UnauthorizedException('Account unavailable');
   }
   await db.orm.public.User.where({ id: userId }).update({ firstName, lastName });
+  if (isManagementRole(user.role) && profile.phoneNumber !== undefined) {
+    await this.managementSecurity.updatePhone(userId, profile.phoneNumber.trim());
+  }
   return this.getMyProfile(userId);
 }
 
@@ -80,78 +87,57 @@ async updateMyProfile(userId: number, profile: UpdateProfileDto) {
 }
 
 async forgotPassword(email: string) {
-    const user = await db.orm.public.User.where({
-      email: email.toLowerCase().trim(),
-    }).first();
-
-    if (!user) {
-      return {
-        success: true,
-        message: 'If that email is registered, an OTP has been sent.',
-      };
-    }
-
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // Hash OTP
-    const otpHash = createHmac('sha256', process.env.OTP_SECRET || 'fallback_secret')
-      .update(otp)
-      .digest('hex');
-
-    const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-
-    await db.orm.public.User.where({
-      id: user.id,
-    }).update({
-      otpHash: otpHash,
-      otpExpiresAt: otpExpiresAt,
-    });
-
-  // Send the password reset OTP email!
-    await this.emailService.sendPasswordResetOtpEmail(email, otp);
-
-    return {
+    const normalizedEmail = email.toLowerCase().trim();
+    const genericResponse = {
       success: true,
       message: 'If that email is registered, an OTP has been sent.',
-      debugOtp: otp, // Keeping this handy for testing right now
     };
-  }
 
-
-  async resetPassword(email: string, otp: string, newPassword: string) {
-    const user = await db.orm.public.User.where({
-      email: email.toLowerCase().trim(),
-    }).first();
-
-    if (!user || !user.otpHash || !user.otpExpiresAt) {
-      throw new BadRequestException('Invalid or expired OTP');
+    const user = await db.orm.public.User.where({ email: normalizedEmail }).first();
+    if (!user || !user.isActive) {
+      return genericResponse;
     }
 
-    // Check expiration
-    if (new Date(user.otpExpiresAt) < new Date()) {
+    const otp = randomInt(100000, 1000000).toString();
+    const otpHash = this.hashOtp(normalizedEmail, otp);
+    const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+    await db.orm.public.User.where({ id: user.id }).update({
+      otpHash,
+      otpExpiresAt,
+      otpAttempts: 0,
+    });
+    await this.emailService.sendPasswordResetOtpEmail(normalizedEmail, otp);
+    return genericResponse;
+  }
+
+  async resetPassword(email: string, otp: string, newPassword: string) {
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await db.orm.public.User.where({ email: normalizedEmail }).first();
+
+    if (!user || !user.isActive || !user.otpHash || !user.otpExpiresAt) {
+      throw new BadRequestException('Invalid or expired OTP');
+    }
+    if (user.otpAttempts >= 5) {
+      throw new BadRequestException('Too many attempts. Request a new code.');
+    }
+    if (new Date(user.otpExpiresAt).getTime() < Date.now()) {
       throw new BadRequestException('OTP has expired');
     }
 
-    // Verify OTP hash
-    const hashedOtp = createHmac('sha256', process.env.OTP_SECRET || 'fallback_secret')
-      .update(otp)
-      .digest('hex');
-
-    if (hashedOtp !== user.otpHash) {
+    if (!/^\d{6}$/.test(otp) || this.hashOtp(normalizedEmail, otp) !== user.otpHash) {
+      await db.orm.public.User.where({ id: user.id }).update({
+        otpAttempts: user.otpAttempts + 1,
+      });
       throw new BadRequestException('Invalid or expired OTP');
     }
 
-    // Hash new password
-    const passwordHash = await bcrypt.hash(newPassword, 10);
-
-    // Update user password and clear OTP
-    await db.orm.public.User.where({
-      id: user.id,
-    }).update({
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await db.orm.public.User.where({ id: user.id }).update({
       passwordHash,
       otpHash: null,
       otpExpiresAt: null,
+      otpAttempts: 0,
     });
 
     return {
@@ -159,7 +145,7 @@ async forgotPassword(email: string) {
       message: 'Password has been successfully reset. You can now log in.',
     };
   }
-  
+
 async register(registerDto: RegisterDto) {
   const { firstName, lastName, email, password } = registerDto;
   const normalizedEmail = email.toLowerCase().trim();
@@ -308,10 +294,21 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
       );
     }
 
+    if (isManagementRole(role)) {
+      await this.managementSecurity.requireConfigured(user.id);
+      const pinChallengeToken = await this.jwtService.signAsync(
+        { sub: user.id, email: user.email, role, purpose: 'pin' },
+        { expiresIn: '5m' },
+      );
+      return {
+        success: true,
+        message: 'Password verified. Enter your management PIN.',
+        data: { pinChallengeToken, user: this.safeUser(user) },
+      };
+    }
+
     const accessToken = await this.jwtService.signAsync({
-      sub: user.id,
-      email: user.email,
-      role,
+      sub: user.id, email: user.email, role, purpose: 'access',
     });
 
     return {
@@ -425,10 +422,21 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
 
     const role = this.normalizeAccountRole(user.role);
 
+    if (isManagementRole(role)) {
+      await this.managementSecurity.requireConfigured(user.id);
+      const pinChallengeToken = await this.jwtService.signAsync(
+        { sub: user.id, email: user.email, role, purpose: 'pin' },
+        { expiresIn: '5m' },
+      );
+      return {
+        success: true,
+        message: 'Google identity verified. Enter your management PIN.',
+        data: { pinChallengeToken, user: this.safeUser(user) },
+      };
+    }
+
     const accessToken = await this.jwtService.signAsync({
-      sub: user.id,
-      email: user.email,
-      role,
+      sub: user.id, email: user.email, role, purpose: 'access',
     });
 
     return {
@@ -446,6 +454,75 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
         },
       },
     };
+  }
+
+
+  private safeUser(user: { id: number; email: string; firstName: string; lastName: string; role: string; isActive: boolean }) {
+    return {
+      id: user.id, email: user.email, firstName: user.firstName,
+      lastName: user.lastName, role: this.normalizeAccountRole(user.role), isActive: user.isActive,
+    };
+  }
+
+  private async verifyPurposeToken(token: string, purpose: 'pin' | 'setup') {
+    try {
+      const payload = await this.jwtService.verifyAsync<{
+        sub: number; email: string; role: string; purpose: string;
+      }>(token);
+      if (!Number.isInteger(payload.sub) || payload.purpose !== purpose || !isManagementRole(payload.role)) {
+        throw new UnauthorizedException('Invalid verification token');
+      }
+      const user = await db.orm.public.User.where({ id: payload.sub }).first();
+      if (!user || !user.isActive || user.email !== payload.email ||
+          this.normalizeAccountRole(user.role) !== payload.role) {
+        throw new UnauthorizedException('Account unavailable');
+      }
+      return user;
+    } catch {
+      throw new UnauthorizedException('Verification session expired or invalid. Please sign in again.');
+    }
+  }
+
+  async verifyManagementPin(challengeToken: string, pin: string) {
+    const user = await this.verifyPurposeToken(challengeToken, 'pin');
+    const security = await this.managementSecurity.verifyPin(user.id, pin);
+    const role = this.normalizeAccountRole(user.role);
+    const purpose = security.needs_setup ? 'setup' : 'access';
+    const accessToken = await this.jwtService.signAsync(
+      { sub: user.id, email: user.email, role, purpose },
+      { expiresIn: purpose === 'setup' ? '15m' : '1h' },
+    );
+    return {
+      success: true,
+      data: {
+        accessToken,
+        user: { ...this.safeUser(user), mustCompleteSetup: security.needs_setup, phoneNumber: security.phone_number },
+      },
+    };
+  }
+
+  async completeManagementSetup(setupToken: string, body: {
+    firstName: string; lastName: string; phoneNumber: string; newPassword: string; newPin: string;
+  }) {
+    const user = await this.verifyPurposeToken(setupToken, 'setup');
+    const details = await this.managementSecurity.finishSetup(user.id, body);
+    const role = this.normalizeAccountRole(user.role);
+    const accessToken = await this.jwtService.signAsync(
+      { sub: user.id, email: user.email, role, purpose: 'access' }, { expiresIn: '1h' },
+    );
+    return { success: true, data: { accessToken, user: { ...this.safeUser(user), ...details, mustCompleteSetup: false } } };
+  }
+
+  async checkActionPin(userId: number, pin: string) {
+    const security = await this.managementSecurity.verifyPin(userId, pin);
+    if (security.needs_setup) throw new ForbiddenException('Complete account setup first');
+    return { success: true };
+  }
+
+  async updateManagementCredentials(userId: number, body: {
+    currentPassword?: string; newPassword?: string; currentPin?: string; newPin?: string;
+  }) {
+    return this.managementSecurity.changeCredentials(userId, body);
   }
 
 }

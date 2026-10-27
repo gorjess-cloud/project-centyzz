@@ -1,4 +1,5 @@
 import HeaderActions from '../../components/workspace/HeaderActions';
+import { api } from '../../api/client.js';
 import { useState, useEffect } from 'react';
 import { 
   Search, 
@@ -16,7 +17,27 @@ import {
   RotateCcw,
   ChevronLeft,
   ChevronRight,
+  Copy,
+  Check,
 } from 'lucide-react';
+
+// The credentials are shown once, so copy them without putting them in storage.
+function CredentialCopyValue({ value, label, copied, onCopy, mono = false }) {
+  return (
+    <span className="group inline-flex min-w-0 max-w-full items-center gap-1.5 align-middle">
+      <span className={`min-w-0 break-all font-bold ${mono ? 'font-mono' : ''}`}>{value}</span>
+      <button
+        type="button"
+        aria-label={`Copy ${label}`}
+        title={copied ? 'Copied!' : `Copy ${label}`}
+        onClick={() => onCopy(label, value)}
+        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#736457] opacity-50 transition-all hover:bg-[#F1ECE4] hover:text-[#2A1E1B] focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#A87C43] sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+      >
+        {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+    </span>
+  );
+}
 
 export default function UserManagementView({ currentUser, showHeaderActions = true }) {
   const loggedInRole = (currentUser?.role || 'ADMIN').toUpperCase();
@@ -45,6 +66,8 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
   const [adminPin, setAdminPin] = useState('');
   const [pinError, setPinError] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
+  const [createdCredentials, setCreatedCredentials] = useState(null);
+  const [copiedCredentialField, setCopiedCredentialField] = useState(null);
 
   const [toastMessage, setToastMessage] = useState('');
 
@@ -56,11 +79,22 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
     tempPassword: '',
   });
 
-  const getAuthToken = () => localStorage.getItem('token') || localStorage.getItem('accessToken') || '';
+  const getAuthToken = () => currentUser?.accessToken || '';
 
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 4000);
+  };
+
+  const handleCopyCredential = async (field, value) => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
+      await navigator.clipboard.writeText(value);
+      setCopiedCredentialField(field);
+      setTimeout(() => setCopiedCredentialField((current) => current === field ? null : current), 1800);
+    } catch {
+      showToast('Could not copy automatically. Please select and copy the value manually.');
+    }
   };
 
   // -------------------------------------------------------------
@@ -75,7 +109,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
         const isArchivedParam = activeTab === 'ARCHIVED';
         const token = getAuthToken();
 
-        const response = await fetch(`http://localhost:3000/api/admin/users?archived=${isArchivedParam}`, {
+        const response = await fetch(`/api/admin/users?archived=${isArchivedParam}`, {
           headers: {
             'Content-Type': 'application/json',
             ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -115,7 +149,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
       const isArchivedParam = activeTab === 'ARCHIVED';
       const token = getAuthToken();
 
-      const response = await fetch(`http://localhost:3000/api/admin/users?archived=${isArchivedParam}`, {
+      const response = await fetch(`/api/admin/users?archived=${isArchivedParam}`, {
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -140,17 +174,22 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
     setIsPinModalOpen(true);
   };
 
-  const handleVerifyPinSubmit = (e) => {
+  const handleVerifyPinSubmit = async (e) => {
     e.preventDefault();
-    if (adminPin !== '1234') {
-      setPinError('Incorrect Admin PIN. (Default test PIN is 1234)');
+    if (!/^\d{6}$/.test(adminPin)) {
+      setPinError('Enter your six-digit management PIN.');
       return;
     }
-
-    setIsPinModalOpen(false);
-    if (pendingAction) {
-      pendingAction();
+    try {
+      await api.verifyActionPin(getAuthToken(), adminPin);
+      setIsPinModalOpen(false);
+      const action = pendingAction;
       setPendingAction(null);
+      if (action) await action(adminPin);
+    } catch (error) {
+      setPinError(error.message || 'Management PIN verification failed.');
+    } finally {
+      setAdminPin('');
     }
   };
 
@@ -210,18 +249,23 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
     e.preventDefault();
     if (!newUserForm.firstName || !newUserForm.email) return;
 
-    requestAdminPin(async () => {
+    requestAdminPin(async (verifiedPin) => {
       try {
-        const response = await fetch('http://localhost:3000/api/admin/users', {
+        const response = await fetch('/api/admin/users', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${getAuthToken()}`,
+            'X-Management-Pin': verifiedPin,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(newUserForm),
         });
 
         if (response.ok) {
+          const result = await response.json();
+          if (!result.temporaryPassword || !result.temporaryPin) throw new Error('Account created but temporary credentials were not returned. Contact the system administrator.');
+          setCopiedCredentialField(null);
+          setCreatedCredentials({ email: result.email, password: result.temporaryPassword, pin: result.temporaryPin });
           setIsAddUserOpen(false);
           setNewUserForm({ firstName: '', lastName: '', email: '', role: 'STAFF', tempPassword: '' });
           refreshUsers();
@@ -240,12 +284,13 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
   // API ACTION: Save Edited Profile
   // -------------------------------------------------------------
   const handleSaveEditProfile = (u) => {
-    requestAdminPin(async () => {
+    requestAdminPin(async (verifiedPin) => {
       try {
-        const response = await fetch(`http://localhost:3000/api/admin/users/${u.id}`, {
+        const response = await fetch(`/api/admin/users/${u.id}`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${getAuthToken()}`,
+            'X-Management-Pin': verifiedPin,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(editForm),
@@ -268,12 +313,13 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
   // API ACTION: Change User Role
   // -------------------------------------------------------------
   const handleRoleChange = (targetUser, newRole) => {
-    requestAdminPin(async () => {
+    requestAdminPin(async (verifiedPin) => {
       try {
-        const response = await fetch(`http://localhost:3000/api/admin/users/${targetUser.id}/role`, {
+        const response = await fetch(`/api/admin/users/${targetUser.id}/role`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${getAuthToken()}`,
+            'X-Management-Pin': verifiedPin,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ role: newRole }),
@@ -308,12 +354,13 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
       return;
     }
 
-    requestAdminPin(async () => {
+    requestAdminPin(async (verifiedPin) => {
       try {
-        const response = await fetch(`http://localhost:3000/api/admin/users/${targetUser.id}/status`, {
+        const response = await fetch(`/api/admin/users/${targetUser.id}/status`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${getAuthToken()}`,
+            'X-Management-Pin': verifiedPin,
           },
         });
 
@@ -340,12 +387,13 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
       return;
     }
 
-    requestAdminPin(async () => {
+    requestAdminPin(async (verifiedPin) => {
       try {
-        const response = await fetch(`http://localhost:3000/api/admin/users/${targetUser.id}/archive`, {
+        const response = await fetch(`/api/admin/users/${targetUser.id}/archive`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${getAuthToken()}`,
+            'X-Management-Pin': verifiedPin,
           },
         });
 
@@ -691,7 +739,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
                                   onClick={() => {
                                     setActiveMenuId(null);
                                     requestAdminPin(() => {
-                                      showToast(`Password reset link sent to ${u.email}`);
+                                      showToast('No email was sent. Ask the user to use Forgot Password on the login page.');
                                     });
                                   }}
                                   className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium border-t border-[#E9E4D8]"
@@ -770,7 +818,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
 
             <div>
               <h3 className="text-base font-bold text-[#2A1E1B]">Admin Authorization</h3>
-              <p className="text-xs text-[#8A8174] mt-1">Please enter your 4-digit Admin PIN to confirm this action.</p>
+              <p className="text-xs text-[#8A8174] mt-1">Enter your six-digit management PIN to confirm this action.</p>
             </div>
 
             <form onSubmit={handleVerifyPinSubmit} className="space-y-4">
@@ -778,14 +826,16 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
                 type="password"
                 maxLength={6}
                 autoFocus
-                placeholder="••••"
+                placeholder="••••••"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
                 value={adminPin}
-                onChange={(e) => setAdminPin(e.target.value)}
+                onChange={(e) => setAdminPin(e.target.value.replace(/\D/g, '').slice(0,6))}
                 className="w-full text-center tracking-[0.5em] text-lg font-bold px-4 py-3 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] outline-none focus:border-[#C5A059]"
               />
 
               {pinError && <p className="text-xs text-red-600 font-medium">{pinError}</p>}
-              <p className="text-[10px] text-[#8A8174]">Hint: Test PIN is <span className="font-mono font-bold text-[#443523]">1234</span></p>
+              <p className="text-[10px] text-[#8A8174]">Your management PIN is verified against your account, not a shared test code.</p>
 
               <div className="flex items-center gap-2 pt-2">
                 <button
@@ -804,6 +854,19 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
               </div>
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {createdCredentials && (
+        <div role="dialog" aria-modal="true" aria-label="One-time management credentials" className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md space-y-4 rounded-xl bg-white p-6 text-[#2A1E1B] shadow-2xl">
+            <h3 className="text-lg font-bold">Account created — save credentials now</h3>
+            <p className="text-sm">These initial credentials are shown only once. The temporary PIN is unique to this account; the initial password may be shared across newly created accounts. Share both securely. The user must change their password, PIN, name and phone number at first login.</p>
+            <p className="text-sm leading-relaxed">Email: <CredentialCopyValue label="email" value={createdCredentials.email} copied={copiedCredentialField === 'email'} onCopy={handleCopyCredential} /></p>
+            <p className="text-sm leading-relaxed">Temporary password: <CredentialCopyValue label="password" mono value={createdCredentials.password} copied={copiedCredentialField === 'password'} onCopy={handleCopyCredential} /></p>
+            <p className="text-sm leading-relaxed">Temporary PIN: <CredentialCopyValue label="PIN" mono value={createdCredentials.pin} copied={copiedCredentialField === 'PIN'} onCopy={handleCopyCredential} /></p>
+            <button type="button" onClick={() => setCreatedCredentials(null)} className="rounded-lg bg-[#3A342B] px-4 py-2 text-sm text-white">I've saved these credentials</button>
           </div>
         </div>
       )}

@@ -27,7 +27,7 @@ export default function POSReportsView({ currentUser, showHeaderActions = true }
   // API Data States
   const [kpiData, setKpiData] = useState({
     totalSales: '₱0.00',
-    totalSalesGrowth: '+12.4% vs yesterday',
+    totalSalesGrowth: 'N/A',
     cashPayments: '₱0.00',
     cashShare: '0% of total',
     digitalPayments: '₱0.00',
@@ -352,17 +352,13 @@ const handleViewReportInvoice = async (report) => {
         <div className="flex flex-wrap items-center gap-3 shrink-0">
           <div className="flex items-center gap-2 border-r border-[#E7DFD4] pr-3">
             <div className="relative">
-              <select 
+              <input
+                type="date"
+                aria-label="POS report date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="appearance-none bg-[#F8F5F0] hover:bg-[#E7DFD4] border border-[#E7DFD4] text-[#2A1E1B] font-bold text-xs px-3.5 py-2 pr-8 rounded-xl outline-none cursor-pointer transition-colors shadow-2xs"
-              >
-                <option value="August 20, 2026">August 20, 2026</option>
-                <option value="August 19, 2026">August 19, 2026</option>
-                <option value="August 18, 2026">August 18, 2026</option>
-                <option value="August 17, 2026">August 17, 2026</option>
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 text-[#8A8174] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                className="bg-[#F8F5F0] hover:bg-[#E7DFD4] border border-[#E7DFD4] text-[#2A1E1B] font-bold text-xs px-3.5 py-2 rounded-xl outline-none cursor-pointer transition-colors shadow-2xs"
+              />
             </div>
 
             <button 
