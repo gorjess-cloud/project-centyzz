@@ -9,3 +9,9 @@
 @media(max-width:720px){.sa-shared-sidebar{position:fixed;left:0;top:0;transform:translateX(-115%);visibility:hidden;transition:transform .2s,visibility .2s}.sa-shared-sidebar.sa-shared-open{transform:translateX(0);visibility:visible}.sa-shared-sidebar>.sa-mobile-close{right:8px;top:6px}.sa-shared-sidebar .sa-staff-sidebar>button{display:none}}
 .sa-content{padding-top:8px}
 @media(max-width:720px){.sa-page-menu{margin:2px 0 10px;padding:8px;border:1px solid #e9e1d1;border-radius:7px;background:#fffefa}.sa-content{padding-top:8px}}
+/* Live dashboard states, matching the existing cream-and-gold UI. */
+.sa-audit-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sa-api-error{padding:13px 18px;margin:12px 0 17px;border:1px solid #e9cac4;border-radius:9px;background:#fff5f2;color:#996253;font-size:11px}
+.sa-api-error button{background:none;border:0;text-decoration:underline;color:inherit;font-weight:700;margin-left:8px}
+.sa-loading-cards{padding:70px 20px;text-align:center;background:#fffefa;border:1px solid #eae4d7;border-radius:13px;color:#9b8d76}
+@media(max-width:720px){.sa-audit-actions{justify-content:flex-end}.sa-refresh span{display:none}.sa-audit-heading{flex-wrap:wrap}.sa-audit-heading>div:first-child{flex:1;min-width:160px}}

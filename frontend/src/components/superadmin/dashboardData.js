@@ -1,23 +1,73 @@
-export const metrics = [
-  { title: 'Managed accounts', subtitle: 'Your community, at a glance', label: 'Total accounts', icon: 'users', items: [
-    { label: 'Active', value: 198, color: '#7d9276' }, { label: 'Inactive', value: 36, color: '#d1ae64' },
-    { label: 'Suspended', value: 14, color: '#b9aa97' }, { label: 'Deleted', value: 8, color: '#bd7865' },
-  ] },
-  { title: 'Password reset requests', subtitle: 'Account access & recovery', label: 'Total requests', icon: 'key', items: [
-    { label: 'Requested', value: 18, color: '#c5a05b' }, { label: 'Pending', value: 6, color: '#a99c88' },
-    { label: 'Expired', value: 3, color: '#c48370' },
-  ] },
-  { title: 'Security audit alerts', subtitle: 'Keep an eye on what matters', label: 'Total alerts', icon: 'shield', items: [
-    { label: 'High', value: 2, color: '#b86e5d' }, { label: 'Medium', value: 5, color: '#d0ad65' },
-    { label: 'Low', value: 7, color: '#84977d' },
-  ] },
+// Presentation metadata only. All counts come from the protected backend API.
+export function buildDashboardMetrics(data) {
+  return [
+    {
+      title: 'Managed accounts', subtitle: 'Account status across all roles', label: 'Total accounts', icon: 'users',
+      items: [
+        { label: 'Active', value: data.accounts.active, color: '#7d9276' },
+        { label: 'Inactive', value: data.accounts.inactive, color: '#d1ae64' },
+        { label: 'Archived', value: data.accounts.archived, color: '#bd7865' },
+      ],
+      footer: `${data.totalUsers.toLocaleString()} registered accounts`,
+      footnote: 'No suspended/deleted status in schema',
+    },
+    {
+      title: 'Verification & recovery', subtitle: 'Currently stored email codes', label: 'Stored codes', icon: 'key',
+      items: [
+        { label: 'Email verification', value: data.codes.verification, color: '#c5a05b' },
+        { label: 'Password recovery', value: data.codes.recovery, color: '#a99c88' },
+        { label: 'Expired', value: data.codes.expired, color: '#c48370' },
+      ],
+      footer: `${data.codes.recovery} active recovery codes`,
+      footnote: 'Not historical reset requests',
+    },
+    {
+      title: 'Recorded system errors', subtitle: 'Server errors by occurrence', label: 'Error records', icon: 'shield',
+      items: [
+        { label: 'Past 24 hours', value: data.errors.last24Hours, color: '#b86e5d' },
+        { label: '1–7 days ago', value: data.errors.previous6Days, color: '#d0ad65' },
+        { label: 'Older', value: data.errors.older, color: '#84977d' },
+      ],
+      footer: `${data.errors.last24Hours} in the past 24 hours`,
+      footnote: 'Error logs, not security alerts',
+    },
+  ];
+}
+
+const actions = {
+  USER_ROLE_CHANGED: { label: 'Role changed', tone: 'sage', subject: 'User role updated' },
+  USER_ARCHIVED: { label: 'Archived', tone: 'rose', subject: 'User account archived' },
+  PRICE_CHANGED: { label: 'Price changed', tone: 'gold', subject: 'Service price updated' },
+};
+
+export const auditActionOptions = [
+  { value: '', label: 'All actions' },
+  { value: 'USER_ROLE_CHANGED', label: 'Role changed' },
+  { value: 'USER_ARCHIVED', label: 'Archived user' },
+  { value: 'PRICE_CHANGED', label: 'Price changed' },
 ];
 
-export const activity = [
-  { id: 'AUD-1048', name: 'Millicent Campillos', role: 'Admin', action: 'Changed', subject: 'Changed service price for Hair Coloring', category: 'Services', time: '10:05 AM', date: '21 Aug 2026', tone: 'sage' },
-  { id: 'AUD-1047', name: 'Millicent Campillos', role: 'Admin', action: 'Updated', subject: 'Updated salon operating hours', category: 'Settings', time: '10:03 AM', date: '21 Aug 2026', tone: 'gold' },
-  { id: 'AUD-1046', name: 'Millicent Campillos', role: 'Admin', action: 'Deleted', subject: 'Removed discontinued Hair Treatment', category: 'Services', time: '09:48 AM', date: '21 Aug 2026', tone: 'rose' },
-  { id: 'AUD-1045', name: 'Millicent Campillos', role: 'Admin', action: 'Updated', subject: 'Updated client appointment #APT-2041', category: 'Schedule', time: '09:32 AM', date: '21 Aug 2026', tone: 'blue' },
-  { id: 'AUD-1044', name: 'Aljean Mark Angeles', role: 'Super admin', action: 'Granted', subject: 'Granted reports access to the Admin role', category: 'Permissions', time: '09:15 AM', date: '21 Aug 2026', tone: 'sage' },
-  { id: 'AUD-1043', name: 'Jessica Palma', role: 'Staff', action: 'Created', subject: 'Added a new client account', category: 'Clients', time: '09:02 AM', date: '21 Aug 2026', tone: 'gold' },
-];
+export function formatAuditLog(log) {
+  const action = actions[log.action] || {
+    label: String(log.action || 'Action').replaceAll('_', ' ').toLowerCase(),
+    tone: 'blue',
+    subject: 'System record changed',
+  };
+  const timestamp = new Date(log.createdAt);
+  const isValidDate = !Number.isNaN(timestamp.getTime());
+  const dateOptions = { timeZone: 'Asia/Manila' };
+  const role = String(log.actorRole || 'UNKNOWN').toLowerCase();
+  const category = String(log.entityType || 'SYSTEM');
+  return {
+    id: String(log.id),
+    name: log.actorName || 'Unknown user',
+    role: role === 'superadmin' ? 'Superadmin' : role.charAt(0).toUpperCase() + role.slice(1),
+    action: action.label,
+    rawAction: log.action,
+    subject: `${action.subject}${log.entityId ? ` (#${log.entityId})` : ''}`,
+    category: category.charAt(0).toUpperCase() + category.slice(1).toLowerCase(),
+    date: isValidDate ? timestamp.toLocaleDateString('en-PH', { ...dateOptions, day: 'numeric', month: 'short', year: 'numeric' }) : 'Unknown date',
+    time: isValidDate ? timestamp.toLocaleTimeString('en-PH', { ...dateOptions, hour: 'numeric', minute: '2-digit', hour12: true }) : '—',
+    tone: action.tone,
+  };
+}
