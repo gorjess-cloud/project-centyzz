@@ -1,9 +1,12 @@
+import { UseInterceptors } from '@nestjs/common';
+import { AdminOperationalEventInterceptor } from '../operational-logs/admin-operational-event.interceptor.js';
 import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, ParseIntPipe, Req } from '@nestjs/common';
 import { ClientsService } from './clients.service.js';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
 import { RolesGuard } from '../../auth/roles.guard.js';
 import { Roles } from '../../auth/roles.decorator.js';
 
+@UseInterceptors(AdminOperationalEventInterceptor)
 @Controller('api/admin/clients')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN', 'SUPERADMIN')

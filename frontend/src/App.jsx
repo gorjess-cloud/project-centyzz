@@ -1,5 +1,10 @@
+<<<<<<< .merge_file_bPs3KX
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+=======
+import CredentialRecoveryPage from './pages/CredentialRecoveryPage';
+import { useEffect, useRef, useState } from 'react';
+>>>>>>> .merge_file_AwTDXX
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import BookingModal, { clientBookingQueueKey } from './components/BookingModal';
@@ -35,9 +40,13 @@ const memberPagePaths = Object.fromEntries(
 );
 
 export default function App() {
+<<<<<<< .merge_file_bPs3KX
   const location = useLocation();
   const navigate = useNavigate();
   const routePage = memberRoutePages[location.pathname];
+=======
+  const [credentialRecoveryHash] = useState(() => window.location.hash.startsWith('#/recover/') ? window.location.hash : null);
+>>>>>>> .merge_file_AwTDXX
   const [activePage, setActivePage] = useState(() => {
     if (window.location.pathname === '/forgot-pin') return 'forgot-pin';
     if (window.location.pathname === '/booking') return 'member-book';
@@ -194,13 +203,25 @@ export default function App() {
     }));
   };
 
+  const logoutPending = useRef(false);
   const handleLogout = () => {
-    guardNavigation(() => {
+    guardNavigation(async () => {
+      if (logoutPending.current) return;
+      logoutPending.current = true;
+      if (['ADMIN', 'STAFF'].includes(memberUser?.role) && memberUser?.accessToken && !memberUser?.mustCompleteSetup) {
+        try {
+          await fetch('/api/admin/operational-logs/sign-out', {
+            method: 'POST', headers: { Authorization: `Bearer ${memberUser.accessToken}` },
+            signal: AbortSignal.timeout(6000),
+          });
+        } catch { /* Local logout still completes during a network outage. */ }
+      }
       setMemberUser(null);
       setMemberAppointments([]);
       setAppointmentsError('');
       setIsLoadingAppointments(false);
       setActivePage('home');
+      logoutPending.current = false;
     });
   };
 
@@ -218,6 +239,8 @@ export default function App() {
       name: `${profile.firstName || ''} ${profile.lastName || ''}`.trim(),
     } : current);
   };
+
+  if (credentialRecoveryHash) return <CredentialRecoveryPage initialHash={credentialRecoveryHash} />;
 
   return (
     <div className={`min-h-screen flex flex-col justify-between overflow-x-clip font-sans ${isDarkMode ? 'bg-[#111111] text-[#F5F1EA]' : 'bg-[#FDFBF7] text-[#3A2E2B]'}`}>

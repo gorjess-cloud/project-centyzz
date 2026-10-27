@@ -21,7 +21,7 @@ export const pinDigest = (pin: string) => {
 export const validPassword = (password: unknown) => typeof password === 'string' && password.length >= 12
   && /[A-Z]/.test(password) && /[a-z]/.test(password) && /\d/.test(password) && /[^A-Za-z0-9]/.test(password);
 
-export type SecurityRow = { user_id: number; pin_hash: string; needs_setup: boolean; failed_attempts: number; locked_until: Date | null; phone_number: string | null };
+export type SecurityRow = { credential_version?: number; user_id: number; pin_hash: string; needs_setup: boolean; failed_attempts: number; locked_until: Date | null; phone_number: string | null };
 
 // Separate table keeps the existing Prisma 8 generated contract unchanged.
 @Injectable()
