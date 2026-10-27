@@ -160,6 +160,7 @@ export class SuperadminController {
   }
   
   @Post('settings/db-backup')
+  @UseGuards(ManagementActionPinGuard)
   createDatabaseBackup(
     @Req() request: AuthenticatedRequest,
   ) {

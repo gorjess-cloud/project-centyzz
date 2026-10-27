@@ -1,4 +1,6 @@
 import CredentialRecoveryPage from './pages/CredentialRecoveryPage';
+import MaintenanceGate from './components/superadmin/MaintenanceGate';
+import './components/superadmin/maintenance-v2.css';
 import { useEffect, useRef, useState } from 'react';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
@@ -42,11 +44,32 @@ export default function App() {
     if (Boolean(resolved) !== isDarkMode) toggleTheme();
   };
   const [memberUser, setMemberUser] = useState(null);
+  const [maintenanceGate, setMaintenanceGate] = useState({ token: null, data: null, checking: true });
   const [memberAppointments, setMemberAppointments] = useState([]);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
   const [appointmentsError, setAppointmentsError] = useState('');
   const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  // Shared entry-point check only; the Admin and Staff components remain unchanged.
+  useEffect(() => {
+    const token = memberUser?.accessToken;
+    const role = String(memberUser?.role || '').toUpperCase();
+    if (!token || role === 'SUPERADMIN') return undefined;
+    let active = true;
+    async function refresh() {
+      try {
+        const response = await fetch('/api/maintenance/status', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Maintenance status unavailable');
+        const body = await response.json();
+        if (active) setMaintenanceGate({ token, data: body.data, checking: false });
+      } catch {
+        if (active) setMaintenanceGate({ token, data: null, checking: true });
+      }
+    }
+    refresh();
+    const timer = window.setInterval(refresh, 15000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [memberUser?.accessToken, memberUser?.role]);
   const { guardNavigation } = useUnsavedChanges();
   const navigatePage = (page) => {
     if (page === activePage) return;
@@ -187,6 +210,15 @@ export default function App() {
   };
 
   if (credentialRecoveryHash) return <CredentialRecoveryPage initialHash={credentialRecoveryHash} />;
+
+  if (memberUser?.accessToken && String(memberUser.role).toUpperCase() !== 'SUPERADMIN') {
+    const checking = maintenanceGate.checking || maintenanceGate.token !== memberUser.accessToken;
+    if (checking || maintenanceGate.data?.enabled) return <MaintenanceGate
+      checking={checking}
+      status={maintenanceGate.data}
+      onSignOut={() => { setMemberUser(null); setMemberAppointments([]); setActivePage('home'); }}
+    />;
+  }
 
   return (
     <div className={`min-h-screen flex flex-col justify-between overflow-x-clip font-sans ${isDarkMode ? 'bg-[#111111] text-[#F5F1EA]' : 'bg-[#FDFBF7] text-[#3A2E2B]'}`}>

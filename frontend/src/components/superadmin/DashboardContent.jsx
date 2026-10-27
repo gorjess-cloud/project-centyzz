@@ -58,7 +58,7 @@ export default function DashboardContent({ summary, onNavigate, maintenance }) {
             <span className={`sa-count-pill${value ? ' has-items' : ''}`}>{value}</span><ArrowRight size={14} />
           </button>)}
         </div>
-        <p className="sa-panel-note">Maintenance preview <span className={`sa-state-pill${maintenance?.enabled ? ' is-warning' : ''}`}>{maintenance?.enabled ? 'Enabled' : 'Off'}</span><button type="button" onClick={() => onNavigate('settings')}>Open settings <ArrowRight size={13} /></button></p>
+        <p className="sa-panel-note">Maintenance configuration <span className={`sa-state-pill${maintenance?.enabled ? ' is-warning' : ''}`}>{maintenance?.enabled ? 'Enabled' : 'Off'}</span><button type="button" onClick={() => onNavigate('settings')}>Open settings <ArrowRight size={13} /></button></p>
       </section>
     </div>
 
