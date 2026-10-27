@@ -35,6 +35,13 @@ function toDateKey(year, month, day) {
 }
 
 const guestSessionKey = 'centyzz-guest-checkout';
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const phonePattern = /^[0-9+\-\s()]{7,15}$/;
+
+const getEmailError = (value) =>
+  emailPattern.test(value.trim()) ? '' : 'Please enter a valid email address.';
+const getPhoneError = (value) =>
+  phonePattern.test(value.trim()) ? '' : 'Please enter a valid contact number.';
 
 function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const [step, setStep] = useState('form');
@@ -64,6 +71,8 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+  const [emailError, setEmailError] = useState('');
   const chosenStylist = stylists.find((s) => String(s.id) === stylistId);
   const stylist = chosenStylist?.name || 'Choose a specialist';
 
@@ -222,6 +231,11 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const handleFormSubmit = async (event) => {
     event.preventDefault();
     setFormError('');
+    const nextPhoneError = getPhoneError(phone);
+    const nextEmailError = getEmailError(email);
+    setPhoneError(nextPhoneError);
+    setEmailError(nextEmailError);
+    if (nextPhoneError || nextEmailError) return;
     if (!currentServiceObj || loadingServices || loadingStylists || loadingSlots || slotsError) {
       setFormError('Please choose a service and wait for availability to load.');
       return;
@@ -336,13 +350,13 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
               <span className="text-[11px] font-bold uppercase tracking-widest text-[#C5A059] flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" /> Book Appointment
               </span>
-              <h2 className={`text-2xl sm:text-3xl font-serif font-bold ${primaryText} mt-1`}>Schedule Your Session</h2>
+              <h2 className={`text-2xl sm:text-3xl font-bold ${primaryText} mt-1`}>Schedule Your Session</h2>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <form onSubmit={handleFormSubmit} className="grid grid-cols-1 gap-8 lg:grid-cols-12">
               
               {/* Calendar Column */}
-              <div className={`lg:col-span-5 ${insetSurface} p-5 rounded-2xl border flex flex-col justify-between shadow-inner`}>
+              <div className={`lg:col-span-5 ${insetSurface} flex flex-col self-start rounded-2xl border p-4 shadow-inner`}>
                 <div>
                   <div className="flex items-center justify-between mb-4 px-1">
                     <button 
@@ -354,7 +368,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                       <ChevronLeft className="w-5 h-5" />
                     </button>
 
-                    <span className={`font-serif font-bold ${primaryText} text-base`}>
+                    <span className={`font-bold ${primaryText} text-base`}>
                       {monthName} {currentYear}
                     </span>
 
@@ -403,22 +417,22 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                   </div>
                 </div>
 
-                <div className={`mt-5 pt-3 border-t ${isDarkMode ? 'border-[#3A342B] text-[#D6D0C8]' : 'border-[#E8DFD1] text-[#2A1E1B]/80'} flex items-center justify-between text-xs`}>
+                <div className={`mt-4 border-t pt-3 ${isDarkMode ? 'border-[#3A342B] text-[#D6D0C8]' : 'border-[#E8DFD1] text-[#2A1E1B]/80'} flex items-center justify-between text-xs`}>
                   <div className="flex items-center gap-2">
                     <CalendarIcon className="w-4 h-4 text-[#C5A059]" />
                     <span>Selected Date:</span>
                   </div>
-                  <strong className={`font-serif ${primaryText}`}>
+                  <strong className={`${primaryText}`}>
                     {monthName} {selectedDay}, {currentYear}
                   </strong>
                 </div>
               </div>
 
               {/* Time Slots Column */}
-              <div className="lg:col-span-3 space-y-3 flex flex-col justify-between">
+              <div className="flex flex-col justify-between space-y-3 lg:col-span-3 lg:pt-10">
                 <div>
                   <div className={`border-b ${isDarkMode ? 'border-[#3A342B]' : 'border-[#E8DFD1]'} pb-2 mb-3`}>
-                    <h3 className={`text-sm font-serif font-bold ${primaryText} flex items-center gap-1.5`}>
+                    <h3 className={`text-sm font-bold ${primaryText} flex items-center gap-1.5`}>
                       <Clock className="w-4 h-4 text-[#C5A059]" /> Appointment Time
                     </h3>
                   </div>
@@ -455,12 +469,12 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
               </div>
 
               {/* Client Details Column */}
-              <div className="lg:col-span-4 space-y-3">
+              <div className="space-y-5 lg:col-span-4">
                 <div className={`border-b ${isDarkMode ? 'border-[#3A342B]' : 'border-[#E8DFD1]'} pb-2`}>
-                  <h3 className={`text-sm font-serif font-bold ${primaryText}`}>Your Details</h3>
+                  <h3 className={`text-sm font-bold ${primaryText}`}>Your Details</h3>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div>
                     <label className={`block text-[10px] font-bold ${isDarkMode ? 'text-[#A9A39B]' : 'text-gray-500'} uppercase tracking-wider mb-1`}>
                       Category
@@ -517,23 +531,53 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                     <label className={`block text-[10px] font-bold ${isDarkMode ? 'text-[#A9A39B]' : 'text-gray-500'} uppercase tracking-wider mb-1`}>
                       Contact Info
                     </label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-4">
                       <input 
                         type="tel" 
                         value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setPhone(value);
+                          setPhoneError(getPhoneError(value));
+                        }}
+                        onBlur={() => setPhoneError(getPhoneError(phone))}
+                        onInvalid={(event) => {
+                          event.preventDefault();
+                          setPhoneError(getPhoneError(phone));
+                        }}
+                        aria-invalid={Boolean(phoneError)}
+                        aria-describedby={phoneError ? 'booking-phone-error' : undefined}
                         required 
                         placeholder="Phone No."
-                        className={`w-full px-3 py-2 rounded-xl border ${fieldStyle} text-xs focus:outline-none focus:border-[#C5A059]`}
+                        className={`w-full px-3 py-2 rounded-xl border ${fieldStyle} ${phoneError ? '!border-red-500' : ''} text-xs focus:outline-none focus:border-[#C5A059]`}
                       />
                       <input 
                         type="email" 
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setEmail(value);
+                          setEmailError(getEmailError(value));
+                        }}
+                        onBlur={() => setEmailError(getEmailError(email))}
+                        onInvalid={(event) => {
+                          event.preventDefault();
+                          setEmailError(getEmailError(email));
+                        }}
+                        aria-invalid={Boolean(emailError)}
+                        aria-describedby={emailError ? 'booking-email-error' : undefined}
                         required 
                         placeholder="Email Address"
-                        className={`w-full px-3 py-2 rounded-xl border ${fieldStyle} text-xs focus:outline-none focus:border-[#C5A059]`}
+                        className={`w-full px-3 py-2 rounded-xl border ${fieldStyle} ${emailError ? '!border-red-500' : ''} text-xs focus:outline-none focus:border-[#C5A059]`}
                       />
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-4">
+                      <p id="booking-phone-error" aria-live="polite" className={`text-[11px] text-red-500 ${phoneError ? '' : 'invisible'}`}>
+                        {phoneError || ' '}
+                      </p>
+                      <p id="booking-email-error" aria-live="polite" className={`text-[11px] text-red-500 ${emailError ? '' : 'invisible'}`}>
+                        {emailError || ' '}
+                      </p>
                     </div>
                   </div>
 
@@ -560,7 +604,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                   <button 
                     type="submit"
                     disabled={loadingServices || loadingStylists || loadingSlots || checkingSlot || !currentServiceObj || !chosenStylist || !selectedSlot}
-                    className={`w-full mt-2 py-3.5 rounded-2xl ${primaryButton} disabled:opacity-50 disabled:cursor-not-allowed font-serif font-bold text-xs tracking-widest uppercase transition-all shadow-md flex items-center justify-center gap-2 group`}
+                    className={`w-full !mt-6 py-3.5 rounded-2xl ${primaryButton} disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-[11px] transition-all shadow-md flex items-center justify-center gap-2 group`}
                   >
                     <span>{checkingSlot ? 'Verifying selected time…' : 'Review Appointment & 50% Deposit'}</span>
                     <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
@@ -581,7 +625,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
 
             <div className="space-y-1">
               <span className="text-[10px] font-bold uppercase tracking-widest text-[#C5A059]">Deposit Payment</span>
-              <h3 className={`text-xl font-serif font-bold ${primaryText}`}>
+              <h3 className={`text-xl font-bold ${primaryText}`}>
                 50% Partial Payment
               </h3>
               <p className={`text-xs ${mutedText} max-w-xs mx-auto`}>
@@ -625,7 +669,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                 type="button"
                 onClick={beginCheckout}
                 disabled={submittingCheckout}
-                className={`w-full py-3.5 rounded-2xl ${primaryButton} disabled:opacity-50 disabled:cursor-not-allowed font-serif font-bold text-xs tracking-widest uppercase transition-all shadow-md flex items-center justify-center gap-2`}
+                className={`w-full py-3.5 rounded-2xl ${primaryButton} disabled:opacity-50 disabled:cursor-not-allowed font-bold text-xs tracking-widest uppercase transition-all shadow-md flex items-center justify-center gap-2`}
               >
                 {submittingCheckout && <Loader2 className="w-4 h-4 animate-spin" />}
                 <span>{submittingCheckout ? 'Preparing secure test checkout…' : 'Continue to 50% test deposit'}</span>
@@ -645,7 +689,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
         {step === 'demo' && (
           <div className="p-8 text-center space-y-5">
             <CreditCard className="w-12 h-12 mx-auto text-[#C5A059]" />
-            <h3 className={`text-xl font-serif font-bold ${primaryText}`}>Temporary PayMongo Demo</h3>
+            <h3 className={`text-xl font-bold ${primaryText}`}>Temporary PayMongo Demo</h3>
             <p className={`text-xs ${mutedText}`}>Prototype only. The next action simulates a deposit; it does not contact PayMongo or charge any money.</p>
             <div className={`${insetSurface} p-4 rounded-2xl border text-sm space-y-2`}>
               <p>Booking: <strong>{checkout?.referenceCode}</strong></p>
@@ -666,7 +710,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
             {['DEMO_PAID', 'TEST_PAID'].includes(checkoutStatus?.paymentStatus)
               ? <CheckCircle2 className="w-12 h-12 mx-auto text-[#C5A059]" />
               : <AlertCircle className="w-12 h-12 mx-auto text-[#C5A059]" />}
-            <h3 className={`text-xl font-serif font-bold ${primaryText}`}>Booking Payment Status</h3>
+            <h3 className={`text-xl font-bold ${primaryText}`}>Booking Payment Status</h3>
             <p className={`text-xs ${mutedText}`}>Reference: <strong>{checkoutStatus?.referenceCode || checkout?.referenceCode || 'Unavailable'}</strong></p>
             <p className={`text-xs ${mutedText}`}>
               {checkoutStatus?.paymentStatus === 'DEMO_PAID' ? 'DEMO deposit recorded; no money was charged. Appointment is pending stylist confirmation.'

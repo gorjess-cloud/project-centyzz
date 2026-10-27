@@ -48,11 +48,13 @@ export default function AuthPage({
   // Employee / Admin 2FA PIN State
   const [isPinStep, setIsPinStep] = useState(false);
   const [pin, setPin] = useState(() => Array(6).fill(''));
+  const [isPinError, setIsPinError] = useState(false);
   const [pendingUser, setPendingUser] = useState(null);
   const [pendingAccessToken, setPendingAccessToken] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const otpInputRefs = useRef([]);
+  const pinInputRef = useRef(null);
 
   const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const passwordRules = [
@@ -264,9 +266,16 @@ export default function AuthPage({
   };
 
   // Numpad button handler for Employee 2FA PIN
+  const clearPinError = () => {
+    if (!isPinError) return;
+    setIsPinError(false);
+    setFormMessage({ type: '', text: '' });
+  };
+
   const handlePinNumpadClick = (num) => {
     const emptyIdx = pin.findIndex((v) => v === '');
     if (emptyIdx !== -1) {
+      clearPinError();
       const nextPin = [...pin];
       nextPin[emptyIdx] = num.toString();
       setPin(nextPin);
@@ -274,6 +283,7 @@ export default function AuthPage({
   };
 
   const handlePinBackspace = () => {
+    clearPinError();
     const lastFilledIdx = pin.map(v => v !== '').lastIndexOf(true);
     if (lastFilledIdx !== -1) {
       const nextPin = [...pin];
@@ -305,6 +315,7 @@ export default function AuthPage({
       onAuthenticated?.(result.data.user, result.data.accessToken);
     } catch (error) {
       setPin(Array(6).fill(''));
+      setIsPinError(/invalid.*pin|pin.*invalid/i.test(error?.message || ''));
       setFormMessage({ type: 'error', text: error?.message || 'PIN verification failed. Please try again.' });
     } finally {
       setIsSubmitting(false);
@@ -397,7 +408,7 @@ export default function AuthPage({
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#C5A059]">
             CLIENT SANCTUARY PORTAL
           </p>
-          <h1 className="mt-3 font-serif text-4xl font-normal leading-tight text-white lg:text-5xl">
+          <h1 className="mt-3 text-4xl font-normal leading-tight text-white lg:text-5xl">
             Elevate Your <br />
             <span className="italic text-[#C5A059]">Personal Elegance.</span>
           </h1>
@@ -428,7 +439,7 @@ export default function AuthPage({
 
           {/* Dynamic Header */}
           <div className="transition-all duration-300 ease-in-out transform">
-            <h2 className={`font-serif text-3xl ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#121212]'}`}>
+            <h2 className={`text-3xl ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#121212]'}`}>
               {isPinStep 
                 ? 'Employee Log In' 
                 : isOtpStep 
@@ -453,21 +464,17 @@ export default function AuthPage({
           </div>
 
           {/* Global Form Message Alert */}
-          {formMessage.text && (
+          {formMessage.text && !(isPinStep && isPinError) && (
             <p
               role={formMessage.type === 'error' ? 'alert' : 'status'}
-              className={`rounded-md border px-3 py-2 text-[11px] ${
+              className={`my-4 text-center text-[11px] font-semibold ${
                 formMessage.type === 'error'
-                  ? isDarkMode
-                    ? 'border-[#7a4d4d] bg-[#2a1d1d] text-[#f7c8c8]'
-                    : 'border-[#e9c7c7] bg-[#fff4f4] text-[#7a2b2b]'
+                  ? isDarkMode ? 'text-red-400' : 'text-red-600'
                   : formMessage.type === 'info'
-                    ? isDarkMode
-                      ? 'border-[#66552f] bg-[#2a251b] text-[#f3dfaa]'
-                      : 'border-[#ead9a9] bg-[#fffaf0] text-[#715b25]'
+                    ? isDarkMode ? 'text-amber-300' : 'text-amber-800'
                     : isDarkMode
-                    ? 'border-[#3d5d3d] bg-[#1d2a1d] text-[#d6f5d7]'
-                    : 'border-[#d4e7d4] bg-[#f3fff3] text-[#2f6b3e]'
+                    ? 'text-green-400'
+                    : 'text-green-700'
               }`}
             >
               {formMessage.text}
@@ -678,6 +685,14 @@ export default function AuthPage({
           {/* VIEW 2: EMPLOYEE / ADMIN 2FA PIN VERIFICATION (PURE DYNAMIC DB DATA) */}
           {isPinStep && (
             <div className="space-y-5 animate-fadeIn">
+              <style>{`
+                @keyframes authPinShake {
+                  0%, 100% { transform: translateX(0); }
+                  25% { transform: translateX(-5px); }
+                  75% { transform: translateX(5px); }
+                }
+                .auth-pin-shake { animation: authPinShake 0.35s ease-in-out; }
+              `}</style>
               
               {/* Dynamic Employee Account Card derived entirely from DB user payload */}
               <div className="bg-[#3A342B] text-white p-4 rounded-2xl shadow-md flex items-center justify-between border border-[#C5A059]/40 text-left">
@@ -689,7 +704,7 @@ export default function AuthPage({
                     <h3 className="font-bold text-sm text-[#F5F1EA]">
                       {pendingUser?.firstName ? `${pendingUser.firstName} ${pendingUser.lastName || ''}`.trim() : 'Authenticated Employee'}
                     </h3>
-                    <p className="text-[10px] text-gray-300 font-mono">
+                    <p className="text-[10px] text-gray-300">
                       {pendingUser?.email}
                     </p>
                   </div>
@@ -705,26 +720,47 @@ export default function AuthPage({
                   Please input your PIN to validate yourself
                 </p>
 
-                <div className="flex justify-center gap-2">
+                <input
+                  ref={pinInputRef}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  autoFocus
+                  aria-label="Six-digit PIN"
+                  value={pin.join('')}
+                  onChange={(event) => {
+                    const nextPin = event.target.value.replace(/\D/g, '').slice(0, 6);
+                    clearPinError();
+                    setPin(Array.from({ length: 6 }, (_, index) => nextPin[index] || ''));
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') handleVerifyPin(event);
+                  }}
+                  className="sr-only"
+                />
+
+                <div className={`flex justify-center gap-2 ${isPinError ? 'auth-pin-shake' : ''}`} onClick={() => pinInputRef.current?.focus()}>
                   {pin.map((digit, idx) => (
                     <div
                       key={idx}
                       className={`w-10 h-12 rounded-xl border-2 flex items-center justify-center text-xl font-bold transition-all shadow-inner ${
-                        digit
+                        isPinError
+                          ? 'border-red-500 bg-red-50 text-red-600'
+                          : digit
                           ? 'border-[#C5A059] bg-white text-[#2A1E1B]'
                           : isDarkMode 
                             ? 'border-[#3A3A3A] bg-[#1A1A1A] text-gray-500' 
                             : 'border-[#E7DFD4] bg-white/70 text-gray-400'
                       }`}
                     >
-                      {digit ? '•' : ''}
+                      {digit || isPinError ? '•' : ''}
                     </div>
                   ))}
                 </div>
 
-                <p className="text-[11px] text-[#C5A059] font-medium">
-                  Forgot your management PIN? Contact your system administrator.
-                </p>
+                <a href="/forgot-pin" className="text-[11px] text-[#C5A059] font-medium hover:underline">
+                  Forgot your management PIN?
+                </a>
               </div>
 
               {/* Numpad */}

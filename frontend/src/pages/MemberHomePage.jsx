@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import useMemberSidebarState from "../hooks/useMemberSidebarState";
+import { useUnsavedChanges } from "../components/UnsavedChangesProvider";
 import {
   Bell,
   CalendarDays,
@@ -19,14 +20,11 @@ import {
   ShieldCheck,
   X,
   Camera,
-  Trash2,
-  Crop,
-  Upload,
-  ZoomIn,
-  ZoomOut,
 } from "lucide-react";
 import { api } from "../api/client";
 import ConfirmationModal from "../components/ConfirmationModal";
+import ProfilePictureModal from "../components/ProfilePictureModal";
+import SaveChangesModal from "../components/SaveChangesModal";
 
 const formatMonth = (date) =>
   date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
@@ -37,7 +35,7 @@ const POPULAR_SERVICES = [
     category: "hair",
     label: "Hair Cut",
     kind: "Hair Services",
-    color: "bg-[#9B6B39] text-white",
+    color: "bg-[#E8D4B8] text-[#4D3B2A]",
   },
   {
     title: "Balayage & Couture Color",
@@ -51,7 +49,7 @@ const POPULAR_SERVICES = [
     category: "nails",
     label: "Foot Spa",
     kind: "Nail Services",
-    color: "bg-[#BDB782] text-[#3F3A2A]",
+    color: "bg-[#D9D8B9] text-[#3F3A2A]",
   },
 ];
 
@@ -68,25 +66,25 @@ export default function MemberHomePage({
   isLoadingAppointments,
   appointmentsError,
 }) {
+  const { markDirty, markSaved, guardNavigation } = useUnsavedChanges();
+  const profileScope = `member-profile-${user?.id || user?.email || "current"}`;
   const [month, setMonth] = useState(() => new Date());
+  const [activeTab, setActiveTab] = useState("upcoming");
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeSection, setActiveSection] = useState(initialSection);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useMemberSidebarState();
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   const [accountProfile, setAccountProfile] = useState(user || {});
   const [profileDraft, setProfileDraft] = useState({ firstName: user?.firstName || "", lastName: user?.lastName || "" });
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
   const [accountLoading, setAccountLoading] = useState(false);
   const [profileMessage, setProfileMessage] = useState(null);
   const [storedPhoto, setStoredPhoto] = useState({ key: "", data: "" });
-  const photoInputRef = useRef(null);
-  const photoDragRef = useRef(null);
-  const [photoModal, setPhotoModal] = useState(false);
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [confirmPhotoRemoval, setConfirmPhotoRemoval] = useState(false);
-  const [cropSource, setCropSource] = useState("");
-  const [photoZoom, setPhotoZoom] = useState(1);
-  const [photoOffset, setPhotoOffset] = useState({ x: 0, y: 0 });
   const avatarStorageKey = `centyzz-member-avatar:${user?.id ?? user?.email ?? "member"}`;
   const profilePhoto = storedPhoto.key === avatarStorageKey ? storedPhoto.data : "";
 
@@ -108,51 +106,12 @@ export default function MemberHomePage({
 
   const removeProfilePhoto = () => {
     setStoredPhoto({ key: avatarStorageKey, data: "" });
-    setPhotoModal(false);
     setProfileMessage({ type: "success", text: "Profile photo removed." });
     setConfirmPhotoRemoval(false);
   };
-  const handleProfilePhoto = (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setProfileMessage({ type: "error", text: "Choose an image file for your profile photo." });
-      return;
-    }
-    if (file.size > 8 * 1024 * 1024) {
-      setProfileMessage({ type: "error", text: "Choose an image smaller than 8 MB." });
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setCropSource(String(reader.result || ""));
-      setPhotoZoom(1);
-      setPhotoOffset({ x: 0, y: 0 });
-      setPhotoModal("crop");
-    };
-    reader.onerror = () => setProfileMessage({ type: "error", text: "This image could not be opened. Try another file." });
-    reader.readAsDataURL(file);
-  };
-
-  const saveProfilePhotoCrop = () => {
-    const image = new Image();
-    image.onload = () => {
-      const size = 512;
-      const scale = Math.max(size / image.width, size / image.height) * photoZoom;
-      const width = image.width * scale;
-      const height = image.height * scale;
-      const canvas = document.createElement("canvas");
-      canvas.width = size;
-      canvas.height = size;
-      canvas.getContext("2d")?.drawImage(image, (size - width) / 2 + photoOffset.x * 2, (size - height) / 2 + photoOffset.y * 2, width, height);
-      setStoredPhoto({ key: avatarStorageKey, data: canvas.toDataURL("image/jpeg", 0.86) });
-      setCropSource("");
-      setPhotoModal("view");
-      setProfileMessage({ type: "success", text: "Profile photo updated." });
-    };
-    image.onerror = () => setProfileMessage({ type: "error", text: "This image could not be opened. Try another file." });
-    image.src = cropSource;
+  const saveProfilePhoto = (imageUrl) => {
+    setStoredPhoto({ key: avatarStorageKey, data: imageUrl });
+    setProfileMessage({ type: "success", text: "Profile photo updated." });
   };
 
   useEffect(() => {
@@ -191,6 +150,7 @@ export default function MemberHomePage({
       setProfileDraft({ firstName: result.data.firstName, lastName: result.data.lastName });
       onUserUpdated?.(result.data);
       setEditingProfile(false);
+      markSaved(profileScope);
       setProfileMessage({ type: "success", text: "Your profile has been updated." });
     } catch (error) {
       setProfileMessage({ type: "error", text: error.message });
@@ -247,13 +207,17 @@ export default function MemberHomePage({
     ];
   }, [month]);
 
-  const openServices = () => {
-    setActivePage("member-services");
+  const navigateMember = (page, beforeNavigate = () => {}) => {
+    guardNavigation(() => {
+      beforeNavigate();
+      setActivePage(page);
+    });
   };
 
-  // NEW: Navigate to member bookings page
+  const openServices = () => navigateMember("member-services");
+
   const openBookings = () => {
-    setActivePage("member-bookings");
+    navigateMember("member-bookings");
   };
 
   return (
@@ -334,8 +298,15 @@ export default function MemberHomePage({
               label: "Home",
               icon: Home,
               action: () => {
-                setActiveSection("home");
-                setActivePage("home");
+                navigateMember("home", () => {
+                  setActiveSection("home");
+                  setEditingProfile(false);
+                  setProfileDraft({
+                    firstName: accountProfile.firstName || "",
+                    lastName: accountProfile.lastName || "",
+                  });
+                  setProfileMessage(null);
+                });
               },
             },
             {
@@ -354,7 +325,7 @@ export default function MemberHomePage({
               id: "account",
               label: "Account",
               icon: UserRound,
-              action: () => setActivePage("member-account"),
+              action: () => navigateMember("member-account"),
             },
           ].map((item) => {
             const Icon = item.icon;
@@ -384,8 +355,8 @@ export default function MemberHomePage({
         <div className="p-3 border-t border-inherit">
           <button
             type="button"
-            onClick={onLogout}
-            className="flex w-full items-center justify-center lg:justify-start gap-3 rounded-xl px-3 py-2.5 text-xs font-medium text-red-600/80 hover:bg-red-500/10 transition-all duration-200 active:scale-95"
+            onClick={() => setConfirmLogout(true)}
+            className="flex w-full items-center justify-center lg:justify-start gap-3 rounded-xl px-3 py-2.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-all duration-200 active:scale-95"
             title={isSidebarCollapsed ? "Log Out" : undefined}
           >
             <LogOut className="h-4 w-4 shrink-0" />
@@ -400,24 +371,33 @@ export default function MemberHomePage({
           {/* Header */}
           <header className="mb-6 flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <h1 className="text-lg font-bold truncate">
-                Good{" "}
-                {today.getHours() < 12
-                  ? "Morning"
-                  : today.getHours() < 18
-                    ? "Afternoon"
-                    : "Evening"}
-                , {name}!
-              </h1>
-              <p className={`mt-0.5 text-[11px] ${mutedText} truncate`}>
-                Today is{" "}
-                {today.toLocaleDateString("en-US", {
-                  weekday: "long",
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </p>
+              {activeSection === "account" ? (
+                <>
+                  <h1 className="truncate text-xl font-bold">Account Settings</h1>
+                  <p className={`mt-0.5 truncate text-xs ${mutedText}`}>Manage your personal information and account details.</p>
+                </>
+              ) : (
+                <>
+                  <h1 className="truncate text-lg font-bold">
+                    Good{" "}
+                    {today.getHours() < 12
+                      ? "Morning"
+                      : today.getHours() < 18
+                        ? "Afternoon"
+                        : "Evening"}
+                    , {name}!
+                  </h1>
+                  <p className={`mt-0.5 truncate text-[11px] ${mutedText}`}>
+                    Today is{" "}
+                    {today.toLocaleDateString("en-US", {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </p>
+                </>
+              )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button
@@ -460,25 +440,23 @@ export default function MemberHomePage({
           )}
 
           {activeSection === "account" ? (
-            <section className={`overflow-hidden rounded-2xl border shadow-sm ${cardSurface}`}>
-              <div className={`flex flex-wrap items-center justify-between gap-4 border-b p-5 sm:p-7 ${isDarkMode ? "border-[#39342B]" : "border-[#E9E4D8]"}`}>
-                <div className="flex min-w-0 items-center gap-4">
-                    <div className="relative h-14 w-14 shrink-0">
-                      <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-2xl bg-[#4A3928] text-lg font-bold text-[#F1E7C6] shadow-sm">
+            <section className="space-y-6 pb-6">
+              <div className={`flex flex-col items-center justify-between gap-6 rounded-2xl border p-6 shadow-sm sm:flex-row ${cardSurface}`}>
+                <div className="flex min-w-0 items-center gap-5">
+                    <button type="button" aria-label="Manage profile photo" title="Manage profile photo" onClick={() => setIsPhotoModalOpen(true)} className="group relative h-20 w-20 shrink-0">
+                      <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-4 border-[#C5A059]/30 bg-[#4A3928] text-2xl font-bold text-[#C5A059] shadow-md">
                         {profilePhoto ? <img src={profilePhoto} alt={`${fullName} profile`} className="h-full w-full object-cover" /> : (initials || "M")}
                       </div>
-                      <button type="button" aria-label="Manage profile photo" title="Manage profile photo" onClick={() => setPhotoModal("view")} className="absolute -bottom-1.5 -right-1.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#C5A059] text-white shadow transition hover:bg-[#9A7946]"><Camera size={13} /></button>
-                      <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfilePhoto} />
-                    </div>
+                      <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"><Camera size={20} /></span>
+                    </button>
                   <div className="min-w-0">
                     <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${isDarkMode ? "text-[#C5A059]" : "text-[#9A7946]"}`}>Member account</p>
-                    <h2 className="mt-1 truncate font-serif text-2xl">{fullName}</h2>
+                    <h2 className="mt-1 truncate text-2xl">{fullName}</h2>
                     <p className={`mt-0.5 truncate text-xs ${mutedText}`}>{accountProfile.email || "Email not provided"}</p>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {profilePhoto && <button type="button" onClick={() => setConfirmPhotoRemoval(true)} className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${isDarkMode ? "border-[#51493B] hover:bg-white/5" : "border-[#E9E4D8] hover:bg-black/5"}`}><Trash2 size={14} /> Remove photo</button>}
-                  {profilePhoto && <button type="button" onClick={() => { setStoredPhoto({ key: avatarStorageKey, data: "" }); setProfileMessage({ type: "success", text: "Profile photo removed." }); }} className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${isDarkMode ? "border-[#51493B] hover:bg-white/5" : "border-[#E9E4D8] hover:bg-black/5"}`}><Trash2 size={14} /> Remove photo</button>}
+                <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end">
+                  <button type="button" onClick={() => setIsPhotoModalOpen(true)} className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${isDarkMode ? "border-[#51493B] hover:bg-white/5" : "border-[#E9E4D8] hover:bg-black/5"}`}><Camera size={14} /> Edit photo</button>
                   <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold ${accountProfile.emailVerified ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
                     {accountProfile.emailVerified ? <BadgeCheck size={13} /> : <ShieldCheck size={13} />}
                     {accountProfile.emailVerified ? "Verified email" : "Account active"}
@@ -487,25 +465,27 @@ export default function MemberHomePage({
                     <button type="button" disabled={!user?.accessToken} onClick={() => { setProfileDraft({ firstName: accountProfile.firstName || "", lastName: accountProfile.lastName || "" }); setProfileMessage(null); setEditingProfile(true); }} className="inline-flex items-center gap-2 rounded-xl border border-[#C5A059]/50 bg-[#C5A059]/10 px-4 py-2.5 text-xs font-bold text-[#9A7946] transition hover:bg-[#C5A059]/20 disabled:cursor-not-allowed disabled:opacity-50"><Pencil size={14} /> Edit profile</button>
                   ) : (
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => { setEditingProfile(false); setProfileDraft({ firstName: accountProfile.firstName || "", lastName: accountProfile.lastName || "" }); setProfileMessage(null); }} className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold ${isDarkMode ? "border-[#51493B]" : "border-[#E9E4D8]"}`}><X size={14} /> Cancel</button>
-                      <button type="button" disabled={savingProfile || !profileDraft.firstName.trim() || !profileDraft.lastName.trim()} onClick={saveProfile} className="inline-flex items-center gap-1.5 rounded-xl bg-[#4A3928] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#2A1E1B] disabled:cursor-not-allowed disabled:opacity-50"><Save size={14} /> {savingProfile ? "Saving…" : "Save changes"}</button>
+                      <button type="button" onClick={() => { setEditingProfile(false); setProfileDraft({ firstName: accountProfile.firstName || "", lastName: accountProfile.lastName || "" }); setProfileMessage(null); markSaved(profileScope); }} className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold ${isDarkMode ? "border-[#51493B]" : "border-[#E9E4D8]"}`}><X size={14} /> Cancel</button>
+                      <button type="button" disabled={savingProfile || !profileDraft.firstName.trim() || !profileDraft.lastName.trim()} onClick={() => setShowSaveConfirmation(true)} className="inline-flex items-center gap-1.5 rounded-xl border border-[#C5A059]/30 bg-[#3A342B] px-5 py-2.5 text-xs font-bold text-[#F5F1EA] shadow-md transition-all hover:bg-[#2A241B] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"><Save size={14} /> {savingProfile ? "Saving…" : "Save changes"}</button>
                     </div>
                   )}
                 </div>
               </div>
 
-              {profileMessage && <p role={profileMessage.type === "error" ? "alert" : "status"} className={`mx-5 mt-5 rounded-xl px-4 py-3 text-xs font-medium sm:mx-7 ${profileMessage.type === "error" ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"}`}>{profileMessage.text}</p>}
+              {profileMessage && <p role={profileMessage.type === "error" ? "alert" : "status"} className={`rounded-2xl border px-4 py-3 text-xs font-medium ${profileMessage.type === "error" ? "border-rose-200 bg-rose-50 text-rose-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>{profileMessage.text}</p>}
 
-              <div className="grid gap-5 p-5 sm:p-7 xl:grid-cols-[minmax(0,1.4fr)_minmax(250px,0.8fr)]">
-                <div className={`rounded-2xl border p-5 ${isDarkMode ? "border-[#39342B] bg-[#1D1A16]" : "border-[#E9E4D8] bg-[#FFFDF8]"}`}>
-                  <div className="mb-5 flex items-start justify-between gap-3">
-                    <div><h3 className="text-sm font-bold">Personal information</h3><p className={`mt-1 text-[11px] ${mutedText}`}>Keep your name current for bookings and receipts.</p></div>
+              <div className={`rounded-2xl border p-6 shadow-sm sm:p-8 ${cardSurface}`}>
+                <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(250px,0.8fr)]">
+                <div className="space-y-6">
+                  <div>
+                    <h3 className={`mb-1 text-sm font-bold uppercase tracking-wider ${isDarkMode ? "text-[#F5F1EA]" : "text-[#2A1E1B]"}`}>Personal Details</h3>
+                    <p className={`text-xs ${mutedText}`}>Update your profile information used for bookings and account communications.</p>
                     {accountLoading && <span className={`text-[10px] ${mutedText}`}>Refreshing…</span>}
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="block"><span className={`mb-1.5 block text-[10px] font-bold uppercase tracking-wide ${mutedText}`}>First name</span><input maxLength={100} disabled={!editingProfile} value={editingProfile ? profileDraft.firstName : accountProfile.firstName || ""} onChange={(event) => setProfileDraft((draft) => ({ ...draft, firstName: event.target.value }))} className={`w-full rounded-xl border px-3.5 py-3 text-sm outline-none transition focus:border-[#C5A059] focus:ring-2 focus:ring-[#C5A059]/20 disabled:opacity-80 ${isDarkMode ? "border-[#51493B] bg-[#211F1B]" : "border-[#E9E4D8] bg-white"}`} /></label>
-                    <label className="block"><span className={`mb-1.5 block text-[10px] font-bold uppercase tracking-wide ${mutedText}`}>Last name</span><input maxLength={100} disabled={!editingProfile} value={editingProfile ? profileDraft.lastName : accountProfile.lastName || ""} onChange={(event) => setProfileDraft((draft) => ({ ...draft, lastName: event.target.value }))} className={`w-full rounded-xl border px-3.5 py-3 text-sm outline-none transition focus:border-[#C5A059] focus:ring-2 focus:ring-[#C5A059]/20 disabled:opacity-80 ${isDarkMode ? "border-[#51493B] bg-[#211F1B]" : "border-[#E9E4D8] bg-white"}`} /></label>
-                    <label className="block sm:col-span-2"><span className={`mb-1.5 block text-[10px] font-bold uppercase tracking-wide ${mutedText}`}>Email address</span><input readOnly value={accountProfile.email || ""} className={`w-full cursor-not-allowed rounded-xl border px-3.5 py-3 text-sm opacity-80 ${isDarkMode ? "border-[#51493B] bg-[#211F1B]" : "border-[#E9E4D8] bg-white"}`} /><span className={`mt-1.5 block text-[10px] ${mutedText}`}>Email changes require a verification flow.</span></label>
+                    <label className="block"><span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-[#8A8174]">First Name</span><input maxLength={100} disabled={!editingProfile} value={editingProfile ? profileDraft.firstName : accountProfile.firstName || ""} onChange={(event) => { setProfileDraft((draft) => ({ ...draft, firstName: event.target.value })); markDirty(profileScope); }} className={`w-full rounded-xl border px-3.5 py-2.5 text-xs font-medium outline-none focus:border-[#C5A059] disabled:cursor-not-allowed disabled:opacity-80 ${isDarkMode ? "border-[#51493B] bg-[#211F1B] text-[#F5F1EA]" : "border-[#E9E4D8] bg-[#FFFDF8] text-[#2A1E1B]"}`} /></label>
+                    <label className="block"><span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-[#8A8174]">Last Name</span><input maxLength={100} disabled={!editingProfile} value={editingProfile ? profileDraft.lastName : accountProfile.lastName || ""} onChange={(event) => { setProfileDraft((draft) => ({ ...draft, lastName: event.target.value })); markDirty(profileScope); }} className={`w-full rounded-xl border px-3.5 py-2.5 text-xs font-medium outline-none focus:border-[#C5A059] disabled:cursor-not-allowed disabled:opacity-80 ${isDarkMode ? "border-[#51493B] bg-[#211F1B] text-[#F5F1EA]" : "border-[#E9E4D8] bg-[#FFFDF8] text-[#2A1E1B]"}`} /></label>
+                    <label className="block sm:col-span-2"><span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-[#8A8174]">Email Address</span><input readOnly value={accountProfile.email || ""} className={`w-full cursor-not-allowed rounded-xl border px-3.5 py-2.5 text-xs font-medium opacity-80 ${isDarkMode ? "border-[#51493B] bg-[#211F1B] text-[#F5F1EA]" : "border-[#E9E4D8] bg-[#F6F4EF] text-[#8A8174]"}`} /><span className={`mt-1 block text-[10px] text-[#8A8174]`}>Email changes require a verification flow.</span></label>
                   </div>
                 </div>
 
@@ -520,226 +500,225 @@ export default function MemberHomePage({
                     <div className="flex items-start gap-3"><CalendarCheck2 size={17} className="mt-0.5 shrink-0 text-[#9A7946]" /><div><p className="text-xs font-bold">Need to check a booking?</p><p className={`mt-1 text-[10px] leading-relaxed ${mutedText}`}>Review upcoming visits and appointment details from your bookings.</p><button type="button" onClick={openBookings} className="mt-3 text-[11px] font-bold text-[#B48B43] hover:underline">View my bookings →</button></div></div>
                   </div>
                 </aside>
+                </div>
               </div>
             </section>
           ) : (
             <>
-              <section
-                className={`mb-6 rounded-2xl border p-5 ${isDarkMode ? "border-[#39342B] bg-[#211F1B]" : "border-[#E2DCCF] bg-[#EFECE4]"}`}
-              >
-                <div className="grid items-center gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-                  <div>
-                    <h2 className="text-sm font-bold">Today’s Popular Picks</h2>
-                    <p className={`mt-1 text-[11px] ${mutedText}`}>
-                      Explore salon favorites and book your next visit.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={openServices}
-                      className="mt-4 flex items-center gap-1.5 rounded-full border border-[#D5CEBF] bg-white px-4 py-1.5 text-[11px] font-medium text-[#443523] shadow-sm transition-colors hover:border-[#C5A059]"
-                    >
-                      See all <span aria-hidden="true">→</span>
-                    </button>
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    {POPULAR_SERVICES.map((service) => (
+              <div className="grid items-stretch gap-6 lg:grid-cols-12">
+                <div className="flex flex-col gap-6 lg:col-span-5">
+                  <section className={`min-w-0 overflow-hidden rounded-2xl border shadow-sm ${cardSurface}`}>
+                  <div role="tablist" className={`flex border-b px-3 pt-3 sm:px-6 ${isDarkMode ? "border-[#39342B]" : "border-[#E9E4D8]"}`}>
+                    {[
+                      { id: "upcoming", label: "Your Upcoming Appointments" },
+                      { id: "history", label: "Appointment History" },
+                    ].map((tab) => (
                       <button
-                        key={service.title}
+                        key={tab.id}
                         type="button"
-                        onClick={() => onOpenBooking({ title: service.title, category: service.category })}
-                        className={`flex min-h-[112px] flex-col justify-between rounded-xl p-3.5 text-left transition-transform hover:-translate-y-0.5 ${service.color}`}
+                        role="tab"
+                        aria-selected={activeTab === tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`min-h-12 flex-1 border-b-2 px-2 text-center text-xs font-semibold transition-colors sm:flex-none sm:px-4 ${
+                          activeTab === tab.id
+                            ? "border-[#B4833F] text-[#8A642F]"
+                            : `border-transparent ${mutedText} hover:text-[#8A642F]`
+                        }`}
                       >
-                        <span>
-                          <span className="block text-xs font-bold">{service.label}</span>
-                          <span className="mt-0.5 block text-[10px] opacity-80">{service.kind}</span>
-                        </span>
-                        <span className="mt-3 border-t border-current/15 pt-2 text-[10px] font-medium">
-                          {service.title}
-                        </span>
+                        {tab.label}
                       </button>
                     ))}
                   </div>
-                </div>
-              </section>
 
-              {/* Upcoming Appointments */}
-              <section
-                className={`mb-6 rounded-2xl border p-5 transition-all duration-300 ${isDarkMode ? "bg-[#211F1B] border-[#39342B]" : "bg-[#EFECE4] border-[#E2DCCF]"}`}
-              >
-                <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)] items-center">
-                  <div>
-                    <h2 className="text-sm font-bold">Your Upcoming Appointments</h2>
-                    <p className={`mt-1 text-[11px] ${mutedText}`}>
-                      Booking details for your account.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={openBookings}
-                      className="mt-4 rounded-full border bg-white px-4 py-1.5 text-[11px] font-medium border-[#D5CEBF] hover:border-[#C5A059] shadow-sm text-[#443523] flex items-center gap-1.5 transition-all duration-200 active:scale-95"
-                    >
-                      View bookings <span aria-hidden="true">→</span>
-                    </button>
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    {appointmentsError ? (
-                      <p role="alert" className="text-xs text-red-700">{appointmentsError}</p>
-                    ) : isLoadingAppointments ? (
-                      <p role="status" className={`text-xs ${mutedText}`}>Loading appointments...</p>
-                    ) : upcomingAppointments.length === 0 ? (
-                      <p className={`text-xs ${mutedText}`}>You don’t have any upcoming appointments.</p>
-                    ) : upcomingAppointments.map((appointment) => (
-                      <div key={appointment.id} className={`rounded-xl border p-3 ${cardSurface}`}>
-                        <p className="text-xs font-bold">{appointment.service?.name || "Service unavailable"}</p>
-                        <p className={`mt-1 text-[10px] ${mutedText}`}>
-                          {new Date(`${appointment.appointmentDate}T12:00:00+08:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {String(appointment.startTime).slice(0, 5)}
-                        </p>
-                        <p className={`mt-1 text-[10px] capitalize ${mutedText}`}>
-                          {String(appointment.status).toLowerCase()}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </section>
-
-              {/* Grid Layout: Past Services & Calendar */}
-              <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
-                {/* Past Services Table */}
-                <section
-                  className={`overflow-hidden rounded-2xl border transition-all duration-300 ${cardSurface}`}
-                >
-                  <div className="flex items-center justify-between border-b border-inherit px-4 py-3.5">
-                    <h2 className="text-sm font-bold">Appointment History</h2>
-                    <button
-                      type="button"
-                      onClick={openBookings}
-                      className="text-xs text-[#B4833F] font-medium hover:underline transition-colors"
-                    >
-                      View All →
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-[minmax(0,1fr)_70px_110px] gap-2 px-4 py-2.5 text-[10px] font-semibold text-[#9A907F] border-b border-inherit">
-                    <span>Service Name</span>
-                    <span>Date</span>
-                    <span>Stylist</span>
-                  </div>
-                  {appointmentsError ? (
-                    <p role="alert" className="px-4 py-3 text-xs text-red-700">{appointmentsError}</p>
-                  ) : isLoadingAppointments ? (
-                    <p role="status" className={`px-4 py-3 text-xs ${mutedText}`}>Loading appointment history...</p>
-                  ) : pastAppointments.length === 0 ? (
-                    <p className={`px-4 py-4 text-xs ${mutedText}`}>No past appointments yet.</p>
-                  ) : pastAppointments.map((appointment, index) => (
-                      <div
-                        key={appointment.id}
-                        className={`grid grid-cols-[minmax(0,1fr)_70px_110px] items-center gap-2 px-4 py-3 text-xs transition-colors duration-150 hover:bg-[#C5A059]/5 ${index ? "border-t border-inherit" : ""}`}
-                      >
-                        <div className="flex min-w-0 items-center gap-2.5">
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#4A3928] text-white shadow-xs">
-                            <CalendarDays className="h-4 w-4" />
-                          </span>
-                          <div className="min-w-0">
-                            <span className="block truncate font-semibold text-xs">
-                              {appointment.service?.name || "Service unavailable"}
-                            </span>
-                            <span className={`text-[10px] ${mutedText}`}>
-                              {String(appointment.status).toLowerCase()}
-                            </span>
-                          </div>
+                  {activeTab === "upcoming" ? (
+                    <div role="tabpanel" className="p-5 sm:p-6">
+                      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h2 className="text-base font-bold">Your Upcoming Appointments</h2>
+                          <p className={`mt-1 text-xs ${mutedText}`}>Booking details for your account.</p>
                         </div>
-                        <span className="text-xs">{new Date(`${appointment.appointmentDate}T12:00:00+08:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
-                        <span className="truncate text-xs">Not assigned</span>
+                        <button
+                          type="button"
+                          onClick={openBookings}
+                          className="flex min-h-10 items-center gap-1.5 rounded-full border border-[#D5CEBF] bg-white px-4 text-[11px] font-medium text-[#443523] shadow-sm transition-all hover:border-[#C5A059] active:scale-95"
+                        >
+                          View bookings <span aria-hidden="true">→</span>
+                        </button>
                       </div>
-                  ))}
-                </section>
+                      {appointmentsError ? (
+                        <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-xs text-red-700">{appointmentsError}</p>
+                      ) : isLoadingAppointments ? (
+                        <p role="status" className={`rounded-xl bg-[#F6F4EF] px-4 py-6 text-center text-xs ${mutedText}`}>Loading appointments...</p>
+                      ) : upcomingAppointments.length === 0 ? (
+                        <div className={`rounded-xl border border-dashed p-8 text-center ${isDarkMode ? "border-[#51493B]" : "border-[#E2DCCF]"}`}>
+                          <CalendarDays className={`mx-auto mb-3 h-7 w-7 ${mutedText}`} />
+                          <p className={`text-xs ${mutedText}`}>You don’t have any upcoming appointments.</p>
+                        </div>
+                      ) : (
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                          {upcomingAppointments.map((appointment) => (
+                            <div key={appointment.id} className={`rounded-xl border p-4 ${cardSurface}`}>
+                              <p className="text-xs font-bold">{appointment.service?.name || "Service unavailable"}</p>
+                              <p className={`mt-2 text-[11px] ${mutedText}`}>
+                                {new Date(`${appointment.appointmentDate}T12:00:00+08:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {String(appointment.startTime).slice(0, 5)}
+                              </p>
+                              <p className={`mt-1 text-[10px] capitalize ${mutedText}`}>
+                                {String(appointment.status).toLowerCase()}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div role="tabpanel" className="p-5 sm:p-6">
+                      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h2 className="text-base font-bold">Appointment History</h2>
+                          <p className={`mt-1 text-xs ${mutedText}`}>Your previous salon visits.</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={openBookings}
+                          className="text-xs font-medium text-[#B4833F] transition-colors hover:underline"
+                        >
+                          View All →
+                        </button>
+                      </div>
+                      <div className={`overflow-hidden rounded-xl border ${isDarkMode ? "border-[#39342B]" : "border-[#E9E4D8]"}`}>
+                        <div className={`hidden grid-cols-[minmax(0,1fr)_90px_110px] gap-2 border-b px-4 py-3 text-[10px] font-semibold text-[#9A907F] sm:grid ${isDarkMode ? "border-[#39342B]" : "border-[#E9E4D8]"}`}>
+                          <span>Service Name</span>
+                          <span>Date</span>
+                          <span>Stylist</span>
+                        </div>
+                        {appointmentsError ? (
+                          <p role="alert" className="px-4 py-3 text-xs text-red-700">{appointmentsError}</p>
+                        ) : isLoadingAppointments ? (
+                          <p role="status" className={`px-4 py-4 text-xs ${mutedText}`}>Loading appointment history...</p>
+                        ) : pastAppointments.length === 0 ? (
+                          <p className={`px-4 py-5 text-xs ${mutedText}`}>No past appointments yet.</p>
+                        ) : pastAppointments.map((appointment, index) => (
+                          <div
+                            key={appointment.id}
+                            className={`grid gap-2 px-4 py-3 text-xs transition-colors duration-150 hover:bg-[#C5A059]/5 sm:grid-cols-[minmax(0,1fr)_90px_110px] sm:items-center ${index ? "border-t border-inherit" : ""}`}
+                          >
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#4A3928] text-white shadow-xs">
+                                <CalendarDays className="h-4 w-4" />
+                              </span>
+                              <div className="min-w-0">
+                                <span className="block truncate font-semibold text-xs">
+                                  {appointment.service?.name || "Service unavailable"}
+                                </span>
+                                <span className={`text-[10px] capitalize ${mutedText}`}>
+                                  {String(appointment.status).toLowerCase()}
+                                </span>
+                              </div>
+                            </div>
+                            <span className="text-xs">
+                              {new Date(`${appointment.appointmentDate}T12:00:00+08:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            </span>
+                            <span className="truncate text-xs">Not assigned</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  </section>
 
-                {/* Calendar & Actions Sidebar */}
-                <aside className="space-y-4">
-                  <section
-                    className={`rounded-2xl border p-4 transition-all duration-300 ${cardSurface}`}
-                  >
-                    <div className="mb-3 flex items-center justify-between">
+                  <section className={`rounded-2xl border p-6 shadow-sm ${cardSurface}`}>
+                    <div className="mb-4 flex items-center justify-between gap-2">
+                      <div>
+                        <h2 className="text-sm font-bold">Today’s Popular Picks</h2>
+                        <p className={`mt-1 text-[11px] ${mutedText}`}>Explore salon favorites and book your next visit.</p>
+                      </div>
                       <button
                         type="button"
-                        onClick={() =>
-                          setMonth(
-                            new Date(
-                              month.getFullYear(),
-                              month.getMonth() - 1,
-                              1,
-                            ),
-                          )
-                        }
+                        onClick={openServices}
+                        className="shrink-0 text-[11px] font-medium text-[#B4833F] hover:underline"
+                      >
+                        See all →
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {POPULAR_SERVICES.map((service) => (
+                        <button
+                          key={service.title}
+                          type="button"
+                          onClick={() => onOpenBooking({ title: service.title, category: service.category })}
+                          className={`flex min-h-[96px] w-full flex-col justify-between rounded-xl p-3.5 text-left transition-transform hover:-translate-y-0.5 ${service.color}`}
+                        >
+                          <span>
+                            <span className="block text-xs font-bold">{service.label}</span>
+                            <span className="mt-0.5 block text-[10px] opacity-80">{service.kind}</span>
+                          </span>
+                          <span className="mt-3 border-t border-current/15 pt-2 text-[10px] font-medium">
+                            {service.title}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                </div>
+
+                <section className={`flex min-h-[620px] min-w-0 flex-col rounded-2xl border p-6 shadow-sm lg:col-span-7 ${cardSurface}`}>
+                  <div className="mb-6 flex items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-base font-bold">Calendar</h2>
+                      <p className={`mt-1 text-xs ${mutedText}`}>Plan your next salon visit.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
                         aria-label="Previous month"
-                        className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-[#C5A059]/15 transition-colors text-xs"
+                        className={`flex h-9 w-9 items-center justify-center rounded-full border transition-colors hover:border-[#C5A059] ${isDarkMode ? "border-[#39342B]" : "border-[#E9E4D8]"}`}
                       >
                         ‹
                       </button>
-                      <h2 className="text-xs font-bold">
-                        {formatMonth(month)}
-                      </h2>
+                      <h3 className="min-w-32 text-center text-sm font-bold">{formatMonth(month)}</h3>
                       <button
                         type="button"
-                        onClick={() =>
-                          setMonth(
-                            new Date(
-                              month.getFullYear(),
-                              month.getMonth() + 1,
-                              1,
-                            ),
-                          )
-                        }
+                        onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
                         aria-label="Next month"
-                        className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-[#C5A059]/15 transition-colors text-xs"
+                        className={`flex h-9 w-9 items-center justify-center rounded-full border transition-colors hover:border-[#C5A059] ${isDarkMode ? "border-[#39342B]" : "border-[#E9E4D8]"}`}
                       >
                         ›
                       </button>
                     </div>
-                    <div className="grid grid-cols-7 gap-y-2 text-center text-[10px] mb-1">
-                      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(
-                        (day, index) => (
-                          <span key={`${day}-${index}`} className={mutedText}>
-                            {day}
-                          </span>
-                        ),
-                      )}
-                    </div>
-                    <div className="grid grid-cols-7 gap-y-2 text-center text-xs">
-                      {calendarDays.map((day, index) => (
-                        <span
-                          key={`${month.getMonth()}-${index}`}
-                          className={`mx-auto flex h-6 w-6 items-center justify-center rounded-full transition-all duration-200 ${
-                            day === today.getDate() &&
-                            month.getMonth() === today.getMonth() &&
-                            month.getFullYear() === today.getFullYear()
-                              ? "bg-[#4A3928] text-white font-bold shadow-xs"
-                              : "hover:bg-[#C5A059]/15"
-                          }`}
-                        >
-                          {day || ""}
-                        </span>
-                      ))}
-                    </div>
-                  </section>
-
-                  {/* Book an Appointment button — still opens the modal, only the nav item changed */}
-                  <button
-                    type="button"
-                    onClick={() => onOpenBooking()}
-                    className="flex w-full items-center justify-center gap-2 rounded-full bg-[#4A3928] px-4 py-3.5 text-xs font-semibold text-white hover:bg-[#725334] shadow-md transition-all duration-200 active:scale-95"
-                  >
-                    <CalendarPlus className="h-4 w-4" /> Book an Appointment
-                  </button>
-
-                  <p
-                    className={`flex items-center justify-center gap-1.5 text-[10px] ${mutedText}`}
-                  >
-                    <Clock3 className="h-3 w-3" /> Salon hours: 9:00 AM – 6:00
-                    PM
-                  </p>
-                </aside>
+                  </div>
+                  <div className={`mb-2 grid grid-cols-7 border-b pb-3 text-center text-xs font-semibold ${mutedText} ${isDarkMode ? "border-[#39342B]" : "border-[#E9E4D8]"}`}>
+                    {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, index) => (
+                      <span key={`${day}-${index}`}>{day}</span>
+                    ))}
+                  </div>
+                  <div className="grid flex-1 auto-rows-fr grid-cols-7 gap-y-2 text-center text-sm">
+                    {calendarDays.map((day, index) => (
+                      <span
+                        key={`${month.getMonth()}-${index}`}
+                        className={`mx-auto flex h-10 w-10 items-center justify-center self-center rounded-full transition-all duration-200 ${
+                          day === today.getDate() && month.getMonth() === today.getMonth() && month.getFullYear() === today.getFullYear()
+                            ? "bg-[#4A3928] text-white font-bold shadow-xs"
+                            : "hover:bg-[#C5A059]/15"
+                        }`}
+                      >
+                        {day || ""}
+                      </span>
+                    ))}
+                  </div>
+                  <div className={`mt-6 border-t pt-5 ${isDarkMode ? "border-[#39342B]" : "border-[#E9E4D8]"}`}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenBooking()}
+                      className="flex w-full items-center justify-center gap-2 rounded-full bg-[#4A3928] px-4 py-3.5 text-xs font-semibold text-white shadow-md transition-all duration-200 hover:bg-[#725334] active:scale-95"
+                    >
+                      <CalendarPlus className="h-4 w-4" /> Book an Appointment
+                    </button>
+                    <p className={`mt-3 flex items-center justify-center gap-1.5 text-[10px] ${mutedText}`}>
+                      <Clock3 className="h-3 w-3" /> Salon hours: 9:00 AM – 6:00 PM
+                    </p>
+                  </div>
+                </section>
               </div>
             </>
           )}
@@ -757,10 +736,7 @@ export default function MemberHomePage({
               id: "home",
               label: "Home",
               icon: Home,
-              action: () => {
-                setActiveSection("home");
-                setActivePage("home");
-              },
+              action: () => navigateMember("home", () => setActiveSection("home")),
             },
             {
               id: "services",
@@ -778,7 +754,7 @@ export default function MemberHomePage({
               id: "account",
               label: "Account",
               icon: UserRound,
-              action: () => setActivePage("member-account"),
+              action: () => navigateMember("member-account"),
             },
           ].map((item) => {
             const Icon = item.icon;
@@ -807,26 +783,24 @@ export default function MemberHomePage({
         </nav>
       </div>
 
-      {photoModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) { setPhotoModal(false); setCropSource(""); } }}>
-          <section role="dialog" aria-modal="true" aria-labelledby="profile-photo-modal-title" className={`max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl border p-5 shadow-2xl sm:p-6 ${isDarkMode ? "border-[#51493B] bg-[#211F1B] text-[#F1E7C6]" : "border-[#E9E4D8] bg-[#FFFDF8] text-[#443523]"}`}>
-            {photoModal === "view" ? <>
-              <div className="mb-5 flex items-start justify-between gap-4"><div><h2 id="profile-photo-modal-title" className="font-serif text-xl">Profile Picture</h2><p className={`mt-1 text-xs ${mutedText}`}>Preview, update, re-crop, or remove your profile picture.</p></div><button type="button" aria-label="Close" onClick={() => setPhotoModal(false)} className={`rounded-full p-2 ${isDarkMode ? "hover:bg-white/10" : "hover:bg-black/5"}`}><X size={17} /></button></div>
-              <div className="mx-auto mb-6 flex h-56 w-56 items-center justify-center overflow-hidden rounded-full bg-[#F6F0E6] text-5xl font-bold text-[#C5A059]">{profilePhoto ? <img src={profilePhoto} alt="Profile preview" className="h-full w-full object-cover" /> : initials || "M"}</div>
-              <div className="flex flex-wrap items-center justify-between gap-3"><button type="button" disabled={!profilePhoto} onClick={() => setConfirmPhotoRemoval(true)} className="text-xs font-bold text-red-600 disabled:opacity-40">Remove</button><div className="flex flex-wrap gap-2"><button type="button" disabled={!profilePhoto} onClick={() => { setCropSource(profilePhoto); setPhotoZoom(1); setPhotoOffset({ x: 0, y: 0 }); setPhotoModal("crop"); }} className={`rounded-lg border px-4 py-2.5 text-xs font-bold disabled:opacity-40 ${isDarkMode ? "border-[#51493B]" : "border-[#E7DFD4]"}`}><Crop size={14} className="mr-1 inline" />Crop</button><button type="button" onClick={() => photoInputRef.current?.click()} className="flex items-center gap-2 rounded-lg bg-[#4A3928] px-4 py-2.5 text-xs font-bold text-white"><Upload size={14} />Upload New Photo</button></div></div>
-              <div className="flex flex-wrap items-center justify-between gap-3"><button type="button" disabled={!profilePhoto} onClick={() => { setStoredPhoto({ key: avatarStorageKey, data: "" }); setPhotoModal(false); setProfileMessage({ type: "success", text: "Profile photo removed." }); }} className="text-xs font-bold text-red-600 disabled:opacity-40">Remove</button><div className="flex flex-wrap gap-2"><button type="button" disabled={!profilePhoto} onClick={() => { setCropSource(profilePhoto); setPhotoZoom(1); setPhotoOffset({ x: 0, y: 0 }); setPhotoModal("crop"); }} className={`rounded-lg border px-4 py-2.5 text-xs font-bold disabled:opacity-40 ${isDarkMode ? "border-[#51493B]" : "border-[#E7DFD4]"}`}><Crop size={14} className="mr-1 inline" />Crop</button><button type="button" onClick={() => photoInputRef.current?.click()} className="flex items-center gap-2 rounded-lg bg-[#4A3928] px-4 py-2.5 text-xs font-bold text-white"><Upload size={14} />Upload New Photo</button></div></div>
-            </> : <>
-              <div className="mb-5 flex items-start justify-between gap-4"><div><h2 id="profile-photo-modal-title" className="font-serif text-xl">Crop Profile Picture</h2><p className={`mt-1 text-xs ${mutedText}`}>Drag to reposition and use the slider to zoom your photo.</p></div><button type="button" aria-label="Close" onClick={() => { setPhotoModal(false); setCropSource(""); }} className={`rounded-full p-2 ${isDarkMode ? "hover:bg-white/10" : "hover:bg-black/5"}`}><X size={17} /></button></div>
-              <div className="mx-auto mb-5 h-64 w-64 max-w-full touch-none select-none overflow-hidden rounded-xl bg-[#F6F0E6]" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); photoDragRef.current = { x: event.clientX, y: event.clientY, offset: photoOffset }; }} onPointerMove={(event) => { if (photoDragRef.current) setPhotoOffset({ x: photoDragRef.current.offset.x + event.clientX - photoDragRef.current.x, y: photoDragRef.current.offset.y + event.clientY - photoDragRef.current.y }); }} onPointerUp={() => { photoDragRef.current = null; }} onPointerCancel={() => { photoDragRef.current = null; }}>
-                {cropSource && <img src={cropSource} alt="Crop preview" draggable="false" className="pointer-events-none h-full w-full object-cover" style={{ transform: `scale(${photoZoom}) translate(${photoOffset.x / photoZoom}px, ${photoOffset.y / photoZoom}px)` }} />}
-              </div>
-              <div className="mb-6 flex items-center gap-3"><ZoomOut size={17} className="shrink-0" /><input aria-label="Zoom photo" type="range" min="1" max="3" step="0.01" value={photoZoom} onChange={(event) => setPhotoZoom(Number(event.target.value))} className="w-full accent-[#4A3928]" /><ZoomIn size={17} className="shrink-0" /></div>
-              <div className="flex justify-end gap-2"><button type="button" onClick={() => { setPhotoModal(profilePhoto ? "view" : false); setCropSource(""); }} className={`rounded-lg border px-4 py-2.5 text-xs font-bold ${isDarkMode ? "border-[#51493B]" : "border-[#E7DFD4]"}`}>Cancel</button><button type="button" onClick={saveProfilePhotoCrop} className="rounded-lg bg-[#4A3928] px-5 py-2.5 text-xs font-bold text-white">Done</button></div>
-            </>}
-          </section>
-        </div>
-      )}
+      <ProfilePictureModal
+        isOpen={isPhotoModalOpen}
+        onClose={() => setIsPhotoModalOpen(false)}
+        currentImageUrl={profilePhoto}
+        onUpload={saveProfilePhoto}
+        onRemove={() => setConfirmPhotoRemoval(true)}
+        isDarkMode={isDarkMode}
+      />
+      <SaveChangesModal
+        isOpen={showSaveConfirmation}
+        onCancel={() => setShowSaveConfirmation(false)}
+        onConfirm={() => {
+          setShowSaveConfirmation(false);
+          void saveProfile();
+        }}
+      />
       {confirmPhotoRemoval && <ConfirmationModal title="Remove profile photo?" message="Your current profile photo will be removed from this device." confirmLabel="Remove photo" danger onCancel={() => setConfirmPhotoRemoval(false)} onConfirm={removeProfilePhoto} />}
+      {confirmLogout && <ConfirmationModal title="Log out?" message="Are you sure you want to log out of your account?" confirmLabel="Log out" danger onCancel={() => setConfirmLogout(false)} onConfirm={() => { setConfirmLogout(false); onLogout?.(); }} />}
     </div>
   );
 }
