@@ -1,4 +1,4 @@
-import HeaderActions from '../workspace/HeaderActions';
+import SuperAdminHeader from './SuperAdminHeader';
 import { ArrowDownToLine, ArrowUpRight, Check, ChevronLeft, ChevronRight, FileText, KeyRound, Search, ShieldCheck, Users } from 'lucide-react';
 import { useState } from 'react';
 import { activity, metrics } from './dashboardData';
@@ -36,20 +36,28 @@ export function AuditTable({ full = false, onViewAll }) {
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     const link = document.createElement('a'); link.href = url; link.download = 'centyzz-sample-audit-logs.csv'; link.click(); URL.revokeObjectURL(url); setExported(true);
   }
-  return <section className="sa-card sa-audit">
-    <div className="sa-audit-heading"><div><span className="sa-eyebrow">ACTIVITY MONITOR</span><h2>{full ? 'System audit logs' : 'Audit trails & activity logs'}</h2><p>A clear view of changes across your salon.</p></div><button className="sa-button" onClick={full ? download : onViewAll}>{full ? <ArrowDownToLine size={15} /> : <FileText size={15} />}{full ? 'Export CSV' : 'View full logs'}{!full && <ArrowUpRight size={14} />}</button></div>
+  return <>
+    {full && <SuperAdminHeader title="System audit logs" description="Review changes and activity across your salon." />}
+    <section className="sa-card sa-audit">
+    <div className="sa-audit-heading"><div><h2>{full ? 'Audit activity' : 'Audit trails & activity logs'}</h2><p>A clear view of changes across your salon.</p></div><button className="sa-button" onClick={full ? download : onViewAll}>{full ? <ArrowDownToLine size={15} /> : <FileText size={15} />}{full ? 'Export CSV' : 'View full logs'}{!full && <ArrowUpRight size={14} />}</button></div>
     <div className="sa-table-tools"><label className="sa-search"><Search size={16} /><input aria-label="Search activity" placeholder="Search activity, users, or services…" value={query} onChange={event => { setQuery(event.target.value); setPage(0); }} /></label><select aria-label="Filter actions" value={filter} onChange={event => { setFilter(event.target.value); setPage(0); }}><option>All actions</option>{['Changed', 'Updated', 'Deleted', 'Granted', 'Created'].map(action => <option key={action}>{action}</option>)}</select></div>
     {exported && <p className="sa-inline-notice" role="status">Sample audit logs exported.</p>}
     <div className="sa-table-scroll"><table className="sa-table"><thead><tr><th>User</th><th>Action</th><th>Subject</th><th>Date & time</th></tr></thead><tbody>{rows.map(row => <tr key={row.id}><td><div className="sa-user-cell"><span className={`sa-table-avatar ${row.tone}`}>{row.name.split(' ').slice(0, 2).map(n => n[0]).join('')}</span><div><strong>{row.name}</strong><small>{row.role}</small></div></div></td><td><span className={`sa-badge ${row.tone}`}><i />{row.action}</span></td><td><span className="sa-subject">{row.subject}</span><small>{row.category} <span className="sa-divider-dot">·</span> {row.id}</small></td><td><span className="sa-date">{row.date}</span><small>{row.time}</small></td></tr>)}</tbody></table>{!rows.length && <div className="sa-empty">No activity matches your search.</div>}</div>
     <div className="sa-table-footer"><span>{filtered.length ? `${currentPage * pageSize + 1}–${Math.min((currentPage + 1) * pageSize, filtered.length)}` : '0'} of {filtered.length} activities</span><div><button aria-label="Previous page" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}><ChevronLeft size={16} /></button><span>{currentPage + 1}</span><button aria-label="Next page" disabled={currentPage >= pages - 1} onClick={() => setPage(currentPage + 1)}><ChevronRight size={16} /></button></div></div>
-  </section>;
+    </section>
+  </>;
 }
 
 export default function Overview({ name, onNavigate }) {
-  return <><div className="sa-welcome"><div><div className="sa-eyebrow">YOUR SALON, CONNECTED</div><h1>Welcome back, {name.split(' ')[0]}. <span className="sa-welcome-spark">✦</span></h1><p>Here’s what’s happening across your system today.</p></div><div className="sa-overview-tools"><HeaderActions /><div className="sa-status"><span className="sa-dot" />System overview <span className="sa-status-line" /> Sample data</div></div></div>
+  const today = new Date();
+  const greeting = today.getHours() < 12 ? 'Morning' : today.getHours() < 18 ? 'Afternoon' : 'Evening';
+  const date = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+  return <>
+    <SuperAdminHeader title={`Good ${greeting}, ${name.split(' ')[0]}!`} description={`Today is ${date}`} />
     <div className="sa-metrics">{metrics.map(metric => <MetricCard key={metric.title} metric={metric} />)}</div>
     <div className="sa-security-note"><span className="sa-note-icon"><ShieldCheck size={19} /></span><div><strong>A little oversight goes a long way.</strong><span>Review your security alerts to keep your salon’s data protected.</span></div><button onClick={() => onNavigate('audit')}>Review audit logs <ArrowUpRight size={15} /></button></div>
     <AuditTable onViewAll={() => onNavigate('audit')} />
-    <footer className="sa-workspace-footer"><span>© {new Date().getFullYear()} Centy’zz Hair & Beauty</span><span><Check size={12} /> Superadmin workspace <span>·</span> Frontend preview</span></footer>
+    <footer className="sa-workspace-footer"><span>© {today.getFullYear()} Centy’zz Hair & Beauty</span><span><Check size={12} /> Superadmin workspace <span>·</span> Sample dashboard data</span></footer>
   </>;
 }
