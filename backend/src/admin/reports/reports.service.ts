@@ -8,7 +8,7 @@ const peso = (n: number) =>
   `₱${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 @Injectable()
-export class ReportsService implements OnModuleDestroy {
+export class ReportsService {
   private readonly logger = new Logger(ReportsService.name);
 
   async getPosReportData(date: string) {
@@ -62,13 +62,6 @@ export class ReportsService implements OnModuleDestroy {
       const openingCash = hasData ? Number(closeout?.opening_cash || 5000) : 0;
       const expectedCash = openingCash + cashSales;
 
-  async getPosReportData(date: string) {
-    try {
-      const raw = await this.transactionsForDate(date);
-      const closeout = await this.closeoutForDate(date);
-      const sums = this.totals(raw);
-      const openingCash = Number(closeout?.opening_cash ?? 5000);
-      const expectedCash = openingCash + sums.cash;
       return {
         selectedDate: date,
         kpiData: {
@@ -81,27 +74,19 @@ export class ReportsService implements OnModuleDestroy {
           voidedRefunds: peso(voidedTotal),
           voidedCount: `${voidedTxns.length} transactions`,
         },
-        transactions: raw.map((row) => ({
-          txnId: row.txn_id || `TXN-${row.id}`,
-          time: row.txn_time || '',
-          cashier: row.cashier || '',
-          service: row.service || '',
-          method: row.method || '',
-          amount: Number(row.amount || 0),
-          status: row.status || '',
-        })),
+        transactions,
         closeoutInfo: {
           register: closeout?.register_id || 'Register 1',
-          cashier: closeout?.cashier || '',
-          shift: closeout?.shift_hours || '',
+          cashier: closeout?.cashier || 'Aljean Mark A. Angeles',
+          shift: closeout?.shift_hours || '8:00 AM – 8:00 PM',
           openingCash,
           totalCashSales: cashSales,
           totalDigitalSales: digitalSales,
           voidedRefunded: peso(voidedTotal),
           expectedCash,
-          actualCashCount: closeout?.actual_cash == null ? null : Number(closeout.actual_cash),
-          discrepancy: Number(closeout?.discrepancy ?? 0),
-          isClosed: Boolean(closeout?.is_closed),
+          actualCashCount: Number(closeout?.actual_cash || 0),
+          discrepancy: Number(closeout?.discrepancy || 0),
+          isClosed: !!closeout?.is_closed,
         },
       };
     } catch (error) {
