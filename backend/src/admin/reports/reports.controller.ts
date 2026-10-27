@@ -1,16 +1,4 @@
-
-import {
-  Controller,
-  Get,
-  Post,
-  Delete,
-  Query,
-  Param,
-  Body,
-  ParseIntPipe,
-  UseGuards,
-} from '@nestjs/common';
-
+import { Controller, Get, Post, Delete, Query, Param, Body, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { ReportsService } from './reports.service.js';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
 import { RolesGuard } from '../../auth/roles.guard.js';
@@ -23,8 +11,10 @@ export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Get('pos')
+  
   async getPosReportData(@Query('date') date?: string) {
-    const selectedDate = date || new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    // If no date is passed, fallback to August 20, 2026
+    const selectedDate = date || 'August 20, 2026';
     return this.reportsService.getPosReportData(selectedDate);
   }
 
