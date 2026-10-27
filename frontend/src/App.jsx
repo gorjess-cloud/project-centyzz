@@ -1,8 +1,13 @@
+<<<<<<< .merge_file_bPs3KX
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+=======
 import CredentialRecoveryPage from './pages/CredentialRecoveryPage';
 import { useEffect, useRef, useState } from 'react';
+>>>>>>> .merge_file_AwTDXX
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
-import BookingModal from './components/BookingModal';
+import BookingModal, { clientBookingQueueKey } from './components/BookingModal';
 import AdminLayout from './components/AdminLayout';
 import FirstManagementSetupModal from './components/FirstManagementSetupModal';
 import ManagementSetupDashboardPreview from './components/ManagementSetupDashboardPreview';
@@ -22,17 +27,47 @@ import MemberBook from './pages/MemberBook';
 import { useWorkspaceTheme } from './components/workspace/WorkspaceContext';
 import { useUnsavedChanges } from './components/UnsavedChangesProvider';
 
+const memberRoutePages = {
+  '/booking': 'member-book',
+  '/member': 'home',
+  '/member/services': 'member-services',
+  '/member/bookings': 'member-bookings',
+  '/member/account': 'member-account',
+};
+
+const memberPagePaths = Object.fromEntries(
+  Object.entries(memberRoutePages).map(([path, page]) => [page, path]),
+);
 
 export default function App() {
+<<<<<<< .merge_file_bPs3KX
+  const location = useLocation();
+  const navigate = useNavigate();
+  const routePage = memberRoutePages[location.pathname];
+=======
   const [credentialRecoveryHash] = useState(() => window.location.hash.startsWith('#/recover/') ? window.location.hash : null);
+>>>>>>> .merge_file_AwTDXX
   const [activePage, setActivePage] = useState(() => {
     if (window.location.pathname === '/forgot-pin') return 'forgot-pin';
+    if (window.location.pathname === '/booking') return 'member-book';
+    if (window.location.pathname === '/member/services') return 'member-services';
+    if (window.location.pathname === '/member/bookings') return 'member-bookings';
+    if (window.location.pathname === '/member/account') return 'member-account';
+    if (window.location.pathname === '/member') return 'home';
     if (new URLSearchParams(window.location.search).get('page') === 'auth') return 'auth';
     return 'home';
   });
   const [serviceFilter, setServiceFilter] = useState('all');
   const [isBookingOpen, setIsBookingOpen] = useState(() => new URLSearchParams(window.location.search).has('centyzz_booking'));
   const [selectedService, setSelectedService] = useState(null);
+  const [clientBookingQueue, setClientBookingQueue] = useState(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(clientBookingQueueKey) || 'null');
+      return Array.isArray(saved?.services) && saved.services.length ? saved : null;
+    } catch {
+      return null;
+    }
+  });
   const [bookingSessionId, setBookingSessionId] = useState(0);
   const [authMode, setAuthMode] = useState('login');
   const { theme, toggleTheme } = useWorkspaceTheme();
@@ -47,11 +82,19 @@ export default function App() {
   const [appointmentsError, setAppointmentsError] = useState('');
   const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const page = routePage ? (memberUser ? routePage : 'home') : activePage;
   const { guardNavigation } = useUnsavedChanges();
   const navigatePage = (page) => {
-    if (page === activePage) return;
-    guardNavigation(() => setActivePage(page));
+    if (page === activePage || page === routePage) return;
+    guardNavigation(() => {
+      setActivePage(page);
+      if (memberPagePaths[page]) navigate(memberPagePaths[page]);
+    });
   };
+
+  useEffect(() => {
+    if (routePage && !memberUser) navigate('/', { replace: true });
+  }, [routePage, memberUser, navigate]);
 
   useEffect(() => {
     if (!memberUser?.accessToken || memberUser?.mustCompleteSetup) return undefined;
@@ -80,6 +123,7 @@ export default function App() {
         setIsBookingOpen(false);
         setSelectedService(service);
         setActivePage('member-book');
+        navigate('/booking', { state: { selectedService: service ?? [] } });
       });
       return;
     }
@@ -94,6 +138,7 @@ export default function App() {
       setIsBookingOpen(false);
       setSelectedService(service);
       setActivePage('member-book');
+      navigate('/booking', { state: { selectedService: service ?? [] } });
     });
   };
 
@@ -103,10 +148,19 @@ export default function App() {
     setAppointmentsRefreshKey((key) => key + 1);
   };
 
-  const isAuthPage = activePage === 'auth' || activePage === 'forgot-pin';
-  const isAdminDashboard = activePage === 'admin';
+  const closeBookingModal = () => {
+    setIsBookingOpen(false);
+    if (clientBookingQueue) {
+      sessionStorage.removeItem(clientBookingQueueKey);
+      setClientBookingQueue(null);
+      setActivePage('services');
+    }
+  };
+
+  const isAuthPage = page === 'auth' || page === 'forgot-pin';
+  const isAdminDashboard = page === 'admin';
   const isMemberDashboard = Boolean(memberUser)
-    && ['home', 'member-services', 'member-bookings', 'member-book', 'member-account'].includes(activePage);
+    && ['home', 'member-services', 'member-bookings', 'member-book', 'member-account'].includes(page);
 
   const enterDemoDashboard = (user) => {
     setMemberAppointments([]);
@@ -193,7 +247,7 @@ export default function App() {
       
       {!isAuthPage && !isMemberDashboard && !isAdminDashboard && (
         <Navbar 
-          activePage={activePage} 
+          activePage={page}
           setActivePage={navigatePage}
           onOpenBooking={handleOpenBooking}
           setServiceFilter={setServiceFilter}
@@ -218,12 +272,11 @@ export default function App() {
           />
         )}
 
-        {!isAdminDashboard && activePage === 'home' && (
+        {!isAdminDashboard && page === 'home' && (
           memberUser ? (
             <MemberHomePage
               user={memberUser}
               isDarkMode={isDarkMode}
-              setIsDarkMode={setIsDarkMode}
               setActivePage={navigatePage}
               onOpenBooking={handleMemberBooking}
               onLogout={requestLogout}
@@ -242,7 +295,7 @@ export default function App() {
             />
           )
         )}
-        {!isAdminDashboard && activePage === 'member-account' && memberUser && (
+        {!isAdminDashboard && page === 'member-account' && memberUser && (
           <MemberHomePage
             user={memberUser}
             isDarkMode={isDarkMode}
@@ -258,30 +311,30 @@ export default function App() {
             appointmentsError={appointmentsError}
           />
         )}
-        {!isAdminDashboard && activePage === 'member-services' && memberUser && (
+        {!isAdminDashboard && page === 'member-services' && memberUser && (
           <MemberServicesPage
             user={memberUser}
             isDarkMode={isDarkMode}
             setActivePage={navigatePage}
-            onOpenBooking={handleMemberBooking}
             onLogout={requestLogout}
+            onAppointmentCreated={handleAppointmentCreated}
             appointments={memberAppointments}
             isLoadingAppointments={isLoadingAppointments}
             appointmentsError={appointmentsError}
           />
         )}
-        {!isAdminDashboard && activePage === 'member-book' && memberUser && (
+        {!isAdminDashboard && page === 'member-book' && memberUser && (
           <MemberBook
             user={memberUser}
             isDarkMode={isDarkMode}
             setIsDarkMode={setIsDarkMode}
             setActivePage={navigatePage}
             onLogout={requestLogout}
-            selectedService={selectedService}
+            selectedService={location.state?.selectedService ?? []}
             onAppointmentCreated={handleAppointmentCreated}
           />
         )}
-        {!isAdminDashboard && activePage === 'member-bookings' && memberUser && (
+        {!isAdminDashboard && page === 'member-bookings' && memberUser && (
           <MemberBookingsPage
             user={memberUser}
             isDarkMode={isDarkMode}
@@ -291,7 +344,7 @@ export default function App() {
             onLogout={requestLogout}
           />
         )}
-        {!isAdminDashboard && activePage === 'services' && (
+        {!isAdminDashboard && page === 'services' && (
           <ServicesPage 
             serviceFilter={serviceFilter}
             setServiceFilter={setServiceFilter}
@@ -302,7 +355,7 @@ export default function App() {
             isDarkMode={isDarkMode}
           />
         )}
-        {!isAdminDashboard && activePage === 'promos' && (
+        {!isAdminDashboard && page === 'promos' && (
           <PromosPage
             onOpenBooking={handleOpenBooking}
             setActivePage={navigatePage}
@@ -310,10 +363,10 @@ export default function App() {
             isDarkMode={isDarkMode}
           />
         )}
-        {!isAdminDashboard && activePage === 'about' && (
+        {!isAdminDashboard && page === 'about' && (
           <AboutPage isDarkMode={isDarkMode} />
         )}
-        {!isAdminDashboard && activePage === 'auth' && (
+        {!isAdminDashboard && page === 'auth' && (
           <AuthPage
             mode={authMode}
             setMode={setAuthMode}
@@ -324,7 +377,7 @@ export default function App() {
             setIsDarkMode={setIsDarkMode}
           />
         )}
-        {!isAdminDashboard && activePage === 'forgot-pin' && (
+        {!isAdminDashboard && page === 'forgot-pin' && (
           <ForgotPinPage
             isDarkMode={isDarkMode}
             setIsDarkMode={setIsDarkMode}
@@ -350,8 +403,11 @@ export default function App() {
         <BookingModal
           key={bookingSessionId}
           isOpen={isBookingOpen}
-          onClose={() => setIsBookingOpen(false)}
+          onClose={closeBookingModal}
           selectedService={selectedService}
+          initialServices={clientBookingQueue?.services || []}
+          initialCompletedCount={clientBookingQueue?.completedCount || 0}
+          isClientCart={Boolean(clientBookingQueue)}
           isDarkMode={isDarkMode}
         />
       )}

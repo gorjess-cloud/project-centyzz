@@ -32,6 +32,7 @@ export default function MemberBookScheduler({
   onLogout,
   selectedService,
   onAppointmentCreated,
+  embedded = false,
 }) {
   const [serviceGroups, setServiceGroups] = useState([]);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
@@ -45,7 +46,8 @@ export default function MemberBookScheduler({
   const [formError, setFormError] = useState('');
 
   const services = useMemo(
-    () => serviceGroups.flatMap((group) => group.services || []),
+    () => (Array.isArray(serviceGroups) ? serviceGroups : [])
+      .flatMap((group) => Array.isArray(group?.services) ? group.services : []),
     [serviceGroups],
   );
   const fullName = user?.fullName || user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Member';
@@ -67,14 +69,18 @@ export default function MemberBookScheduler({
     api.getServices()
       .then((result) => {
         if (!isCurrent) return;
-        const groups = Array.isArray(result) ? result : [];
+        const groups = Array.isArray(result)
+          ? result
+          : Array.isArray(result?.data)
+            ? result.data
+            : [];
         setServiceGroups(groups);
         const requested = Array.isArray(selectedService) ? selectedService : selectedService ? [selectedService] : [];
-        const availableServices = groups.flatMap((group) => group.services || []);
+        const availableServices = groups.flatMap((group) => Array.isArray(group?.services) ? group.services : []);
         const matches = requested.map((requestedService) => {
           const requestedName = String(requestedService?.title || requestedService?.name || '').toLowerCase();
-          return availableServices.find((item) => String(item.id) === String(requestedService?.id))
-            || availableServices.find((item) => requestedName && item.name.toLowerCase() === requestedName);
+          return availableServices.find((item) => String(item?.id) === String(requestedService?.id))
+            || availableServices.find((item) => requestedName && String(item?.name || '').toLowerCase() === requestedName);
         }).filter(Boolean);
         setSelectedServiceIds(matches.map((item) => String(item.id)));
       })
@@ -147,9 +153,17 @@ export default function MemberBookScheduler({
     }
   };
 
+  const service = selectedServices[0];
+  const selectedTime = selectedServices
+    .map((item) => selectedTimes[item.id])
+    .filter(Boolean)
+    .join(', ');
+  const hasAllSelectedTimes = selectedServices.length > 0
+    && selectedServices.every((item) => selectedTimes[item.id]);
+
   return (
-    <div className={`min-h-screen pb-24 lg:flex lg:pb-0 ${surface}`}>
-      <aside className={`relative hidden w-20 shrink-0 flex-col border-r lg:sticky lg:top-0 lg:flex lg:h-screen ${sidebarSurface}`}>
+    <div className={`${embedded ? "min-h-0" : "min-h-screen pb-24 lg:flex lg:pb-0"} ${surface}`}>
+      {!embedded && <aside className={`relative hidden w-20 shrink-0 flex-col border-r lg:sticky lg:top-0 lg:flex lg:h-screen ${sidebarSurface}`}>
         <div className="flex h-16 items-center justify-center border-b border-inherit">
           <img src="/logo.png" alt="Centy'zz Salon" className="h-10 w-10 rounded-full object-cover" />
         </div>
@@ -177,15 +191,15 @@ export default function MemberBookScheduler({
         <button type="button" onClick={onLogout} aria-label="Log out" className="mb-3 flex h-10 items-center justify-center text-red-600 hover:bg-red-50 hover:text-red-700">
           <LogOut className="h-4 w-4" />
         </button>
-      </aside>
+      </aside>}
 
-      <main className="min-w-0 flex-1 px-3 py-4 sm:px-6 sm:py-5 lg:px-8">
+      <main className={`min-w-0 flex-1 px-3 py-4 sm:px-6 sm:py-5 ${embedded ? "lg:px-6" : "lg:px-8"}`}>
         <div className="mx-auto max-w-5xl">
           <header className="mb-6 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <button type="button" onClick={() => setActivePage('member-bookings')} aria-label="Back to bookings" className="text-[#8A8174] hover:text-[#C5A059]">
+              {!embedded && <button type="button" onClick={() => setActivePage('member-bookings')} aria-label="Back to bookings" className="text-[#8A8174] hover:text-[#C5A059]">
                 <ArrowLeft className="h-5 w-5" />
-              </button>
+              </button>}
               <div>
                 <h1 className="text-xl font-bold">Book an appointment</h1>
                 <p className={`mt-0.5 text-xs ${mutedText}`}>Choose a service, date, and available time.</p>
@@ -267,13 +281,13 @@ export default function MemberBookScheduler({
                 <dl className={`mt-4 space-y-3 text-xs ${mutedText}`}>
                   <div className="flex justify-between gap-3"><dt>Member</dt><dd className="text-right font-medium">{fullName}</dd></div>
                   <div className="flex justify-between gap-3"><dt>Email</dt><dd className="break-all text-right font-medium">{user?.email || 'Not provided'}</dd></div>
-                  <div className="flex justify-between gap-3"><dt>Service</dt><dd className="text-right font-medium">{service?.name || 'Not selected'}</dd></div>
+                  <div className="flex justify-between gap-3"><dt>Service</dt><dd className="text-right font-medium">{selectedServices.map((item) => item.name).join(', ') || 'Not selected'}</dd></div>
                   <div className="flex justify-between gap-3"><dt>Date</dt><dd className="text-right font-medium">{formatDate(appointmentDate)}</dd></div>
                   <div className="flex justify-between gap-3"><dt>Time</dt><dd className="text-right font-medium">{selectedTime || 'Not selected'}</dd></div>
                 </dl>
                 {service && <p className="mt-4 border-t border-inherit pt-3 text-sm font-bold">₱{Number(service.price).toFixed(2)}</p>}
               </section>
-              <button type="submit" disabled={isSubmitting || isLoadingServices || !service || !selectedTime} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#4A3928] px-4 py-3 text-xs font-semibold text-white transition-colors hover:bg-[#725334] disabled:cursor-not-allowed disabled:opacity-50">
+              <button type="submit" disabled={isSubmitting || isLoadingServices || !service || !hasAllSelectedTimes} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#4A3928] px-4 py-3 text-xs font-semibold text-white transition-colors hover:bg-[#725334] disabled:cursor-not-allowed disabled:opacity-50">
                 {isSubmitting ? 'Saving appointment...' : <><Check className="h-4 w-4" /> Confirm appointment</>}
               </button>
             </aside>
@@ -281,12 +295,12 @@ export default function MemberBookScheduler({
         </div>
       </main>
 
-      <nav aria-label="Member mobile navigation" className="fixed bottom-3 left-1/2 z-40 flex w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 items-center justify-around rounded-full border border-white/10 bg-[#4A3928]/95 px-2 py-1.5 text-white shadow-xl backdrop-blur-md lg:hidden">
+      {!embedded && <nav aria-label="Member mobile navigation" className="fixed bottom-3 left-1/2 z-40 flex w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 items-center justify-around rounded-full border border-white/10 bg-[#4A3928]/95 px-2 py-1.5 text-white shadow-xl backdrop-blur-md lg:hidden">
         <button type="button" onClick={() => setActivePage('home')} className="flex flex-col items-center p-2 text-[10px]"><Home className="h-5 w-5" /><span>Home</span></button>
         <button type="button" onClick={() => setActivePage('member-services')} className="flex flex-col items-center p-2 text-[10px]"><Scissors className="h-5 w-5" /><span>Services</span></button>
         <button type="button" onClick={() => setActivePage('member-bookings')} aria-current="page" className="flex flex-col items-center p-2 text-[10px] font-bold text-[#F1E7C6]"><CalendarDays className="h-5 w-5" /><span>Bookings</span></button>
         <button type="button" onClick={() => setActivePage('member-account')} className="flex flex-col items-center p-2 text-[10px]"><UserRound className="h-5 w-5" /><span>Account</span></button>
-      </nav>
+      </nav>}
     </div>
   );
 }

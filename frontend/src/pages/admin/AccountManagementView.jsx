@@ -279,9 +279,7 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs font-medium text-[#2A1E1B] outline-none focus:border-[#C5A059]"
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Email Address</label>
                 <input
@@ -303,17 +301,17 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs font-medium text-[#2A1E1B] outline-none focus:border-[#C5A059]"
                 />
               </div>
-            </div>
 
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Assigned System Role</label>
-              <input
-                type="text"
-                readOnly
-                value={profileForm.role}
-                className="w-full sm:w-1/2 px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#F6F4EF] text-xs font-bold text-[#8A8174] cursor-not-allowed"
-              />
-              <p className="text-[10px] text-[#8A8174] mt-1">Role assignments can only be modified by Superadmin accounts.</p>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Assigned System Role</label>
+                <input
+                  type="text"
+                  disabled
+                  value={profileForm.role}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#F6F4EF] text-xs font-bold text-[#8A8174] cursor-not-allowed"
+                />
+                <p className="text-[10px] text-[#8A8174] mt-1">Role assignments can only be modified by Superadmin accounts.</p>
+              </div>
             </div>
 
             <div className="pt-2">

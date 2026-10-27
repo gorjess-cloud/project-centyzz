@@ -4,9 +4,10 @@ const STORAGE_KEY = "centyzz-member-sidebar-collapsed";
 
 function readCollapsedState() {
   try {
-    return localStorage.getItem(STORAGE_KEY) !== "false";
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    return savedState === null ? false : savedState !== "false";
   } catch {
-    return true;
+    return false;
   }
 }
 

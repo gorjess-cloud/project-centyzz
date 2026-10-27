@@ -14,7 +14,7 @@ export default function Navbar({ activePage, setActivePage, setServiceFilter, se
     : 'bg-[#D1B06D] text-[#1F1A17] hover:bg-[#C5A059]';
 
   return (
-    <header className={`sticky top-0 z-40 backdrop-blur-md border-b ${shellClasses}`}>
+    <header className={`sticky top-0 z-40 rounded-b-2xl backdrop-blur-md border-b ${shellClasses}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between sm:h-20">
           <div 

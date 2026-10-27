@@ -1,6 +1,7 @@
 import HeaderActions from '../../components/workspace/HeaderActions';
 import ConfirmationModal from '../../components/ConfirmationModal';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { api } from '../../api/client';
 import { 
   Search, 
   Plus, 
@@ -16,8 +17,9 @@ import {
   UserPlus
 } from 'lucide-react';
 
-export default function ScheduleManagementView({ showHeaderActions = true }) {
+export default function ScheduleManagementView({ showHeaderActions = true, currentUser }) {
   const [toastMessage, setToastMessage] = useState('');
+  const [appointmentsError, setAppointmentsError] = useState('');
 
   // Main Tab State: 'active' vs 'archived'
   const [mainTab, setMainTab] = useState('active');
@@ -88,7 +90,7 @@ export default function ScheduleManagementView({ showHeaderActions = true }) {
   ]);
 
   // Appointments Dataset
-  const [appointments, setAppointments] = useState([
+  const [appointments, setAppointments] = useState(currentUser?.accessToken ? [] : [
     { 
       id: 'A-78402', 
       clientName: 'Mary Lisondra', 
@@ -129,6 +131,36 @@ export default function ScheduleManagementView({ showHeaderActions = true }) {
       notes: 'Prefers nude gel polish colors.'
     }
   ]);
+
+  useEffect(() => {
+    if (!currentUser?.accessToken) return undefined;
+    let active = true;
+    api.getStaffAppointments(currentUser.accessToken)
+      .then((result) => {
+        if (!Array.isArray(result?.data)) {
+          throw new Error('The server returned an invalid appointments list.');
+        }
+        if (!active) return;
+        setAppointments(result.data.map((appointment) => ({
+          ...appointment,
+          clientName: appointment.customerName || 'Guest',
+          clientEmail: appointment.customerEmail || '',
+          clientPhone: appointment.customerPhone || '',
+          serviceName: appointment.service?.name || appointment.serviceName || '',
+          duration: appointment.service?.durationMinutes
+            ? `${appointment.service.durationMinutes} mins`
+            : '',
+          price: appointment.service?.price == null
+            ? ''
+            : `₱${Number(appointment.service.price).toFixed(2)}`,
+          stylist: appointment.stylistName || 'Unassigned',
+          dateTime: `${appointment.appointmentDate || ''} at ${String(appointment.startTime || '').slice(0, 5)}`,
+        })));
+        setAppointmentsError('');
+      })
+      .catch((error) => { if (active) setAppointmentsError(error.message || 'Unable to load appointments.'); });
+    return () => { active = false; };
+  }, [currentUser?.accessToken]);
 
   // Modals & Action Target States
   const [isAddStaffModalOpen, setIsAddStaffModalOpen] = useState(false);
@@ -567,6 +599,7 @@ export default function ScheduleManagementView({ showHeaderActions = true }) {
         {/* ================= SUB-TAB 3: APPOINTMENTS ================= */}
         {activeSubTab === 'appointments' && (
           <div className="space-y-4 animate-fadeIn">
+            {appointmentsError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">{appointmentsError}</p>}
             {appointments.map((app) => (
               <div
                 key={app.id}
@@ -580,7 +613,7 @@ export default function ScheduleManagementView({ showHeaderActions = true }) {
                   <div>
                     <h4 className="font-bold text-[#2A1E1B] text-sm">{app.clientName}</h4>
                     <p className="text-xs text-[#8A8174] mt-0.5">
-                      {app.serviceName} &bull; <strong className="text-[#2A1E1B]">{app.stylist}</strong>
+                      {app.service?.name || app.serviceName || 'Service not specified'} &bull; <strong className="text-[#2A1E1B]">{app.stylist}</strong>
                     </p>
                   </div>
                 </div>
@@ -799,7 +832,7 @@ export default function ScheduleManagementView({ showHeaderActions = true }) {
                     <span className="text-xs font-bold text-[#8A8174]">Ref: #{selectedAppointment.id}</span>
                   </div>
 
-                  <h3 className="text-2xl font-bold text-[#2A1E1B]">{selectedAppointment.serviceName}</h3>
+                  <h3 className="text-2xl font-bold text-[#2A1E1B]">{selectedAppointment.service?.name || selectedAppointment.serviceName || 'Service not specified'}</h3>
 
                   <div className="flex items-center gap-6 text-xs text-[#2A1E1B] font-bold pt-2 border-t border-[#E7DFD4]/60">
                     <span className="flex items-center gap-1.5"><Clock size={15} /> {selectedAppointment.duration}</span>

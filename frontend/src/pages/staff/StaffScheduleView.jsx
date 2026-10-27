@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, CreditCard, Trash2, CalendarClock, Tag, Check } from 'lucide-react';
+import { Search, CreditCard, Trash2, CalendarClock, Tag, Check, Lock } from 'lucide-react';
 import { Toast, useToast, Badge, EmptyState, ConfirmModal, peso, card, input } from '../../components/staff/ui';
 import useModalScrollLock from '../../hooks/useModalScrollLock';
 import { api } from '../../api/client';
@@ -8,45 +8,37 @@ import { api } from '../../api/client';
 const TAX = 0.0825;
 const initials = (n = '') => n.split(' ').slice(0, 2).map((p) => p[0] || '').join('');
 
-export default function StaffScheduleView({ currentUser }) {
+export default function StaffScheduleView({
+  currentUser,
+  appointments,
+  appointmentsLoading,
+  appointmentsError,
+  onRefreshAppointments,
+  onAppointmentUpdated,
+}) {
   const [code, setCode] = useState('');
   const [appt, setAppt] = useState(null);
-  const [appointments, setAppointments] = useState([]);
-  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
-  const [appointmentsError, setAppointmentsError] = useState('');
-  const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0);
   const [promo, setPromo] = useState('');
   const [promoApplied, setPromoApplied] = useState(false);
   const [promoValue, setPromoValue] = useState(0);
   const [promoType, setPromoType] = useState('PERCENTAGE');
   const [toast, say] = useToast();
   const [confirm, setConfirm] = useState(null);
-  useModalScrollLock(Boolean(confirm?.title));
-
-  useEffect(() => {
-    let current = true;
-    if (!currentUser?.accessToken) {
-      setAppointmentsError('Sign in with a staff account to load appointments.');
-      setAppointmentsLoading(false);
-      return undefined;
-    }
-    setAppointmentsLoading(true);
-    setAppointmentsError('');
-    api.getStaffAppointments(currentUser.accessToken)
-      .then((result) => { if (current) setAppointments(result.data ?? []); })
-      .catch((error) => { if (current) setAppointmentsError(error.message); })
-      .finally(() => { if (current) setAppointmentsLoading(false); });
-    return () => { current = false; };
-  }, [currentUser?.accessToken, appointmentsRefreshKey]);
+  const [isConfirmCancelOpen, setIsConfirmCancelOpen] = useState(false);
+  const [isAuthPinOpen, setIsAuthPinOpen] = useState(false);
+  const [authPin, setAuthPin] = useState('');
+  useModalScrollLock(Boolean(confirm?.title || isConfirmCancelOpen || isAuthPinOpen));
 
   const subtotal = appt ? appt.items.reduce((s, i) => s + i.price, 0) : 0;
   const discount = promoApplied ? Math.min(promoType.includes('PERCENT') ? subtotal * promoValue / 100 : promoValue, subtotal) : 0;
   const tax = (subtotal - discount) * TAX;
   const total = subtotal - discount + tax;
   const query = code.trim().toLowerCase();
+  const serviceName = (appointment) =>
+    appointment.service?.name || appointment.serviceName || 'Service not specified';
   const activeAppointments = appointments.filter((appointment) => !['CANCELLED', 'NO_SHOW'].includes(appointment.status));
   const matches = query ? activeAppointments.filter((appointment) =>
-    [appointment.referenceCode, appointment.customerName, appointment.service?.name]
+    [appointment.referenceCode, appointment.customerName, serviceName(appointment)]
       .some((value) => String(value ?? '').toLowerCase().includes(query)),
   ) : [];
   const visibleAppointments = query ? matches : activeAppointments;
@@ -63,7 +55,12 @@ export default function StaffScheduleView({ currentUser }) {
       ...found,
       code: found.referenceCode || String(found.id),
       guest: found.customerName,
-      items: found.service ? [{ name: found.service.name, note: found.notes || '', staff: found.stylistName || 'Unassigned', price: Number(found.service.price) }] : [],
+      items: [{
+        name: serviceName(found),
+        note: found.notes || '',
+        staff: found.stylistName || 'Unassigned',
+        price: Number(found.service?.price || 0),
+      }],
     } : null);
   };
   const apply = async () => {
@@ -84,7 +81,7 @@ export default function StaffScheduleView({ currentUser }) {
     try {
       await api.updateStaffAppointmentStatus(currentUser.accessToken, appt.id, status);
       say(successMessage);
-      setAppointments((items) => items.map((item) => item.id === appt.id ? { ...item, status } : item));
+      onAppointmentUpdated({ id: appt.id, status });
       reset();
     } catch (error) { say(error.message); }
   };
@@ -94,25 +91,32 @@ export default function StaffScheduleView({ currentUser }) {
     action: () => changeAppointmentStatus('CONFIRMED', `Appointment confirmed; no payment was charged by this action`),
   });
   const noShow = () => setConfirm({ message: `Mark appointment #${appt.code} as a no-show?`, action: () => changeAppointmentStatus('NO_SHOW', `#${appt.code} marked as No Show`) });
+  const confirmCancellationAuthorization = (event) => {
+    event.preventDefault();
+    if (!/^\d{6}$/.test(authPin)) return;
+    console.log('Cancellation authorized.');
+    setIsAuthPinOpen(false);
+    setAuthPin('');
+  };
   const row = 'flex justify-between text-xs text-[#443523]';
 
   return (
-    <div className="fade-in flex min-h-[calc(100vh-2.5rem)] flex-col">
-      <h1 className="text-2xl font-bold text-[#2A1E1B]">Appointments</h1>
-      <p className="mb-6 mt-0.5 text-xs text-[#8A8174]">Scan client appointment receipt or look up guest</p>
+    <div className="fade-in flex min-h-[calc(100vh-2.5rem)] flex-col lg:h-[calc(100vh-5rem)] lg:min-h-0 lg:overflow-hidden">
+      <h1 className="shrink-0 text-2xl font-bold text-[#2A1E1B]">Appointments</h1>
+      <p className="mb-6 mt-0.5 shrink-0 text-xs text-[#8A8174]">Scan client appointment receipt or look up guest</p>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:h-[calc(100vh-9rem)] lg:grid-cols-3">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3">
         <section className={`${card} flex min-h-0 flex-col p-4 lg:col-span-1`} aria-label="Assigned appointments">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-bold text-[#2A1E1B]">{['ADMIN', 'SUPERADMIN'].includes(currentUser?.role) ? 'Salon Appointments' : 'My Assigned Appointments'}</h2>
-            <div className="flex items-center gap-3"><span className="text-[11px] text-[#8A8174]">{appointments.length} appointments</span><button type="button" onClick={() => setAppointmentsRefreshKey((n) => n + 1)} className="text-xs font-bold text-[#8B5E3C] hover:underline">Refresh</button></div>
+            <div className="flex items-center gap-3"><span className="text-[11px] text-[#8A8174]">{appointments.length} appointments</span><button type="button" onClick={onRefreshAppointments} disabled={appointmentsLoading} className="text-xs font-bold text-[#8B5E3C] hover:underline disabled:cursor-wait disabled:opacity-60">Refresh</button></div>
           </div>
-          <div className={`${card} mb-3 flex items-center gap-3 px-3 transition focus-within:border-[#C5A059] focus-within:ring-2 focus-within:ring-[#C5A059]/20`}>
+          <div className={`${card} mb-3 flex shrink-0 items-center gap-3 px-3 transition focus-within:border-[#C5A059] focus-within:ring-2 focus-within:ring-[#C5A059]/20`}>
             <Search size={16} className="shrink-0 text-[#8A8174]" />
             <input aria-label="Search appointments" value={code} onChange={(e) => { setCode(e.target.value); setAppt(null); setPromoApplied(false); setPromoValue(0); setPromo(''); }} onKeyDown={(e) => e.key === 'Enter' && matches.length === 1 && lookup(matches[0].referenceCode || matches[0].id)}
               placeholder="Type appointment/reference code here" className="min-w-0 flex-1 bg-transparent py-3.5 text-xs text-[#2A1E1B] outline-none" />
           </div>
-          <button onClick={() => matches.length === 1 && lookup(matches[0].referenceCode || matches[0].id)} disabled={matches.length !== 1} className="mb-3 flex items-center justify-center gap-2 rounded-xl bg-[#4A3928] px-5 py-3 text-xs font-bold text-white shadow-sm transition hover:bg-[#2A1E1B] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"><Search size={14} /> Lookup &amp; Load</button>
+          <button onClick={() => matches.length === 1 && lookup(matches[0].referenceCode || matches[0].id)} disabled={matches.length !== 1} className="mb-3 flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#4A3928] px-5 py-3 text-xs font-bold text-white shadow-sm transition hover:bg-[#2A1E1B] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"><Search size={14} /> Lookup &amp; Load</button>
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
             {appointmentsLoading ? <p className="text-xs text-[#8A8174]">Loading appointments…</p>
               : appointmentsError ? <p role="alert" className="text-xs text-red-600">{appointmentsError}</p>
@@ -131,7 +135,7 @@ export default function StaffScheduleView({ currentUser }) {
                   <button type="button" key={item.id} onClick={() => lookup(item.referenceCode || String(item.id))}
                     className={`flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition ${appt?.id === item.id ? 'border-[#C5A059] bg-[#F6F0E6] ring-1 ring-[#C5A059]/50' : 'border-[#E7DFD4] bg-white hover:bg-[#F6F0E6]'}`}>
                     <span className="flex min-w-0 flex-col">
-                      <strong className="text-xs text-[#2A1E1B]">{item.customerName} · {item.service?.name || 'Service'}</strong>
+                      <strong className="text-xs text-[#2A1E1B]">{item.customerName} · {serviceName(item)}</strong>
                       <span className="text-[11px] text-[#8A8174]">{item.appointmentDate} · {String(item.startTime).slice(0, 5)} · {item.stylistName || 'Unassigned'}</span>
                     </span>
                     <span className="flex shrink-0 flex-col items-end gap-1">
@@ -145,7 +149,7 @@ export default function StaffScheduleView({ currentUser }) {
         </section>
 
         <section className="flex min-h-0 flex-col gap-4 lg:col-span-2">
-          <div className={`${card} min-h-64 flex-1 overflow-y-auto p-4`}>
+          <div className={`${card} min-h-0 flex-1 overflow-y-auto p-4`}>
             {appt ? (
               <div className="fade-in">
                 <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -175,7 +179,7 @@ export default function StaffScheduleView({ currentUser }) {
             ) : <EmptyState icon={CalendarClock} title={appointmentsLoading ? 'Loading appointments' : appointmentsError || 'Appointments will appear here'} hint="Search by reference code, guest, or service." />}
           </div>
 
-          <div className={`${card} grid shrink-0 items-center gap-5 p-5 md:grid-cols-2 xl:grid-cols-[1fr_1fr_auto]`}>
+          <div className={`${card} mt-auto grid shrink-0 items-center gap-5 p-5 md:grid-cols-2 xl:grid-cols-[1fr_1fr_auto]`}>
         <div>
           <p className="mb-2 text-[10px] font-bold uppercase text-[#443523]">Promo Code</p>
           <div className="flex gap-2">
@@ -193,6 +197,7 @@ export default function StaffScheduleView({ currentUser }) {
         <div className="flex flex-col gap-2 md:col-span-2 md:flex-row xl:col-span-1 xl:flex-col">
           <button disabled={!appt || appt.status === 'CONFIRMED'} onClick={pay} className="flex items-center justify-center gap-2 rounded-lg bg-[#4A3928] px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#2A1E1B] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"><CreditCard size={14} />{appt?.status === 'CONFIRMED' ? ' Already Confirmed' : ' Confirm Appointment'}</button>
           <button disabled={!appt || appt.status !== 'CONFIRMED'} onClick={noShow} className={`flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${appt?.status === 'CONFIRMED' ? 'border border-red-200 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white active:scale-95' : 'border border-red-100 bg-red-50/50 text-red-300'}`}><Trash2 size={14} /> Mark as “No Show”</button>
+          <button type="button" disabled={!appt} onClick={() => setIsConfirmCancelOpen(true)} className="flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-5 py-2.5 text-xs font-bold text-red-600 transition hover:bg-red-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"><Trash2 size={14} /> Cancel Appointment</button>
         </div>
       </div>
         </section>
@@ -211,6 +216,52 @@ export default function StaffScheduleView({ currentUser }) {
         </div>,
         document.body,
       ) : confirm && <ConfirmModal message={confirm.message} danger={confirm.message.includes('no-show')} onCancel={() => setConfirm(null)} onConfirm={() => { confirm.action(); setConfirm(null); }} />}
+      {isConfirmCancelOpen && createPortal(
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsConfirmCancelOpen(false); }}>
+          <section role="alertdialog" aria-modal="true" aria-labelledby="cancel-appointment-title" aria-describedby="cancel-appointment-message" className="w-full max-w-sm rounded-3xl border border-[#E9E4D8] bg-white p-6 text-center shadow-2xl">
+            <h2 id="cancel-appointment-title" className="text-base font-bold text-[#2A1E1B]">Cancel Appointment</h2>
+            <p id="cancel-appointment-message" className="mt-2 text-xs text-[#8A8174]">Are you sure you want to cancel this appointment? This action cannot be undone.</p>
+            <div className="mt-6 flex items-center gap-2">
+              <button type="button" onClick={() => setIsConfirmCancelOpen(false)} className="flex-1 rounded-full bg-[#EFECE6] px-4 py-2.5 text-xs font-bold text-[#5C524B] transition-colors hover:bg-[#E4E0D8]">Go Back</button>
+              <button type="button" onClick={() => { setIsConfirmCancelOpen(false); setAuthPin(''); setIsAuthPinOpen(true); }} className="flex-1 rounded-full bg-[#4A3928] px-4 py-2.5 text-xs font-bold text-white shadow-md transition-all hover:bg-[#3A2E2B] active:scale-95">Proceed</button>
+            </div>
+          </section>
+        </div>,
+        document.body,
+      )}
+      {isAuthPinOpen && createPortal(
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs" onMouseDown={(event) => { if (event.target === event.currentTarget) { setIsAuthPinOpen(false); setAuthPin(''); } }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="staff-authorization-title" className="w-full max-w-sm space-y-5 rounded-3xl border border-[#E9E4D8] bg-white p-6 text-center shadow-2xl">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-[#E9DCB3] bg-[#FFFDF3] text-[#B4833F] shadow-xs">
+              <Lock className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 id="staff-authorization-title" className="text-base font-bold text-[#2A1E1B]">Staff Authorization</h2>
+              <p className="mt-1 text-xs text-[#8A8174]">Enter your six-digit management PIN to confirm this action.</p>
+            </div>
+            <form onSubmit={confirmCancellationAuthorization} className="space-y-4">
+              <input
+                type="password"
+                maxLength={6}
+                autoFocus
+                placeholder="••••••"
+                aria-label="Six-digit management PIN"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                value={authPin}
+                onChange={(event) => setAuthPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="w-full rounded-full border border-[#E9E4D8] bg-[#FFFDF8] px-4 py-3 text-center text-lg font-bold tracking-[0.5em] outline-none focus:border-[#C5A059]"
+              />
+              <p className="text-[10px] text-[#8A8174]">Your management PIN is verified against your account, not a shared test code.</p>
+              <div className="flex items-center gap-2 pt-2">
+                <button type="button" onClick={() => { setIsAuthPinOpen(false); setAuthPin(''); }} className="flex-1 rounded-full bg-[#EFECE6] px-4 py-2.5 text-xs font-bold text-[#5C524B] transition-colors hover:bg-[#E4E0D8]">Cancel</button>
+                <button type="submit" disabled={authPin.length !== 6} className="flex-1 rounded-full bg-[#4A3928] px-4 py-2.5 text-xs font-bold text-white shadow-md transition-all hover:bg-[#3A2E2B] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">Confirm PIN</button>
+              </div>
+            </form>
+          </section>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
