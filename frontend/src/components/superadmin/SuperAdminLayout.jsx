@@ -15,7 +15,7 @@ import SuperAdminSettings from './SuperAdminSettings';
 import { defaultMaintenancePreview } from './superadminPreviewData';
 import AccountManagementView from '../../pages/admin/AccountManagementView';
 import './superadmin.css';
-<<<<<<< Updated upstream
+import { useUnsavedChanges } from '../UnsavedChangesProvider';
 import './superadminContent.css';
 
 const maintenanceKey = 'centyzz-maintenance-ui-preview';
@@ -26,9 +26,6 @@ function readMaintenancePreview() {
   } catch { /* Start with the operational preview when storage is unavailable. */ }
   return defaultMaintenancePreview;
 }
-=======
-import { useUnsavedChanges } from '../UnsavedChangesProvider';
->>>>>>> Stashed changes
 
 const demoUser = {
   firstName: 'Aljean Mark', lastName: 'Angeles', email: 'aljeanmark@example.com',
@@ -37,11 +34,8 @@ const demoUser = {
 
 export default function SuperAdminLayout({ currentUser = demoUser, onUserUpdated, onLogout = () => { window.location.href = '/'; } }) {
   const [activePage, setActivePage] = useState('dashboard');
-<<<<<<< Updated upstream
-  const [maintenance, setMaintenance] = useState(readMaintenancePreview);
-=======
   const { guardNavigation } = useUnsavedChanges();
->>>>>>> Stashed changes
+  const [maintenance, setMaintenance] = useState(readMaintenancePreview);
   const workspaceRef = useRef(null);
   const { theme } = useWorkspaceTheme();
   const preview = Boolean(currentUser?.isDemo && !currentUser?.accessToken);
