@@ -81,4 +81,29 @@ export class EmailService {
       );
     }
   }
+  async sendCredentialResetLinkEmail(to: string, kind: 'password' | 'pin', link: string): Promise<void> {
+    const label = kind === 'pin' ? 'PIN' : 'password';
+    const safeLink = link.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    try {
+      const result = await this.transporter.sendMail({
+        from: { name: 'Centyzz Hair & Beauty Salon', address: process.env.SMTP_USER! }, to,
+        subject: `Centyzz — reset your ${label}`,
+        text: `An administrator requested a ${label} reset for your Centyzz account. Open this link to choose your new ${label}: ${link}\nThis link expires in 15 minutes and works once. If you did not expect this email, do not use the link and contact your administrator. Your credentials have not changed.`,
+        html: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;color:#2A1E1B"><h2>Centyzz ${label} reset</h2><p>An administrator requested a reset for your account. Choose your own new ${label} using the button below.</p><p><a href="${safeLink}" style="display:inline-block;padding:14px 22px;background:#8B5E3C;color:white;border-radius:8px;text-decoration:none">Reset my ${label}</a></p><p>This link expires in <strong>15 minutes</strong> and works once.</p><p>If the button does not work, copy this link into your browser:</p><p style="word-break:break-all">${safeLink}</p><p>If you did not expect this email, do not use the link and contact your administrator. Your credentials have not changed.</p></div>`,
+      });
+      if (!result.accepted?.length) throw new Error('Recipient not accepted');
+    } catch {
+      throw new InternalServerErrorException('Unable to send the reset email. Please try again later.');
+    }
+  }
+
+  async sendCredentialChangedEmail(to: string, kind: 'password' | 'pin'): Promise<void> {
+    const label = kind === 'pin' ? 'PIN' : 'password';
+    await this.transporter.sendMail({
+      from: { name: 'Centyzz Hair & Beauty Salon', address: process.env.SMTP_USER! }, to,
+      subject: `Centyzz — your ${label} was changed`,
+      text: `Your Centyzz ${label} was successfully reset. Existing Admin/Staff sessions have been signed out. If you did not make this change, contact your administrator immediately.`,
+    });
+  }
+
 }

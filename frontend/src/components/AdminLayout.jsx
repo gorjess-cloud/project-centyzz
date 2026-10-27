@@ -68,7 +68,7 @@ export default function AdminLayout({ currentUser, onLogout, onUserUpdated }) {
           )}
 
           {activePage === 'logs' && (
-            <OperationalLogsView />
+            <OperationalLogsView currentUser={currentUser} />
           )}
 
           {activePage === 'schedule' && <ScheduleManagementView />}
