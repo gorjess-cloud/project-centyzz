@@ -1,4 +1,4 @@
-import HeaderActions from '../workspace/HeaderActions';
+import SuperAdminHeader from './SuperAdminHeader';
 import {
   ArrowDownToLine, ArrowUpRight, Check, ChevronLeft, ChevronRight,
   FileText, KeyRound, RefreshCw, Search, ShieldCheck, Users,
@@ -127,8 +127,10 @@ export function AuditTable({ full = false, token, onViewAll }) {
     }
   }
 
-  return <section className="sa-card sa-audit">
-    <div className="sa-audit-heading"><div><span className="sa-eyebrow">ACTIVITY MONITOR</span><h2>{full ? 'System audit logs' : 'Audit trails & activity logs'}</h2><p>Actual recorded changes across your salon.</p></div>
+  return <>
+    {full && <SuperAdminHeader title="System audit logs" description="Review changes and activity across your salon." />}
+    <section className="sa-card sa-audit">
+    <div className="sa-audit-heading"><div><h2>{full ? 'Audit activity' : 'Audit trails & activity logs'}</h2><p>Actual recorded changes across your salon.</p></div>
       <div className="sa-audit-actions">
         <button type="button" className="sa-button sa-refresh" disabled={loading} title="Refresh audit logs" onClick={() => setReload(count => count + 1)}><RefreshCw size={15} /> <span>Refresh</span></button>
         <button type="button" className="sa-button" disabled={full && (exporting || loading || Boolean(error))} onClick={full ? download : onViewAll}>{full ? <ArrowDownToLine size={15} /> : <FileText size={15} />}{full ? (exporting ? 'Exporting…' : 'Export CSV') : 'View full logs'}{!full && <ArrowUpRight size={14} />}</button>
@@ -148,10 +150,14 @@ export function AuditTable({ full = false, token, onViewAll }) {
     <div className="sa-table-footer"><span>{!loading && !error && total ? `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, total)}` : '0'} of {error ? '—' : total} activities</span>
       <div><button type="button" aria-label="Previous page" disabled={loading || currentPage <= 1} onClick={() => setPage(p => p - 1)}><ChevronLeft size={16} /></button><span>{currentPage}</span><button type="button" aria-label="Next page" disabled={loading || currentPage >= pages} onClick={() => setPage(p => p + 1)}><ChevronRight size={16} /></button></div>
     </div>
-  </section>;
+    </section>
+  </>;
 }
 
 export default function Overview({ name, token, onNavigate }) {
+  const today = new Date();
+  const greeting = today.getHours() < 12 ? 'Morning' : today.getHours() < 18 ? 'Afternoon' : 'Evening';
+  const date = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -179,11 +185,10 @@ export default function Overview({ name, token, onNavigate }) {
 
   const metrics = summary ? buildDashboardMetrics(summary) : [];
   return <>
-    <div className="sa-welcome"><div><div className="sa-eyebrow">YOUR SALON, CONNECTED</div><h1>Welcome back, {name?.split(' ')[0] || 'Superadmin'}. <span className="sa-welcome-spark">✦</span></h1><p>Here’s what’s happening across your system today.</p></div>
-      <div className="sa-overview-tools"><HeaderActions />
-        <button type="button" className="sa-button" disabled={loading} onClick={() => setRefresh(count => count + 1)} title="Refresh dashboard statistics"><RefreshCw size={14} /> Refresh</button>
-        <div className="sa-status" role="status"><span className="sa-dot" />System overview <span className="sa-status-line" /> {loading ? 'Loading…' : error ? 'Unavailable' : 'Live database'}</div>
-      </div>
+    <SuperAdminHeader title={`Good ${greeting}, ${name?.split(' ')[0] || 'Superadmin'}!`} description={`Today is ${date}`} />
+    <div className="sa-dashboard-tools">
+      <div className="sa-status" role="status"><span className="sa-dot" />System overview <span className="sa-status-line" /> {loading ? 'Loading…' : error ? 'Unavailable' : 'Live database'}</div>
+      <button type="button" className="sa-button" disabled={loading} onClick={() => setRefresh(count => count + 1)} title="Refresh dashboard statistics"><RefreshCw size={14} /> Refresh</button>
     </div>
     {error && <div className="sa-api-error" role="alert">{error} <button type="button" onClick={() => setRefresh(count => count + 1)}>Try again</button></div>}
     {loading && <div className="sa-loading-cards" role="status">Loading live account, verification, and error statistics…</div>}
