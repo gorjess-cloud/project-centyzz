@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import useMemberSidebarState from "../hooks/useMemberSidebarState";
 import {
   Bell,
@@ -45,9 +46,6 @@ export function LegacyMemberBookCheckout({
   const cardSurface = isDarkMode
     ? "border-[#39342B] bg-[#211F1B]"
     : "border-[#E9E4D8] bg-white";
-  const sidebarSurface = isDarkMode
-    ? "border-[#39342B] bg-[#1D1A16]"
-    : "border-[#E9E4D8] bg-[#FFFDF8]";
   const mutedText = isDarkMode ? "text-[#C9C1B5]" : "text-[#8A8174]";
   const inputBg = isDarkMode ? "bg-[#2A2723] border-[#39342B] text-[#F5F1EA]" : "bg-[#FDFBF7] border-[#E9E4D8] text-[#443523]";
 
@@ -62,14 +60,14 @@ export function LegacyMemberBookCheckout({
     <div className={`min-h-screen pb-24 lg:pb-0 lg:flex ${surface} transition-colors duration-300`}>
       {/* Sidebar matching other pages */}
       <aside
-        className={`relative hidden lg:flex shrink-0 flex-col border-r lg:sticky lg:top-0 lg:h-screen transition-all duration-300 ease-in-out ${
-          isSidebarCollapsed ? "w-20" : "w-48"
-        } ${sidebarSurface}`}
+        className={`relative z-50 hidden shrink-0 flex-col border-r transition-all duration-300 ease-in-out select-none lg:sticky lg:top-0 lg:flex lg:h-screen ${
+          isSidebarCollapsed ? "w-20" : "w-56"
+        } border-[#E7DFD4] bg-[#FFFDF8]`}
       >
         <button
           type="button"
           onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-          className="absolute -right-3 top-6 flex h-6 w-6 items-center justify-center rounded-full border bg-white text-xs shadow-md transition-transform hover:scale-110 active:scale-95 border-[#E9E4D8] text-[#443523] z-20"
+          className="absolute -right-3 top-6 z-20 flex h-6 w-6 items-center justify-center rounded-full border border-[#E7DFD4] bg-white text-xs text-[#443523] shadow-md transition-transform hover:scale-110 active:scale-95"
           aria-label="Toggle Sidebar"
         >
           <span className={`transition-transform duration-300 ${isSidebarCollapsed ? "rotate-180" : ""}`}>
@@ -77,42 +75,35 @@ export function LegacyMemberBookCheckout({
           </span>
         </button>
 
-        <div className="flex h-16 items-center justify-center px-4 border-b border-inherit">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col items-center border-b border-[#E7DFD4] pt-6 pb-4">
+          <div className="flex items-center gap-3 rounded-xl px-2 py-1">
             <img
               src="/logo.png"
-              alt="Salon Logo"
-              className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-[#C5A059]/20"
+              alt="Centy'zz Salon Logo"
+              className="h-10 w-10 shrink-0 object-contain"
             />
             {!isSidebarCollapsed && (
-              <div className="min-w-0 transition-opacity duration-300">
-                <span className="text-xs font-bold leading-tight block truncate">Centy'zz</span>
-                <span className="text-[10px] text-[#8A8174] block truncate">Hair & Beauty</span>
+              <div className="flex min-w-0 flex-col justify-center text-left leading-none">
+                <span className="block text-[1.2rem] font-bold uppercase text-[#2A1E1B]">Centy'zz</span>
+                <span className="block pt-0.5 text-[8px] font-medium uppercase tracking-[0.25em] text-[#C5A059]">Hair &amp; Beauty</span>
               </div>
             )}
           </div>
         </div>
 
-        <div className="flex flex-col items-center justify-center border-b border-inherit py-4 px-2 text-center transition-all duration-300">
-          <div
-            className={`flex items-center justify-center rounded-full border-2 border-[#C5A059] bg-[#4A3928] font-semibold text-white transition-all duration-300 ${
-              isSidebarCollapsed ? "h-9 w-9 text-[10px]" : "mb-2 h-12 w-12 text-xs"
-            }`}
-          >
-            {initials || "M"}
-          </div>
-          {!isSidebarCollapsed && (
-            <div className="w-full px-2">
-              <span className="inline-block rounded-full bg-[#E8D9C2]/50 px-2 py-0.5 text-[9px] font-medium text-[#6F4C25] mb-1">
-                Exclusive Member
-              </span>
-              <p className="text-xs font-bold truncate">{fullName}</p>
-              <p className={`text-[9px] truncate ${mutedText}`}>{user?.email || "Email not provided"}</p>
+        <div className="flex flex-col items-center border-b border-[#E7DFD4] px-2 py-4">
+          <div className="group relative flex w-full flex-col items-center rounded-2xl px-2 py-1">
+            <div className="relative">
+              <div role="img" aria-label={`${fullName} profile`} className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border-2 border-[#C5A059] bg-[#4A3928] text-sm font-bold text-[#C5A059] shadow-sm">
+                {initials || "M"}
+              </div>
+              {!isSidebarCollapsed && <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-[#D8C2A0] bg-[#EBDBC8] px-2.5 py-0.5 text-[9px] font-extrabold text-[#8C6D3B] shadow-2xs">CLIENT</span>}
             </div>
-          )}
+            {!isSidebarCollapsed && <div className="mt-3 w-full px-2 text-center"><h2 className="truncate text-xs font-bold text-[#2A1E1B]">{fullName}</h2><p className="truncate text-[9px] text-[#8A8174]">{user?.email || "Email not provided"}</p></div>}
+          </div>
         </div>
 
-        <nav aria-label="Member navigation" className="flex flex-1 flex-col gap-1.5 p-3">
+        <nav aria-label="Member navigation" className="flex-1 overflow-y-auto px-3 py-3 space-y-1 custom-scrollbar">
           {[
             { id: "home", label: "Home", icon: Home, action: () => setActivePage("home") },
             { id: "services", label: "Services", icon: Scissors, action: () => setActivePage("member-services") },
@@ -120,28 +111,30 @@ export function LegacyMemberBookCheckout({
             { id: "account", label: "Account", icon: UserRound, action: () => setActivePage("member-account") },
           ].map((item) => {
             const Icon = item.icon;
+            const active = item.id === "booking";
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={item.action}
-                className="group flex items-center justify-center lg:justify-start gap-3 rounded-xl px-3 py-2.5 text-xs font-medium hover:bg-[#C5A059]/15 hover:text-[#443523] transition-all duration-200 active:scale-95"
+                aria-current={active ? "page" : undefined}
+                className={`w-full flex items-center p-2.5 rounded-xl transition-all duration-200 active:scale-95 ${active ? "bg-[#3A342B] text-white shadow-md font-semibold" : "text-[#443523] hover:bg-[#C5A059]/15 hover:text-[#4A3928]"} ${isSidebarCollapsed ? "justify-center" : "justify-start gap-3"}`}
               >
-                <Icon className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:scale-110" />
-                {!isSidebarCollapsed && <span className="truncate">{item.label}</span>}
+                <Icon size={18} className={active ? "text-white" : "text-[#443523]"} />
+                {!isSidebarCollapsed && <span className="text-xs font-medium truncate">{item.label}</span>}
               </button>
             );
           })}
         </nav>
 
-        <div className="p-3 border-t border-inherit">
+        <div className="p-3 border-t border-[#E7DFD4]">
           <button
             type="button"
             onClick={onLogout}
-            className="flex w-full items-center justify-center lg:justify-start gap-3 rounded-xl px-3 py-2.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-all duration-200 active:scale-95"
+            className={`w-full flex items-center p-2.5 rounded-xl text-red-600 hover:bg-red-50 hover:text-red-700 transition-all duration-200 active:scale-95 ${isSidebarCollapsed ? "justify-center" : "justify-start gap-3"}`}
           >
-            <LogOut className="h-4 w-4 shrink-0" />
-            {!isSidebarCollapsed && <span className="truncate">Log Out</span>}
+            <LogOut size={18} />
+            {!isSidebarCollapsed && <span className="text-xs font-bold truncate">Log Out</span>}
           </button>
         </div>
       </aside>
@@ -486,5 +479,17 @@ export function LegacyMemberBookCheckout({
 }
 
 export default function MemberBook(props) {
-  return <MemberBookScheduler {...props} />;
+  const location = useLocation();
+  const routeSelection = location.state?.selectedService;
+  const selectedService = Array.isArray(routeSelection)
+    ? routeSelection
+    : routeSelection
+      ? [routeSelection]
+      : Array.isArray(props.selectedService)
+        ? props.selectedService
+        : props.selectedService
+          ? [props.selectedService]
+          : [];
+
+  return <MemberBookScheduler {...props} selectedService={selectedService} />;
 }

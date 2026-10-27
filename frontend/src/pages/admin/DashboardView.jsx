@@ -1,4 +1,6 @@
 import HeaderActions from '../../components/workspace/HeaderActions';
+import { useEffect, useState } from 'react';
+import { api } from '../../api/client';
 import { 
   TrendingUp, 
   Calendar, 
@@ -11,12 +13,36 @@ export default function DashboardView({ currentUser }) {
   const today = new Date();
   const name = currentUser?.firstName || "Millicent";
 
-  const appointments = [
+  const [appointments, setAppointments] = useState(currentUser?.accessToken ? [] : [
     { id: '1', time: '08:30 AM', client: 'Alicent Hightower', service: 'Haircut and Hair color', stylist: 'Peter Parker', status: 'Confirmed' },
     { id: '2', time: '09:00 AM', client: 'Jessica Palma', service: 'Manicure and Pedicure', stylist: 'Margaret Qualley', status: 'Confirmed' },
     { id: '3', time: '09:00 AM', client: 'Bernadette Lalata', service: 'Brazilian Blowout', stylist: 'Shaira Sollano', status: 'In Progress' },
     { id: '4', time: '12:00 PM', client: 'Michael Litang', service: 'Full color', stylist: 'Shaira Sollano', status: 'Pending' },
-  ];
+  ]);
+  const [appointmentsError, setAppointmentsError] = useState('');
+
+  useEffect(() => {
+    if (!currentUser?.accessToken) return undefined;
+    let active = true;
+    api.getStaffAppointments(currentUser.accessToken)
+      .then((result) => {
+        if (!Array.isArray(result?.data)) {
+          throw new Error('The server returned an invalid appointments list.');
+        }
+        if (!active) return;
+        setAppointments(result.data.map((appointment) => ({
+          id: appointment.id,
+          time: appointment.startTime || 'Time TBD',
+          client: appointment.customerName || 'Guest',
+          service: appointment.service?.name || appointment.serviceName || 'Service not specified',
+          stylist: appointment.stylistName || 'Unassigned',
+          status: appointment.status || 'PENDING',
+        })));
+        setAppointmentsError('');
+      })
+      .catch((error) => { if (active) setAppointmentsError(error.message || 'Unable to load appointments.'); });
+    return () => { active = false; };
+  }, [currentUser?.accessToken]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -118,6 +144,7 @@ export default function DashboardView({ currentUser }) {
         </div>
 
         <div className="overflow-x-auto">
+          {appointmentsError && <p role="alert" className="border-b border-red-200 bg-red-50 px-5 py-3 text-xs text-red-700">{appointmentsError}</p>}
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#F8F5F0] text-[10px] uppercase font-bold text-gray-500 tracking-wider border-b border-[#E7DFD4]">
@@ -133,7 +160,7 @@ export default function DashboardView({ currentUser }) {
                 <tr key={apt.id} className="hover:bg-[#FDFBF7] transition-colors">
                   <td className="p-4 pl-6 font-mono font-semibold text-gray-500">{apt.time}</td>
                   <td className="p-4 font-bold text-[#2A1E1B]">{apt.client}</td>
-                  <td className="p-4 text-gray-600">{apt.service}</td>
+                  <td className="p-4 text-gray-600">{apt.service?.name || apt.serviceName || apt.service || 'Service not specified'}</td>
                   <td className="p-4 text-gray-500">Stylist : <span className="text-[#2A1E1B] font-semibold">{apt.stylist}</span></td>
                   <td className="p-4 pr-6 text-right">
                     <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full ${

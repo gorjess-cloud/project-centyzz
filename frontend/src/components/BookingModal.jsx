@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { 
   X, 
@@ -8,6 +8,13 @@ import {
   Sparkles, 
   Clock, 
   User, 
+  Scissors,
+  CalendarDays,
+  ClipboardCheck,
+  Check,
+  PhilippinePeso,
+  Mail,
+  Phone,
   CreditCard,
   ArrowRight,
   Loader2,
@@ -35,6 +42,7 @@ function toDateKey(year, month, day) {
 }
 
 const guestSessionKey = 'centyzz-guest-checkout';
+export const clientBookingQueueKey = 'centyzz-client-booking-queue';
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phonePattern = /^[0-9+\-\s()]{7,15}$/;
 
@@ -43,24 +51,58 @@ const getEmailError = (value) =>
 const getPhoneError = (value) =>
   phonePattern.test(value.trim()) ? '' : 'Please enter a valid contact number.';
 
-function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
-  const [step, setStep] = useState('form');
+function getReturningCheckout() {
+  if (!new URLSearchParams(window.location.search).has('centyzz_booking')) return null;
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(guestSessionKey) || 'null');
+    return stored?.referenceCode && stored?.token ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+function BookingModal({
+  isOpen,
+  onClose,
+  selectedService,
+  initialServices = [],
+  initialCompletedCount = 0,
+  isClientCart = false,
+  requireServiceSelection = false,
+  closeOnBackdrop = false,
+  currentUser,
+  onAppointmentCreated,
+  onServiceBooked,
+  isDarkMode,
+}) {
+  const [returningCheckout] = useState(getReturningCheckout);
+  const [step, setStep] = useState(returningCheckout ? 'result' : 'form');
+  const [queueServices, setQueueServices] = useState(() => (
+    isClientCart && Array.isArray(initialServices) ? initialServices : []
+  ));
+  const [completedServices, setCompletedServices] = useState(initialCompletedCount);
+  const [totalQueuedServices] = useState(() => (
+    isClientCart ? initialCompletedCount + initialServices.length : 0
+  ));
   const [serviceGroups, setServiceGroups] = useState([]);
-  const [loadingServices, setLoadingServices] = useState(false);
+  const [loadingServices, setLoadingServices] = useState(true);
   const [servicesError, setServicesError] = useState('');
   const [category, setCategory] = useState(''); // Database category id, not a display label
-  const [serviceId, setServiceId] = useState(''); // Exactly one service for a guest
+  const [serviceId, setServiceId] = useState(''); // One service per checkout
   const [slots, setSlots] = useState([]);
-  const [loadingSlots, setLoadingSlots] = useState(false);
-  const [slotsError, setSlotsError] = useState('');
+  const [slotsLoadedKey, setSlotsLoadedKey] = useState('');
+  const [slotsErrorState, setSlotsErrorState] = useState({ key: '', message: '' });
   const [checkingSlot, setCheckingSlot] = useState(false);
   const [formError, setFormError] = useState('');
   const [stylists, setStylists] = useState([]);
   const [stylistId, setStylistId] = useState('');
-  const [loadingStylists, setLoadingStylists] = useState(false);
-  const [checkout, setCheckout] = useState(null);
+  const [loadingStylists, setLoadingStylists] = useState(true);
+  const [checkout, setCheckout] = useState(returningCheckout);
   const [checkoutStatus, setCheckoutStatus] = useState(null);
   const [submittingCheckout, setSubmittingCheckout] = useState(false);
+  const processedCheckoutRef = useRef('');
+  const checkoutRequestRef = useRef(false);
+  const onAppointmentCreatedRef = useRef(onAppointmentCreated);
 
   const initialSalonDate = getSalonToday();
   const [yearToday, monthToday, dayToday] = initialSalonDate.split('-').map(Number);
@@ -68,11 +110,18 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const [selectedDay, setSelectedDay] = useState(dayToday);
   const [selectedTime, setSelectedTime] = useState(''); // Backend HH:mm value
 
-  const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState(() => (
+    currentUser?.fullName || currentUser?.name
+      || [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(' ')
+  ));
+  const [phone, setPhone] = useState(() => (
+    currentUser?.phoneNumber || currentUser?.contactNumber || currentUser?.phone || ''
+  ));
+  const [email, setEmail] = useState(() => currentUser?.email || '');
   const [phoneError, setPhoneError] = useState('');
   const [emailError, setEmailError] = useState('');
+  const initialActiveService = useRef(isClientCart ? queueServices[0] : selectedService);
+  const queuePosition = completedServices + 1;
   const chosenStylist = stylists.find((s) => String(s.id) === stylistId);
   const stylist = chosenStylist?.name || 'Choose a specialist';
 
@@ -87,45 +136,59 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const depositAmount = totalPriceNumber * 0.5;
   const balanceRemaining = totalPriceNumber - depositAmount;
   const selectedDate = toDateKey(currentDate.getFullYear(), currentDate.getMonth(), selectedDay);
+  const slotsRequestKey = `${serviceId}|${stylistId}|${selectedDate}`;
+  const loadingSlots = Boolean(isOpen && serviceId && stylistId && slotsLoadedKey !== slotsRequestKey);
+  const slotsError = slotsErrorState.key === slotsRequestKey ? slotsErrorState.message : '';
   const selectedSlot = slots.find((slot) => slot.startTime === selectedTime && slot.available);
+
+  const persistClientQueue = useCallback((services, completedCount, currentServiceId = null) => {
+    try {
+      if (!services.length) {
+        sessionStorage.removeItem(clientBookingQueueKey);
+      } else {
+        sessionStorage.setItem(clientBookingQueueKey, JSON.stringify({
+          services,
+          completedCount,
+          currentServiceId,
+        }));
+      }
+      return true;
+    } catch {
+      setFormError('Unable to preserve your remaining cart bookings in this browser session.');
+      return false;
+    }
+  }, []);
+
+  const applyCheckoutStatus = useCallback((status) => {
+    setCheckoutStatus(status);
+    if (!isClientCart || !['DEMO_PAID', 'TEST_PAID'].includes(status?.paymentStatus)
+      || !status.referenceCode || processedCheckoutRef.current === status.referenceCode) return;
+
+    processedCheckoutRef.current = status.referenceCode;
+    const bookedService = queueServices[0];
+    if (!bookedService) return;
+
+    const remainingServices = queueServices.slice(1);
+    const nextCompletedCount = completedServices + 1;
+    setQueueServices(remainingServices);
+    setCompletedServices(nextCompletedCount);
+    onServiceBooked?.(bookedService.id);
+    onAppointmentCreatedRef.current?.();
+    persistClientQueue(remainingServices, nextCompletedCount);
+    sessionStorage.removeItem(guestSessionKey);
+    setStep(remainingServices.length ? 'queue-success' : 'booking-success');
+  }, [completedServices, isClientCart, onServiceBooked, persistClientQueue, queueServices]);
+  const initialApplyCheckoutStatus = useRef(applyCheckoutStatus);
 
   // Home and Services both open this same component. A Services-page click supplies
   // its real database id; Home defaults to the first available database service.
   useEffect(() => {
     if (!isOpen) return undefined;
     let active = true;
-    // PayMongo return redirects recreate the modal and restore a local checkout reference.
-    const returningFromCheckout = new URLSearchParams(window.location.search).has('centyzz_booking');
-    const stored = (() => { try { return JSON.parse(sessionStorage.getItem(guestSessionKey) || 'null'); } catch { return null; } })();
-    if (returningFromCheckout && stored?.referenceCode && stored?.token) {
-      setCheckout(stored);
-      setStep('result');
-      api.getGuestCheckoutStatus(stored.referenceCode, stored.token)
-        .then((status) => { if (active) setCheckoutStatus(status); })
-        .catch((err) => { if (active) setFormError(err.message); });
-      const url = new URL(window.location.href);
-      url.searchParams.delete('centyzz_booking');
-      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
-    } else {
-      setStep('form');
-      setCheckout(null);
-      setCheckoutStatus(null);
-    }
-    setFormError('');
-    setStylistId('');
-    setStylists([]);
-    setLoadingStylists(true);
     api.getGuestStylists().then((data) => {
       if (active) setStylists(Array.isArray(data) ? data : data?.data || []);
     }).catch((err) => { if (active) setFormError('Could not load specialists: ' + err.message); })
       .finally(() => { if (active) setLoadingStylists(false); });
-    setSlots([]);
-    setSelectedTime('');
-    setServicesError('');
-    setLoadingServices(true);
-    const salonDate = getSalonToday().split('-').map(Number);
-    setCurrentDate(new Date(salonDate[0], salonDate[1] - 1, 1));
-    setSelectedDay(salonDate[2]);
 
     api.getServices()
       .then((result) => {
@@ -135,12 +198,13 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
         const available = groups.flatMap((group) =>
           (group.services || []).map((service) => ({ ...service, categoryId: String(group.id) }))
         );
-        const requestedName = String(selectedService?.name || selectedService?.title || '').trim().toLowerCase();
+        const requestedService = isClientCart ? initialActiveService.current : selectedService;
+        const requestedName = String(requestedService?.name || requestedService?.title || '').trim().toLowerCase();
         const matched = available.find((service) =>
-          selectedService?.id != null && String(service.id) === String(selectedService.id)
+          requestedService?.id != null && String(service.id) === String(requestedService.id)
         ) || available.find((service) =>
           requestedName && service.name.toLowerCase() === requestedName
-        ) || available[0];
+        ) || (!isClientCart && !requireServiceSelection ? available[0] : null);
         setCategory(matched?.categoryId || '');
         setServiceId(matched ? String(matched.id) : '');
       })
@@ -149,26 +213,41 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
       })
       .finally(() => { if (active) setLoadingServices(false); });
     return () => { active = false; };
-  }, [isOpen, selectedService]);
+  }, [isClientCart, isOpen, requireServiceSelection, selectedService]);
+
+  useEffect(() => {
+    if (!isOpen || !returningCheckout) return undefined;
+    let active = true;
+    api.getGuestCheckoutStatus(returningCheckout.referenceCode, returningCheckout.token)
+      .then((status) => { if (active) initialApplyCheckoutStatus.current(status); })
+      .catch((err) => { if (active) setFormError(err.message); });
+    const url = new URL(window.location.href);
+    url.searchParams.delete('centyzz_booking');
+    window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+    return () => { active = false; };
+  }, [isOpen, returningCheckout]);
 
   // Refetch when the date or selected service changes. Ignore responses from
   // superseded requests so stale slots cannot become selectable.
   useEffect(() => {
-    if (!isOpen || !serviceId || !stylistId) { setSlots([]); setSelectedTime(''); return undefined; }
+    if (!isOpen || !serviceId || !stylistId) return undefined;
     let active = true;
-    setSlots([]);
-    setSelectedTime('');
-    setSlotsError('');
-    setFormError('');
-    setLoadingSlots(true);
+    const requestKey = `${serviceId}|${stylistId}|${selectedDate}`;
     api.getGuestAvailableSlots(selectedDate, Number(serviceId), stylistId)
       .then((result) => {
-        if (active) setSlots(Array.isArray(result.slots) ? result.slots : []);
+        if (active) {
+          setSlots(Array.isArray(result.slots) ? result.slots : []);
+          setSlotsErrorState({ key: requestKey, message: '' });
+          setSlotsLoadedKey(requestKey);
+        }
       })
       .catch((error) => {
-        if (active) { setSlots([]); setSlotsError(error.message); }
-      })
-      .finally(() => { if (active) setLoadingSlots(false); });
+        if (active) {
+          setSlots([]);
+          setSlotsErrorState({ key: requestKey, message: error.message });
+          setSlotsLoadedKey(requestKey);
+        }
+      });
     return () => { active = false; };
   }, [isOpen, serviceId, stylistId, selectedDate]);
 
@@ -260,7 +339,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
         setFormError('That time is no longer available. Please select another one.');
         return;
       }
-      setStep('confirm');
+      setStep('summary');
     } catch (error) {
       setFormError(`Could not verify the selected time: ${error.message}`);
     } finally {
@@ -269,12 +348,23 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   };
 
   const beginCheckout = async () => {
+    if (checkoutRequestRef.current) return;
+    const queuedService = isClientCart ? queueServices[0] : null;
+    const bookingServiceId = Number(currentServiceObj?.id ?? serviceId);
+    if (!Number.isSafeInteger(bookingServiceId) || bookingServiceId <= 0
+      || (queuedService && String(queuedService.id) !== String(currentServiceObj?.id))) {
+      setFormError('The selected cart service is invalid. Please close this window and review your cart.');
+      return;
+    }
     if (!chosenStylist || !currentServiceObj) { setFormError('Choose a service and specialist.'); setStep('form'); return; }
+    if (isClientCart && !queuedService) { setFormError('There are no services left to book from your cart.'); return; }
+    if (isClientCart && !persistClientQueue(queueServices, completedServices, String(currentServiceObj.id))) return;
+    checkoutRequestRef.current = true;
     setSubmittingCheckout(true);
     setFormError('');
     try {
       const created = await api.createGuestCheckout({
-        serviceId: Number(serviceId),
+        serviceId: bookingServiceId,
         stylistId: stylistId,
         appointmentDate: selectedDate,
         startTime: selectedTime,
@@ -299,7 +389,10 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
         api.getGuestAvailableSlots(selectedDate, Number(serviceId), stylistId)
           .then((result) => setSlots(result.slots || [])).catch(() => setSlots([]));
       }
-    } finally { setSubmittingCheckout(false); }
+    } finally {
+      checkoutRequestRef.current = false;
+      setSubmittingCheckout(false);
+    }
   };
 
   const finishDemo = async () => {
@@ -308,8 +401,8 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
     try {
       await api.finishGuestDemo(checkout.id, checkout.token);
       const status = await api.getGuestCheckoutStatus(checkout.referenceCode, checkout.token);
-      setCheckoutStatus(status);
       setStep('result');
+      applyCheckoutStatus(status);
     } catch (err) { setFormError(err.message || 'Demo checkout failed.'); }
     finally { setSubmittingCheckout(false); }
   };
@@ -317,21 +410,49 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const refreshStatus = async () => {
     if (!checkout?.referenceCode || !checkout?.token) return;
     setSubmittingCheckout(true); setFormError('');
-    try { setCheckoutStatus(await api.getGuestCheckoutStatus(checkout.referenceCode, checkout.token)); }
+    try { applyCheckoutStatus(await api.getGuestCheckoutStatus(checkout.referenceCode, checkout.token)); }
     catch (err) { setFormError(err.message || 'Unable to check payment status.'); }
     finally { setSubmittingCheckout(false); }
   };
 
   const handleResetAndClose = () => {
     setStep('form');
+    if (isClientCart) sessionStorage.removeItem(guestSessionKey);
     onClose();
+  };
+
+  const handleBookNextService = () => {
+    const nextService = queueServices[0];
+    if (!nextService) return;
+    const matched = allServices.find((service) => String(service.id) === String(nextService.id))
+      || allServices.find((service) => service.name.toLowerCase() === String(nextService.name || nextService.title || '').toLowerCase());
+    if (!matched) {
+      setFormError('The next cart service is no longer available. Please close this window and review your cart.');
+      return;
+    }
+    const matchedGroup = serviceGroups.find((group) =>
+      (group.services || []).some((service) => String(service.id) === String(matched.id))
+    );
+    setCategory(matchedGroup ? String(matchedGroup.id) : '');
+    setServiceId(String(matched.id));
+    setSelectedTime('');
+    setCheckout(null);
+    setCheckoutStatus(null);
+    setFormError('');
+    processedCheckoutRef.current = '';
+    setStep('form');
   };
 
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-md animate-fadeIn">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-md animate-fadeIn"
+      onMouseDown={(event) => {
+        if (closeOnBackdrop && event.target === event.currentTarget) onClose();
+      }}
+    >
       <div className={`${modalSurface} rounded-3xl border shadow-2xl relative transition-all duration-300 w-full overflow-hidden ${
-        step === 'form' ? 'max-w-5xl' : 'max-w-md'
+        step === 'form' ? 'max-w-5xl' : step === 'summary' ? 'max-w-lg' : 'max-w-md'
       }`}>
         
         {/* Close Button */}
@@ -351,6 +472,11 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                 <Sparkles className="w-3.5 h-3.5" /> Book Appointment
               </span>
               <h2 className={`text-2xl sm:text-3xl font-bold ${primaryText} mt-1`}>Schedule Your Session</h2>
+              {isClientCart && (
+                <p className={`mt-2 text-sm ${mutedText}`}>
+                  Booking {queuePosition} of {totalQueuedServices} services from your cart.
+                </p>
+              )}
             </div>
 
             <form onSubmit={handleFormSubmit} className="grid grid-cols-1 gap-8 lg:grid-cols-12">
@@ -475,40 +601,56 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                 </div>
 
                 <div className="space-y-4">
-                  <div>
-                    <label className={`block text-[10px] font-bold ${isDarkMode ? 'text-[#A9A39B]' : 'text-gray-500'} uppercase tracking-wider mb-1`}>
-                      Category
-                    </label>
-                    <select 
-                      value={category} 
-                      onChange={handleCategoryChange}
-                      className={`w-full px-3 py-2.5 rounded-xl border ${fieldStyle} text-xs font-medium focus:outline-none focus:border-[#C5A059]`}
-                    >
-                      {!serviceGroups.length && <option value="">No services loaded</option>}
-                      {serviceGroups.map((group) => (
-                        <option key={group.id} value={String(group.id)}>{group.category}</option>
-                      ))}
-                    </select>
-                  </div>
+                  {isClientCart ? (
+                    <div className={`${insetSurface} rounded-xl border p-3`}>
+                      <p className={`text-[10px] font-bold ${mutedText} uppercase tracking-wider`}>Cart service</p>
+                      <p className={`mt-1 text-sm font-semibold ${primaryText}`}>
+                        {currentServiceObj?.name || 'Loading selected service…'}
+                      </p>
+                      {currentServiceObj && (
+                        <p className={`mt-1 text-xs ${mutedText}`}>
+                          ₱{Number(currentServiceObj.price).toLocaleString('en-PH')}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className={`block text-[10px] font-bold ${isDarkMode ? 'text-[#A9A39B]' : 'text-gray-500'} uppercase tracking-wider mb-1`}>
+                          Category
+                        </label>
+                        <select
+                          value={category}
+                          onChange={handleCategoryChange}
+                          className={`w-full px-3 py-2.5 rounded-xl border ${fieldStyle} text-xs font-medium focus:outline-none focus:border-[#C5A059]`}
+                        >
+                          {!serviceGroups.length && <option value="">No services loaded</option>}
+                          {serviceGroups.map((group) => (
+                            <option key={group.id} value={String(group.id)}>{group.category}</option>
+                          ))}
+                        </select>
+                      </div>
 
-                  <div>
-                    <label className={`block text-[10px] font-bold ${isDarkMode ? 'text-[#A9A39B]' : 'text-gray-500'} uppercase tracking-wider mb-1`}>
-                      Service
-                    </label>
-                    <select
-                      value={serviceId}
-                      onChange={(e) => { setServiceId(e.target.value); setSelectedTime(''); }}
-                      required
-                      className={`w-full px-3 py-2.5 rounded-xl border ${fieldStyle} text-xs font-medium focus:outline-none focus:border-[#C5A059]`}
-                    >
-                      {!categoryServices.length && <option value="">No services available</option>}
-                      {categoryServices.map((service) => (
-                        <option key={service.id} value={String(service.id)}>
-                          {service.name} (₱{Number(service.price).toLocaleString('en-PH')})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      <div>
+                        <label className={`block text-[10px] font-bold ${isDarkMode ? 'text-[#A9A39B]' : 'text-gray-500'} uppercase tracking-wider mb-1`}>
+                          Service
+                        </label>
+                        <select
+                          value={serviceId}
+                          onChange={(e) => { setServiceId(e.target.value); setSelectedTime(''); }}
+                          required
+                          className={`w-full px-3 py-2.5 rounded-xl border ${fieldStyle} text-xs font-medium focus:outline-none focus:border-[#C5A059]`}
+                        >
+                          {!categoryServices.length && <option value="">No services available</option>}
+                          {categoryServices.map((service) => (
+                            <option key={service.id} value={String(service.id)}>
+                              {service.name} (₱{Number(service.price).toLocaleString('en-PH')})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  )}
 
                   <div>
                     <label className={`block text-[10px] font-bold ${isDarkMode ? 'text-[#A9A39B]' : 'text-gray-500'} uppercase tracking-wider mb-1`}>
@@ -606,7 +748,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                     disabled={loadingServices || loadingStylists || loadingSlots || checkingSlot || !currentServiceObj || !chosenStylist || !selectedSlot}
                     className={`w-full !mt-6 py-3.5 rounded-2xl ${primaryButton} disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-[11px] transition-all shadow-md flex items-center justify-center gap-2 group`}
                   >
-                    <span>{checkingSlot ? 'Verifying selected time…' : 'Review Appointment & 50% Deposit'}</span>
+                    <span>{checkingSlot ? 'Verifying selected time…' : 'Book Appointment Now'}</span>
                     <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
                   </button>
                 </div>
@@ -616,7 +758,67 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
           </div>
         )}
 
-        {/* STEP 2: Payment Review & Breakdown */}
+        {/* STEP 2: Appointment Summary */}
+        {step === 'summary' && (
+          <div className="p-6 sm:p-8">
+            <div className="mb-6 text-center">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#C5A059]">Please review your details</span>
+              <h3 className={`mt-2 flex items-center justify-center gap-2 text-2xl font-bold ${primaryText}`}>
+                <ClipboardCheck className="h-6 w-6 text-[#C5A059]" />
+                Appointment Summary
+              </h3>
+            </div>
+            <div className={`${insetSurface} mx-auto w-full overflow-hidden rounded-2xl border text-sm shadow-sm`}>
+              <dl className={`divide-y ${isDarkMode ? 'divide-[#3A342B]' : 'divide-[#E8DFD1]'}`}>
+                {[
+                  { label: 'Service', value: serviceTitle, Icon: Scissors },
+                  { label: 'Date', value: selectedDate, Icon: CalendarDays },
+                  { label: 'Time', value: formatClock(selectedTime), Icon: Clock },
+                  { label: 'Name', value: fullName.trim(), Icon: User },
+                  ...(phone.trim() ? [{ label: 'Contact', value: phone.trim(), Icon: Phone }] : []),
+                  ...(email.trim() ? [{ label: 'Email', value: email.trim(), Icon: Mail }] : []),
+                ].map(({ label, value, Icon }) => (
+                  <div key={label} className="flex min-h-14 items-center justify-between gap-4 px-4 py-3 sm:px-5">
+                    <dt className={`flex shrink-0 items-center gap-2.5 ${mutedText}`}>
+                      <Icon className="h-4 w-4 text-[#C5A059]" />
+                      <span>{label}</span>
+                    </dt>
+                    <dd className={`min-w-0 break-words text-right font-semibold ${primaryText}`}>{value || '—'}</dd>
+                  </div>
+                ))}
+                <div className={`flex min-h-16 items-center justify-between gap-4 border-t px-4 py-3 sm:px-5 ${isDarkMode ? 'border-[#3A342B] bg-[#30291E]' : 'border-[#E8DFD1] bg-[#F8F5EE]'}`}>
+                  <dt className={`flex items-center gap-2.5 font-semibold ${primaryText}`}>
+                    <PhilippinePeso className="h-4 w-4 text-[#C5A059]" />
+                    <span>Price</span>
+                  </dt>
+                  <dd className={`text-right text-lg font-extrabold ${primaryText}`}>₱{totalPriceNumber.toFixed(2)}</dd>
+                </div>
+              </dl>
+            </div>
+            <div className="mx-auto mt-6 flex w-full flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => setStep('form')}
+                className={`w-full rounded-2xl border py-3 text-xs font-medium transition-colors ${isDarkMode ? 'border-[#3A342B] bg-[#242220] text-[#F5F1EA] hover:bg-[#302D29]' : 'border-[#E8DFD1] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6]'}`}
+              >
+                <span>Go Back &amp; Edit</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => (isClientCart ? beginCheckout() : setStep('confirm'))}
+                disabled={isClientCart && submittingCheckout}
+                className={`flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50 ${primaryButton}`}
+              >
+                {isClientCart && submittingCheckout
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Check className="h-4 w-4" />}
+                {isClientCart && submittingCheckout ? 'Saving appointment…' : 'Confirm Appointment'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: Payment Review & Breakdown */}
         {step === 'confirm' && (
           <div className="p-8 text-center space-y-6">
             <div className={`w-14 h-14 ${insetSurface} text-[#C5A059] rounded-full flex items-center justify-center mx-auto border shadow-sm`}>
@@ -676,7 +878,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
               </button>
               
               <button 
-                onClick={() => setStep('form')}
+                onClick={() => setStep('summary')}
                 className={`w-full py-2.5 rounded-2xl border ${isDarkMode ? 'bg-[#242220] border-[#3A342B] hover:bg-[#302D29] text-[#F5F1EA]' : 'bg-white border-[#E8DFD1] hover:bg-[#F6F0E6] text-[#2A1E1B]'} font-medium text-xs transition-colors`}
               >
                 Go Back & Edit
@@ -685,7 +887,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
           </div>
         )}
 
-        {/* STEP 3: Explicit no-money demo, only if enabled on the backend. */}
+        {/* STEP 4: Explicit no-money demo, only if enabled on the backend. */}
         {step === 'demo' && (
           <div className="p-8 text-center space-y-5">
             <CreditCard className="w-12 h-12 mx-auto text-[#C5A059]" />
@@ -725,6 +927,52 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                 {submittingCheckout ? 'Checking…' : 'Refresh payment status'}
               </button>}
             <button type="button" onClick={handleResetAndClose} className={`w-full py-2 rounded-xl border ${fieldStyle}`}>Close</button>
+          </div>
+        )}
+
+        {step === 'queue-success' && (
+          <div className="p-8 text-center space-y-5">
+            <CheckCircle2 className="mx-auto h-12 w-12 text-[#C5A059]" />
+            <h3 className={`text-xl font-bold ${primaryText}`}>Service {completedServices} booked!</h3>
+            <p className={`text-sm ${mutedText}`}>
+              Ready to book Service {completedServices + 1}?
+            </p>
+            {servicesError && <p role="alert" className="text-xs text-red-500">Unable to load services: {servicesError}</p>}
+            {formError && <p role="alert" className="text-xs text-red-500">{formError}</p>}
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={handleBookNextService}
+                disabled={loadingServices || !allServices.length}
+                className={`w-full rounded-xl py-3 ${primaryButton} text-xs font-bold`}
+              >
+                {loadingServices ? 'Loading the next service…' : '                Confirm next service'}
+              </button>
+              <button
+                type="button"
+                onClick={handleResetAndClose}
+                className={`w-full rounded-xl border py-3 text-xs font-medium ${fieldStyle}`}
+              >
+                No, return to Services
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 'booking-success' && (
+          <div className="p-8 text-center space-y-5">
+            <CheckCircle2 className="mx-auto h-12 w-12 text-[#C5A059]" />
+            <h3 className={`text-xl font-bold ${primaryText}`}>All cart services booked!</h3>
+            <p className={`text-sm ${mutedText}`}>
+              Your {totalQueuedServices === 1 ? 'appointment is' : 'appointments are'} confirmed in your booking list.
+            </p>
+            <button
+              type="button"
+              onClick={handleResetAndClose}
+              className={`w-full rounded-xl py-3 text-xs font-bold ${primaryButton}`}
+            >
+              Close
+            </button>
           </div>
         )}
 

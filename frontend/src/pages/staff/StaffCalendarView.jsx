@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, UserRound } from 'lucide-react';
-import { api } from '../../api/client';
 import { Badge, EmptyState, card } from '../../components/staff/ui';
 
 const dateKey = (date) => {
@@ -10,9 +9,9 @@ const dateKey = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-const parseAppointmentDate = (value) => {
-  const [year, month, day] = String(value || '').slice(0, 10).split('-').map(Number);
-  return year && month && day ? new Date(year, month - 1, day) : null;
+const appointmentDateKey = (value) => {
+  const key = String(value || '').trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(key) ? key : '';
 };
 
 const monthLabel = (date) => new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(date);
@@ -39,42 +38,34 @@ function getMonthDays(monthDate) {
   return [...dates, ...Array(gridSize - dates.length).fill(null)];
 }
 
-export default function StaffCalendarView({ currentUser }) {
+export default function StaffCalendarView({
+  currentUser,
+  appointments,
+  appointmentsLoading: loading,
+  appointmentsError: error,
+  onRefreshAppointments,
+}) {
   const [today] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-  const [appointments, setAppointments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [appointmentTab, setAppointmentTab] = useState('upcoming');
   const todayKey = dateKey(today);
 
-  useEffect(() => {
-    let active = true;
-    if (!currentUser?.accessToken) return () => { active = false; };
-
-    api.getStaffAppointments(currentUser.accessToken)
-      .then((result) => { if (active) setAppointments(result.data ?? []); })
-      .catch((requestError) => { if (active) setError(requestError.message); })
-      .finally(() => { if (active) setLoading(false); });
-
-    return () => { active = false; };
-  }, [currentUser?.accessToken]);
-
   const appointmentDates = useMemo(() => new Set(
-    appointments.map((appointment) => {
-      const date = parseAppointmentDate(appointment.appointmentDate);
-      return date ? dateKey(date) : '';
-    }).filter(Boolean),
+    appointments.map((appointment) => appointmentDateKey(appointment.appointmentDate)).filter(Boolean),
   ), [appointments]);
 
   const monthDays = useMemo(() => getMonthDays(visibleMonth), [visibleMonth]);
   const selectedAppointments = useMemo(() => appointments
     .filter((appointment) => {
-      const appointmentDate = parseAppointmentDate(appointment.appointmentDate);
-      return appointmentDate && dateKey(appointmentDate) === dateKey(selectedDate);
+      if (appointmentDateKey(appointment.appointmentDate) !== dateKey(selectedDate)) return false;
+      const status = String(appointment.status || '').toUpperCase().replace(/[\s-]+/g, '_');
+      return appointmentTab === 'upcoming'
+        ? ['PENDING', 'CONFIRMED'].includes(status)
+        : ['COMPLETED', 'CANCELLED', 'NO_SHOW'].includes(status);
     })
     .sort((left, right) => String(left.startTime || '').localeCompare(String(right.startTime || ''))),
-  [appointments, selectedDate]);
+  [appointmentTab, appointments, selectedDate]);
 
   const changeMonth = (amount) => {
     setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() + amount, 1));
@@ -92,7 +83,12 @@ export default function StaffCalendarView({ currentUser }) {
           <h1 className="text-2xl font-bold text-[#2A1E1B]">Schedule</h1>
           <p className="mt-0.5 text-xs text-[#8A8174]">Browse appointments by date</p>
         </div>
-        <button type="button" onClick={() => selectDate(today)} className="rounded-xl border border-[#E7DFD4] bg-white px-4 py-2 text-xs font-bold text-[#443523] transition hover:bg-[#F6F0E6]">Today</button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={onRefreshAppointments} disabled={loading || !currentUser?.accessToken} className="rounded-xl border border-[#E7DFD4] bg-white px-4 py-2 text-xs font-bold text-[#443523] transition hover:bg-[#F6F0E6] disabled:cursor-wait disabled:opacity-60">
+            {loading && currentUser?.accessToken ? 'Refreshing…' : 'Refresh'}
+          </button>
+          <button type="button" onClick={() => selectDate(today)} className="rounded-xl border border-[#E7DFD4] bg-white px-4 py-2 text-xs font-bold text-[#443523] transition hover:bg-[#F6F0E6]">Today</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 w-full items-start">
@@ -128,19 +124,39 @@ export default function StaffCalendarView({ currentUser }) {
           <aside className={`${card} flex max-h-[80vh] min-h-64 flex-col overflow-y-auto rounded-3xl border border-gray-200 bg-white p-6 shadow-sm`}>
             <div className="mb-4 border-b border-[#E7DFD4] pb-4">
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#A1885B]">DAY VIEW</p>
-              <h2 className="mt-1 text-base font-bold text-[#2A1E1B]">Appointments</h2>
+              <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-base font-bold text-[#2A1E1B]">Appointments</h2>
+                <div role="tablist" aria-label="Appointment status" className="inline-flex rounded-full bg-[#F6F0E6] p-1">
+                  {['upcoming', 'past'].map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      role="tab"
+                      aria-selected={appointmentTab === tab}
+                      onClick={() => setAppointmentTab(tab)}
+                      className={`rounded-full px-3 py-1.5 text-[10px] font-bold capitalize transition ${appointmentTab === tab ? 'bg-[#4A3928] text-white shadow-sm' : 'text-[#756D60] hover:text-[#2A1E1B]'}`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <p className="mt-1 text-xs text-[#8A8174]">{longDate(selectedDate)}</p>
             </div>
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
               {!currentUser?.accessToken ? <p className="py-5 text-center text-xs text-[#8A8174]">Sign in with a staff account to load appointments.</p>
                 : loading ? <p className="py-5 text-center text-xs text-[#8A8174]">Loading appointments…</p>
                 : error ? <p role="alert" className="py-5 text-center text-xs text-red-600">{error}</p>
-                  : !selectedAppointments.length ? <EmptyState icon={CalendarDays} title="Nothing scheduled" hint="No appointments scheduled for this day." />
+                  : !selectedAppointments.length ? <EmptyState
+                    icon={CalendarDays}
+                    title={appointmentTab === 'past' ? 'No past appointments' : 'No upcoming appointments'}
+                    hint={`No ${appointmentTab} appointments for this day.`}
+                  />
                     : selectedAppointments.map((appointment) => (
                       <article key={appointment.id} className="rounded-xl border border-[#E7DFD4] bg-white p-3">
                         <div className="mb-2 flex items-center gap-2 text-xs font-bold text-[#8B5E3C]"><Clock3 size={14} />{formatTime(appointment.startTime)}{appointment.endTime ? ` – ${formatTime(appointment.endTime)}` : ''}</div>
                         <p className="text-sm font-bold text-[#2A1E1B]">{appointment.customerName || 'Guest'}</p>
-                        <p className="mt-0.5 text-xs text-[#756D60]">{appointment.service?.name || 'Service unavailable'}</p>
+                        <p className="mt-0.5 text-xs text-[#756D60]">{appointment.service?.name || appointment.serviceName || 'Service not specified'}</p>
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                           <span className="flex items-center gap-1 text-[10px] text-[#8A8174]"><UserRound size={12} />{appointment.stylistName || 'Unassigned'}</span>
                           <Badge tone={appointment.status === 'CONFIRMED' ? 'ok' : appointment.status === 'CANCELLED' || appointment.status === 'NO_SHOW' ? 'bad' : 'gold'}>{appointment.status || 'PENDING'}</Badge>

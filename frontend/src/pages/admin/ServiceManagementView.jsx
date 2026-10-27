@@ -1,5 +1,6 @@
 import HeaderActions from '../../components/workspace/HeaderActions';
 import ConfirmationModal from '../../components/ConfirmationModal';
+import { getServiceImage } from '../../utils/serviceImages';
 import { useState, useEffect } from 'react';
 import { 
   Search, 
@@ -508,176 +509,162 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
           </div>
         )}
 
-        {/* Services Data Table */}
-        <div className="overflow-x-auto overflow-y-visible rounded-xl border border-[#E9E4D8]">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-[#FFFDF8] border-b border-[#E9E4D8] text-[10px] font-semibold text-[#9A907F] uppercase tracking-wider">
-                <th className="p-4 pl-5 w-10">
-                  <input
-                    type="checkbox"
-                    onChange={handleSelectAll}
-                    checked={selectedServiceIds.length === paginatedServices.length && paginatedServices.length > 0}
-                    className="rounded border-[#E9E4D8] text-[#3A342B] focus:ring-0 cursor-pointer"
-                  />
-                </th>
-                <th className="p-4">Category</th>
-                <th className="p-4">Service Name</th>
-                <th className="p-4">Duration</th>
-                <th className="p-4">Price</th>
-                <th className="p-4">Status</th>
-                <th className="p-4 text-right pr-6">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E9E4D8] text-xs">
-              {loading ? (
-                <tr>
-                  <td colSpan="7" className="p-8 text-center text-[#8A8174]">
-                    Loading services from Neon DB...
-                  </td>
-                </tr>
-              ) : paginatedServices.length === 0 ? (
-                <tr>
-                  <td colSpan="7" className="p-8 text-center text-[#8A8174]">
-                    No {activeTab.toLowerCase()} services found.
-                  </td>
-                </tr>
-              ) : (
-                paginatedServices.map((s, index) => {
-                  const isSelected = selectedServiceIds.includes(s.id);
-                  const isBottomRow = index >= paginatedServices.length - 2;
+        {/* Services Cards */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] px-4 py-3">
+            <label className="flex cursor-pointer items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-[#9A907F]">
+              <input
+                type="checkbox"
+                onChange={handleSelectAll}
+                checked={selectedServiceIds.length === paginatedServices.length && paginatedServices.length > 0}
+                className="rounded border-[#E9E4D8] text-[#3A342B] focus:ring-0"
+              />
+              Select all on this page
+            </label>
+            <span className="text-[10px] text-[#8A8174]">{selectedServiceIds.length} selected</span>
+          </div>
 
-                  return (
-                    <tr 
-                      key={s.id} 
-                      className={`hover:bg-[#C5A059]/5 transition-colors ${isSelected ? 'bg-[#FFFDF0]' : ''}`}
-                    >
-                      <td className="p-4 pl-5">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => handleSelectService(s.id)}
-                          className="rounded border-[#E9E4D8] text-[#3A342B] focus:ring-0 cursor-pointer"
+          {loading ? (
+            <p role="status" className="rounded-2xl border border-[#E9E4D8] bg-white p-8 text-center text-xs text-[#8A8174]">
+              Loading services from Neon DB...
+            </p>
+          ) : paginatedServices.length === 0 ? (
+            <p className="rounded-2xl border border-[#E9E4D8] bg-white p-8 text-center text-xs text-[#8A8174]">
+              No {activeTab.toLowerCase()} services found.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+              {paginatedServices.map((s, index) => {
+                const isSelected = selectedServiceIds.includes(s.id);
+                const isBottomRow = index >= paginatedServices.length - 3;
+                const duration = s.duration || (s.durationMinutes ? `${s.durationMinutes} mins` : 'Duration not provided');
+
+                return (
+                  <div key={s.id} className="relative min-w-0">
+                    <article className={`group relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-[#E9E4D8] bg-white p-2.5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md ${isSelected ? 'ring-2 ring-[#C5A059]' : ''}`}>
+                      <div className="relative aspect-[4/3] overflow-hidden rounded-xl">
+                        <img
+                          src={getServiceImage(s.name, s.category)}
+                          alt={s.name}
+                          loading="lazy"
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                         />
-                      </td>
-
-                      <td className="p-4">
-                        {renderCategoryBadge(s.category)}
-                      </td>
-
-                      <td className="p-4">
-                        <div>
-                          <p className="font-bold text-[#2A1E1B]">{s.name}</p>
-                          <p className="text-[11px] text-[#8A8174] truncate max-w-xs">{s.description}</p>
-                        </div>
-                      </td>
-
-                      <td className="p-4 text-[#443523] font-medium">
-                        {s.duration}
-                      </td>
-
-                      <td className="p-4 text-[#2A1E1B] font-bold">
-                        {s.price}
-                      </td>
-
-                      <td className="p-4">
-                        <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-3.5 py-1 rounded-full ${
-                          s.isArchived 
-                            ? 'bg-[#EFECE6] text-[#6E6359] border border-[#DFD5C0]' 
-                            : s.status === 'ACTIVE' 
-                              ? 'bg-[#E6F4EA] text-[#137333] border border-[#CEEAD6]' 
-                              : 'bg-[#FCE8E6] text-[#C5221F] border border-[#FAD2CF]'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${s.isArchived ? 'bg-[#6E6359]' : s.status === 'ACTIVE' ? 'bg-[#137333]' : 'bg-[#C5221F]'}`} />
-                          {s.isArchived ? 'ARCHIVED' : s.status}
-                        </span>
-                      </td>
-
-                      <td className="p-4 text-right pr-6 relative">
+                        <label className="absolute left-2 top-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-white/95 shadow-sm" aria-label={`Select ${s.name}`}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleSelectService(s.id)}
+                            className="rounded border-[#E9E4D8] text-[#3A342B] focus:ring-0"
+                          />
+                        </label>
                         <button
+                          type="button"
                           onClick={() => setActiveMenuId(activeMenuId === s.id ? null : s.id)}
-                          className="p-2 rounded-lg hover:bg-[#E9E4D8]/50 text-[#8A8174] hover:text-[#2A1E1B] transition-colors"
+                          aria-label={`Actions for ${s.name}`}
+                          aria-expanded={activeMenuId === s.id}
+                          className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-full bg-white/95 text-[#443523] shadow-sm transition-colors hover:bg-white hover:text-[#8B5E3C]"
                           title="Actions"
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
-
-                        {/* Dropdown Menu */}
-                        {activeMenuId === s.id && (
-                          <div className={`absolute right-6 w-52 bg-white rounded-xl shadow-xl border border-[#E9E4D8] py-1.5 z-40 text-left animate-fadeIn ${
-                            isBottomRow ? 'bottom-12' : 'top-12'
+                        <div className="absolute bottom-2 left-2 flex flex-wrap items-center gap-1.5">
+                          {renderCategoryBadge(s.category)}
+                          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-bold ${
+                            s.isArchived
+                              ? 'border-[#DFD5C0] bg-[#EFECE6] text-[#6E6359]'
+                              : s.status === 'ACTIVE'
+                                ? 'border-[#CEEAD6] bg-[#E6F4EA] text-[#137333]'
+                                : 'border-[#FAD2CF] bg-[#FCE8E6] text-[#C5221F]'
                           }`}>
-                            
-                            {!s.isArchived ? (
-                              <>
-                                <button
-                                  onClick={() => {
-                                    setEditingService(s);
-                                    setServiceForm({
-                                      name: s.name,
-                                      category: s.category,
-                                      price: s.price.replace('₱', '').replace(/,/g, ''),
-                                      durationHours: String(Math.floor(Number(s.durationMinutes || 0) / 60)),
-                                      durationMins: String(Number(s.durationMinutes || 0) % 60),
-                                      description: s.description
-                                    });
-                                    setActiveMenuId(null);
-                                    setIsAddServiceOpen(true);
-                                  }}
-                                  className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium"
-                                >
-                                  <Edit3 className="h-3.5 w-3.5 text-[#8A8174]" />
-                                  Edit Service
-                                </button>
+                            <span className={`h-1.5 w-1.5 rounded-full ${s.isArchived ? 'bg-[#6E6359]' : s.status === 'ACTIVE' ? 'bg-[#137333]' : 'bg-[#C5221F]'}`} />
+                            {s.isArchived ? 'ARCHIVED' : s.status}
+                          </span>
+                        </div>
+                      </div>
 
-                                <button
-                                  onClick={() => requestServiceAction(s, "status")}
-                                  className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium border-t border-[#E9E4D8]"
-                                >
-                                  {s.status === 'ACTIVE' ? <UserX className="h-3.5 w-3.5 text-red-500" /> : <UserCheck className="h-3.5 w-3.5 text-emerald-600" />}
-                                  {s.status === 'ACTIVE' ? 'Set Inactive' : 'Set Active'}
-                                </button>
+                      <div className="flex min-w-0 flex-1 flex-col px-1 pt-3">
+                        <h3 className="line-clamp-2 text-sm font-bold leading-snug text-[#2A1E1B]">{s.name}</h3>
+                        <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-[#8A8174]">
+                          {s.description || 'Professional salon care tailored for a premium finishing look.'}
+                        </p>
+                      </div>
 
-                                <button
-                                  onClick={() => requestServiceAction(s, "archive")}
-                                  className="w-full px-3.5 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 font-semibold border-t border-[#E9E4D8]"
-                                >
-                                  <Archive className="h-3.5 w-3.5" />
-                                  Archive Service
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => requestServiceAction(s, "archive")}
-                                  className="w-full px-3.5 py-2 text-xs text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 font-semibold"
-                                >
-                                  <RotateCcw className="h-3.5 w-3.5" />
-                                  Restore Service
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    alert(`Service Details:\nName: ${s.name}\nCategory: ${s.category}\nPrice: ${s.price}\nDuration: ${s.duration}\nDescription: ${s.description}`);
-                                    setActiveMenuId(null);
-                                  }}
-                                  className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium border-t border-[#E9E4D8]"
-                                >
-                                  <Search className="h-3.5 w-3.5 text-[#8A8174]" />
-                                  View Details
-                                </button>
-                              </>
-                            )}
+                      <div className="mt-4 flex items-center justify-between gap-2 border-t border-[#E9E4D8] px-1 pt-3">
+                        <div className="flex min-w-0 items-baseline gap-2">
+                          <span className="truncate text-base font-extrabold text-[#B48B43]">{s.price}</span>
+                          <span className="shrink-0 text-[10px] text-[#8A8174]">{duration}</span>
+                        </div>
+                      </div>
+                    </article>
 
-                          </div>
+                    {activeMenuId === s.id && (
+                      <div className={`absolute right-2 z-40 w-52 rounded-xl border border-[#E9E4D8] bg-white py-1.5 text-left shadow-xl animate-fadeIn ${
+                        isBottomRow ? 'bottom-12' : 'top-12'
+                      }`}>
+                        {!s.isArchived ? (
+                          <>
+                            <button
+                              onClick={() => {
+                                setEditingService(s);
+                                setServiceForm({
+                                  name: s.name,
+                                  category: s.category,
+                                  price: s.price.replace('₱', '').replace(/,/g, ''),
+                                  durationHours: String(Math.floor(Number(s.durationMinutes || 0) / 60)),
+                                  durationMins: String(Number(s.durationMinutes || 0) % 60),
+                                  description: s.description
+                                });
+                                setActiveMenuId(null);
+                                setIsAddServiceOpen(true);
+                              }}
+                              className="flex w-full items-center gap-2 px-3.5 py-2 text-xs font-medium text-[#2A1E1B] hover:bg-[#FFFDF8]"
+                            >
+                              <Edit3 className="h-3.5 w-3.5 text-[#8A8174]" />
+                              Edit Service
+                            </button>
+                            <button
+                              onClick={() => requestServiceAction(s, "status")}
+                              className="flex w-full items-center gap-2 border-t border-[#E9E4D8] px-3.5 py-2 text-xs font-medium text-[#2A1E1B] hover:bg-[#FFFDF8]"
+                            >
+                              {s.status === 'ACTIVE' ? <UserX className="h-3.5 w-3.5 text-red-500" /> : <UserCheck className="h-3.5 w-3.5 text-emerald-600" />}
+                              {s.status === 'ACTIVE' ? 'Set Inactive' : 'Set Active'}
+                            </button>
+                            <button
+                              onClick={() => requestServiceAction(s, "archive")}
+                              className="flex w-full items-center gap-2 border-t border-[#E9E4D8] px-3.5 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
+                            >
+                              <Archive className="h-3.5 w-3.5" />
+                              Archive Service
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => requestServiceAction(s, "archive")}
+                              className="flex w-full items-center gap-2 px-3.5 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                              Restore Service
+                            </button>
+                            <button
+                              onClick={() => {
+                                alert(`Service Details:\nName: ${s.name}\nCategory: ${s.category}\nPrice: ${s.price}\nDuration: ${s.duration}\nDescription: ${s.description}`);
+                                setActiveMenuId(null);
+                              }}
+                              className="flex w-full items-center gap-2 border-t border-[#E9E4D8] px-3.5 py-2 text-xs font-medium text-[#2A1E1B] hover:bg-[#FFFDF8]"
+                            >
+                              <Search className="h-3.5 w-3.5 text-[#8A8174]" />
+                              View Details
+                            </button>
+                          </>
                         )}
-                      </td>
-
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Pagination Footer */}
