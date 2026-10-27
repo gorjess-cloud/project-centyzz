@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import CredentialRecoveryPage from './pages/CredentialRecoveryPage';
+import { useEffect, useRef, useState } from 'react';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import BookingModal from './components/BookingModal';
@@ -23,6 +24,7 @@ import { useUnsavedChanges } from './components/UnsavedChangesProvider';
 
 
 export default function App() {
+  const [credentialRecoveryHash] = useState(() => window.location.hash.startsWith('#/recover/') ? window.location.hash : null);
   const [activePage, setActivePage] = useState(() => {
     if (window.location.pathname === '/forgot-pin') return 'forgot-pin';
     if (new URLSearchParams(window.location.search).get('page') === 'auth') return 'auth';
@@ -147,13 +149,25 @@ export default function App() {
     }));
   };
 
+  const logoutPending = useRef(false);
   const handleLogout = () => {
-    guardNavigation(() => {
+    guardNavigation(async () => {
+      if (logoutPending.current) return;
+      logoutPending.current = true;
+      if (['ADMIN', 'STAFF'].includes(memberUser?.role) && memberUser?.accessToken && !memberUser?.mustCompleteSetup) {
+        try {
+          await fetch('/api/admin/operational-logs/sign-out', {
+            method: 'POST', headers: { Authorization: `Bearer ${memberUser.accessToken}` },
+            signal: AbortSignal.timeout(6000),
+          });
+        } catch { /* Local logout still completes during a network outage. */ }
+      }
       setMemberUser(null);
       setMemberAppointments([]);
       setAppointmentsError('');
       setIsLoadingAppointments(false);
       setActivePage('home');
+      logoutPending.current = false;
     });
   };
 
@@ -171,6 +185,8 @@ export default function App() {
       name: `${profile.firstName || ''} ${profile.lastName || ''}`.trim(),
     } : current);
   };
+
+  if (credentialRecoveryHash) return <CredentialRecoveryPage initialHash={credentialRecoveryHash} />;
 
   return (
     <div className={`min-h-screen flex flex-col justify-between overflow-x-clip font-sans ${isDarkMode ? 'bg-[#111111] text-[#F5F1EA]' : 'bg-[#FDFBF7] text-[#3A2E2B]'}`}>

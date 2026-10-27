@@ -1,3 +1,6 @@
+import { CredentialRecoveryService } from './credential-recovery.service.js';
+import { UseInterceptors } from '@nestjs/common';
+import { AdminOperationalEventInterceptor } from '../operational-logs/admin-operational-event.interceptor.js';
 import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, ParseIntPipe, Req } from '@nestjs/common';
 import { UsersService } from './users.service.js';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard.js';
@@ -5,17 +8,32 @@ import { RolesGuard } from '../../auth/roles.guard.js';
 import { Roles } from '../../auth/roles.decorator.js';
 import { ManagementActionPinGuard } from './management-action-pin.guard.js';
 
+@UseInterceptors(AdminOperationalEventInterceptor)
 @Controller('api/admin/users')
 @UseGuards(JwtAuthGuard, RolesGuard) 
 @Roles('ADMIN', 'SUPERADMIN')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService, private readonly recovery: CredentialRecoveryService) {}
 
  @Get()
   
   async getUsers(@Query('archived') archived?: string) {
     const isArchived = archived === 'true';
     return this.usersService.getUsers(isArchived);
+  }
+
+  @Post(':id/reset-password-email')
+  @Roles('ADMIN')
+  @UseGuards(ManagementActionPinGuard)
+  sendPasswordReset(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
+    return this.recovery.request(id, 'password', req.user.sub);
+  }
+
+  @Post(':id/reset-pin-email')
+  @Roles('ADMIN')
+  @UseGuards(ManagementActionPinGuard)
+  sendPinReset(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
+    return this.recovery.request(id, 'pin', req.user.sub);
   }
 
   @Post()

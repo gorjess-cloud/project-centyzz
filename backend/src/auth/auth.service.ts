@@ -295,9 +295,9 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
     }
 
     if (isManagementRole(role)) {
-      await this.managementSecurity.requireConfigured(user.id);
+      const security = await this.managementSecurity.requireConfigured(user.id);
       const pinChallengeToken = await this.jwtService.signAsync(
-        { sub: user.id, email: user.email, role, purpose: 'pin' },
+        { sub: user.id, email: user.email, role, purpose: 'pin', credentialVersion: ['ADMIN','STAFF'].includes(role) ? security.credential_version ?? 0 : undefined },
         { expiresIn: '5m' },
       );
       return {
@@ -467,7 +467,7 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
   private async verifyPurposeToken(token: string, purpose: 'pin' | 'setup') {
     try {
       const payload = await this.jwtService.verifyAsync<{
-        sub: number; email: string; role: string; purpose: string;
+        sub: number; email: string; role: string; purpose: string; credentialVersion?: number;
       }>(token);
       if (!Number.isInteger(payload.sub) || payload.purpose !== purpose || !isManagementRole(payload.role)) {
         throw new UnauthorizedException('Invalid verification token');
@@ -477,7 +477,11 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
           this.normalizeAccountRole(user.role) !== payload.role) {
         throw new UnauthorizedException('Account unavailable');
       }
-      return user;
+      if (['ADMIN','STAFF'].includes(payload.role)) {
+        const security = await this.managementSecurity.requireConfigured(user.id);
+        if ((payload.credentialVersion ?? 0) !== (security.credential_version ?? 0)) throw new UnauthorizedException('Credentials changed');
+      }
+      return { ...user, recoveryCredentialVersion: payload.credentialVersion ?? 0 };
     } catch {
       throw new UnauthorizedException('Verification session expired or invalid. Please sign in again.');
     }
@@ -487,9 +491,10 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
     const user = await this.verifyPurposeToken(challengeToken, 'pin');
     const security = await this.managementSecurity.verifyPin(user.id, pin);
     const role = this.normalizeAccountRole(user.role);
+    if (['ADMIN','STAFF'].includes(role) && user.recoveryCredentialVersion !== (security.credential_version ?? 0)) throw new UnauthorizedException('Credentials changed. Sign in again.');
     const purpose = security.needs_setup ? 'setup' : 'access';
     const accessToken = await this.jwtService.signAsync(
-      { sub: user.id, email: user.email, role, purpose },
+      { sub: user.id, email: user.email, role, purpose, credentialVersion: ['ADMIN','STAFF'].includes(role) ? security.credential_version ?? 0 : undefined },
       { expiresIn: purpose === 'setup' ? '15m' : '1h' },
     );
     return {
@@ -508,7 +513,7 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
     const details = await this.managementSecurity.finishSetup(user.id, body);
     const role = this.normalizeAccountRole(user.role);
     const accessToken = await this.jwtService.signAsync(
-      { sub: user.id, email: user.email, role, purpose: 'access' }, { expiresIn: '1h' },
+      { sub: user.id, email: user.email, role, purpose: 'access', credentialVersion: ['ADMIN','STAFF'].includes(role) ? user.recoveryCredentialVersion : undefined }, { expiresIn: '1h' },
     );
     return { success: true, data: { accessToken, user: { ...this.safeUser(user), ...details, mustCompleteSetup: false } } };
   }

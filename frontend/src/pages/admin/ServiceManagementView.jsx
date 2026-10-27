@@ -45,6 +45,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
 
   // Services Data from DB
   const [services, setServices] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
@@ -69,7 +70,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
   // Form States
   const [serviceForm, setServiceForm] = useState({
     name: '',
-    category: 'HAIR',
+    categoryId: '',
     price: '',
     durationHours: '1',
     durationMins: '0',
@@ -133,21 +134,16 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
         const isArchivedParam = activeTab === 'ARCHIVED';
         const token = getAuthToken();
 
-        const response = await fetch(`/api/admin/services?archived=${isArchivedParam}`, {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-          },
-        });
-
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const [response, categoryResponse] = await Promise.all([
+          fetch(`/api/admin/services?archived=${isArchivedParam}`, { headers }),
+          fetch('/api/admin/services/categories', { headers }),
+        ]);
         if (!response.ok) throw new Error(`Unable to load services (HTTP ${response.status}).`);
-        if (response.ok) {
-          const data = await response.json();
-          if (isMounted) setLoadError('');
-          if (isMounted && Array.isArray(data)) {
-            setServices(data);
-          }
-        }
+        if (!categoryResponse.ok) throw new Error(`Unable to load service categories (HTTP ${categoryResponse.status}).`);
+        const [data, categoryData] = await Promise.all([response.json(), categoryResponse.json()]);
+        if (!Array.isArray(data) || !Array.isArray(categoryData)) throw new Error('Invalid service catalog response.');
+        if (isMounted) { setServices(data); setCategories(categoryData); setLoadError(''); }
       } catch (err) {
         console.error('Error fetching services:', err);
         if (isMounted) setLoadError(err.message || 'Unable to load services.');
@@ -194,7 +190,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.category.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesCategory = categoryFilter === 'ALL' || s.category === categoryFilter;
+    const matchesCategory = categoryFilter === 'ALL' || String(s.categoryId) === categoryFilter;
 
     return matchesSearch && matchesCategory;
   });
@@ -273,7 +269,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
       if (response.ok) {
         setIsAddServiceOpen(false);
         setEditingService(null);
-        setServiceForm({ name: '', category: 'HAIR', price: '', durationHours: '1', durationMins: '0', description: '' });
+        setServiceForm({ name: '', categoryId: '', price: '', durationHours: '1', durationMins: '0', description: '' });
         refreshServices();
         showToast(editingService ? `Successfully updated service` : `Successfully added new service`);
       } else {
@@ -350,27 +346,16 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
     });
   };
   const renderCategoryBadge = (category) => {
-    const cat = (category || 'HAIR').toUpperCase();
-    if (cat === 'HAIR') {
-      return (
-
-        <span className="inline-flex items-center gap-1.5 bg-[#FDEBB6] text-[#8C6D23] text-[10px] font-bold tracking-wider px-3 py-1 rounded-full border border-[#F3DE9F]">
-          <Sparkles className="h-3 w-3" /> HAIR
-        </span>
-      );
-    }
-    if (cat === 'NAILS') {
-      return (
-        <span className="inline-flex items-center gap-1.5 bg-[#E1F5FE] text-[#0288D1] text-[10px] font-bold tracking-wider px-3 py-1 rounded-full border border-[#B3E5FC]">
-          <Tag className="h-3 w-3" /> NAILS
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1.5 bg-[#FCE4EC] text-[#C2185B] text-[10px] font-bold tracking-wider px-3 py-1 rounded-full border border-[#F8BBD0]">
-        <Tag className="h-3 w-3" /> SKIN
-      </span>
-    );
+    const name = category || 'Uncategorized';
+    const normalized = name.toLowerCase();
+    const hair = normalized.startsWith('hair');
+    const colors = hair ? 'bg-[#FDEBB6] text-[#8C6D23] border-[#F3DE9F]'
+      : normalized.includes('nail') ? 'bg-[#E1F5FE] text-[#0288D1] border-[#B3E5FC]'
+      : normalized.includes('aesthetic') || normalized.includes('lash') ? 'bg-[#FCE4EC] text-[#C2185B] border-[#F8BBD0]'
+      : 'bg-[#F1ECE4] text-[#736457] border-[#E5DED3]';
+    return <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-3 py-1 rounded-full border ${colors}`}>
+      {hair ? <Sparkles className="h-3 w-3 shrink-0" /> : <Tag className="h-3 w-3 shrink-0" />}{name}
+    </span>;
   };
 
   return (
@@ -449,14 +434,13 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
 
             <div className="relative">
               <select
+                aria-label="Filter services by category"
                 value={categoryFilter}
                 onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
                 className="appearance-none pl-9 pr-8 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs font-semibold text-[#443523] outline-none cursor-pointer focus:border-[#C5A059]"
               >
                 <option value="ALL">All Categories</option>
-                <option value="HAIR">Hair</option>
-                <option value="NAILS">Nails</option>
-                <option value="SKIN">Skin</option>
+                {categories.map(category => <option key={category.id} value={String(category.id)}>{category.name}</option>)}
               </select>
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8A8174] pointer-events-none" />
             </div>
@@ -464,7 +448,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
             <button
               onClick={() => {
                 setEditingService(null);
-                setServiceForm({ name: '', category: 'HAIR', price: '', durationHours: '1', durationMins: '0', description: '' });
+                setServiceForm({ name: '', categoryId: '', price: '', durationHours: '1', durationMins: '0', description: '' });
                 setIsAddServiceOpen(true);
               }}
               className="flex items-center gap-2 bg-[#8B5E3C] hover:bg-[#724B2F] text-white px-4 py-2.5 rounded-xl text-xs font-semibold shadow-sm transition-all active:scale-95 border border-[#C5A059]/40"
@@ -562,7 +546,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
                       </td>
 
                       <td className="p-4">
-                        {renderCategoryBadge(s.category)}
+                        {renderCategoryBadge(s.categoryName || s.category)}
                       </td>
 
                       <td className="p-4">
@@ -615,7 +599,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
                                     setEditingService(s);
                                     setServiceForm({
                                       name: s.name,
-                                      category: s.category,
+                                      categoryId: String(s.categoryId ?? ''),
                                       price: s.price.replace('₱', '').replace(/,/g, ''),
                                       durationHours: String(Math.floor(Number(s.durationMinutes || 0) / 60)),
                                       durationMins: String(Number(s.durationMinutes || 0) % 60),
@@ -740,13 +724,17 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Category</label>
                   <select
-                    value={serviceForm.category}
-                    onChange={(e) => setServiceForm({ ...serviceForm, category: e.target.value })}
+                    required
+                    aria-label="Service category"
+                    value={serviceForm.categoryId}
+                    onChange={(e) => setServiceForm({ ...serviceForm, categoryId: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs font-semibold text-[#443523] outline-none focus:border-[#C5A059]"
                   >
-                    <option value="HAIR">Hair</option>
-                    <option value="NAILS">Nails</option>
-                    <option value="SKIN">Skin</option>
+                    <option value="" disabled>Select a category</option>
+                    {categories.filter(category => (category.isActive && !category.isArchived) ||
+                      (editingService && String(category.id) === serviceForm.categoryId)).map(category =>
+                        <option key={category.id} value={String(category.id)}>{category.name}{!category.isActive || category.isArchived ? ' (unavailable for new services)' : ''}</option>
+                    )}
                   </select>
                 </div>
 

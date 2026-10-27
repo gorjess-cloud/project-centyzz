@@ -228,6 +228,20 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage) || 1;
   const paginatedUsers = filteredUsers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
+  const handleRecoveryEmail = (user, kind) => {
+    setActiveMenuId(null);
+    requestAdminPin(async (verifiedPin) => {
+      try {
+        const response = await fetch(`/api/admin/users/${user.id}/reset-${kind}-email`, {
+          method: 'POST', headers: { Authorization: `Bearer ${getAuthToken()}`, 'X-Management-Pin': verifiedPin },
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(Array.isArray(result.message) ? result.message.join(' ') : result.message || 'Unable to send reset email.');
+        showToast(result.message);
+      } catch (error) { showToast(error.message || 'Unable to send reset email.'); }
+    });
+  };
+
   const handleSelectAll = (e) => {
     if (e.target.checked) {
       setSelectedUserIds(paginatedUsers.map((u) => u.id));
@@ -736,16 +750,15 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
                                 </div>
 
                                 <button
-                                  onClick={() => {
-                                    setActiveMenuId(null);
-                                    requestAdminPin(() => {
-                                      showToast('No email was sent. Ask the user to use Forgot Password on the login page.');
-                                    });
-                                  }}
+                                  onClick={() => handleRecoveryEmail(u, 'password')}
                                   className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium border-t border-[#E9E4D8]"
                                 >
                                   <KeyRound className="h-3.5 w-3.5 text-[#B4833F]" />
                                   Reset Password Email
+                                </button>
+                                <button onClick={() => handleRecoveryEmail(u, 'pin')}
+                                  className="w-full px-3.5 py-2 text-xs text-[#2A1E1B] hover:bg-[#FFFDF8] flex items-center gap-2 font-medium border-t border-[#E9E4D8]">
+                                  <Lock className="h-3.5 w-3.5 text-[#B4833F]" />Reset PIN Email
                                 </button>
 
                                 <button
