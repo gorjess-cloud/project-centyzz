@@ -18,7 +18,7 @@ export default function Footer({ setActivePage, setServiceFilter, isDarkMode }) 
                 className="h-8 w-auto object-contain" 
               />
           </div>
-              <span className="text-xl font-serif tracking-widest text-white font-bold uppercase">CENTYZZ</span>
+              <span className="text-xl tracking-widest text-white font-bold uppercase">CENTYZZ</span>
             </div>
             <p className={`text-xs leading-relaxed ${secondaryText}`}>
               Your premier sanctuary for luxury hair styling and bespoke nail artistry. Experience elegance redefined.

@@ -1,6 +1,9 @@
 import HeaderActions from '../../components/workspace/HeaderActions';
 import { api } from '../../api/client.js';
 import { useState } from 'react';
+import { useUnsavedChanges } from '../../components/UnsavedChangesProvider';
+import ProfilePictureModal from '../../components/ProfilePictureModal';
+import SaveChangesModal from '../../components/SaveChangesModal';
 import { 
   User, 
   Lock, 
@@ -13,8 +16,28 @@ import {
   History
 } from 'lucide-react';
 
+const evaluatePasswordStrength = (password) => {
+  const checks = [
+    password.length >= 8,
+    /[A-Z]/.test(password),
+    /[a-z]/.test(password),
+    /\d/.test(password),
+    /[^A-Za-z0-9]/.test(password),
+  ];
+  const score = checks.filter(Boolean).length;
+  return score === checks.length ? 'Strong' : score >= 3 ? 'Medium' : 'Weak';
+};
+
 export default function AccountManagementView({ currentUser, onUserUpdated, showHeaderActions = true }) {
   const [toastMessage, setToastMessage] = useState('');
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+  const [pendingSave, setPendingSave] = useState('');
+  const [passwordStrength, setPasswordStrength] = useState('');
+  const { markDirty, markSaved } = useUnsavedChanges();
+  const profileScope = `admin-profile-${currentUser?.id || currentUser?.email || 'current'}`;
+  const avatarScope = `admin-avatar-${currentUser?.id || currentUser?.email || 'current'}`;
+  const passwordScope = `admin-password-${currentUser?.id || currentUser?.email || 'current'}`;
+  const pinScope = `admin-pin-${currentUser?.id || currentUser?.email || 'current'}`;
 
   // Active sub-tab state
   const [activeTab, setActiveTab] = useState('PROFILE'); // 'PROFILE', 'SECURITY', 'LOGS'
@@ -56,20 +79,29 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
     setTimeout(() => setToastMessage(''), 4000);
   };
 
-  const handleProfileSave = async (e) => {
-    e.preventDefault();
+  const handleAvatarImport = (imageUrl) => {
+    markDirty(avatarScope);
+    setProfileForm((previous) => ({ ...previous, avatarUrl: imageUrl }));
+  };
+
+  const handleAvatarRemove = () => {
+    markDirty(avatarScope);
+    setProfileForm((previous) => ({ ...previous, avatarUrl: '' }));
+  };
+
+  const handleProfileSave = async () => {
     try {
       const result = await api.updateMyProfile(currentUser?.accessToken, {
         firstName: profileForm.firstName, lastName: profileForm.lastName,
         phoneNumber: profileForm.contactNumber,
       });
       onUserUpdated?.(result.data);
+      markSaved(profileScope);
       showToast('Successfully updated profile details!');
     } catch (error) { showToast(error.message || 'Unable to update profile'); }
   };
 
-  const handlePasswordChange = async (e) => {
-    e.preventDefault();
+  const handlePasswordChange = async () => {
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       showToast('Error: New passwords do not match.');
       return;
@@ -81,11 +113,12 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
       });
       showToast('Password successfully changed!');
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setPasswordStrength('');
+      markSaved(passwordScope);
     } catch (error) { showToast(error.message || 'Unable to change password'); }
   };
 
-  const handlePinChange = async (e) => {
-    e.preventDefault();
+  const handlePinChange = async () => {
     if (pinForm.newPin !== pinForm.confirmPin) {
       showToast('Error: New PIN entries do not match.');
       return;
@@ -97,10 +130,33 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
       });
       showToast('Management PIN updated successfully!');
       setPinForm({ currentPin: '', newPin: '', confirmPin: '' });
+      markSaved(pinScope);
     } catch (error) { showToast(error.message || 'Unable to change PIN'); }
   };
 
+  const requestSave = (event, action) => {
+    event.preventDefault();
+    setPendingSave(action);
+  };
+
+  const confirmSave = () => {
+    const action = pendingSave;
+    setPendingSave('');
+    if (action === 'profile') void handleProfileSave();
+    if (action === 'password') void handlePasswordChange();
+    if (action === 'pin') void handlePinChange();
+  };
+
   const initials = `${profileForm.firstName.charAt(0)}${profileForm.lastName.charAt(0)}`.toUpperCase();
+  const passwordMismatch = Boolean(passwordForm.confirmPassword)
+    && passwordForm.newPassword !== passwordForm.confirmPassword;
+  const pinMismatch = Boolean(pinForm.confirmPin)
+    && pinForm.newPin !== pinForm.confirmPin;
+  const passwordStrengthColor = {
+    Weak: 'text-red-600',
+    Medium: 'text-amber-600',
+    Strong: 'text-green-600',
+  }[passwordStrength];
 
   return (
     <div className="w-full space-y-6 text-[#443523] pb-6">
@@ -127,7 +183,7 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
       {/* Profile Overview Header Card */}
       <div className="bg-white rounded-2xl border border-[#E9E4D8] shadow-sm p-6 flex flex-col sm:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-5">
-          <div className="relative group cursor-pointer">
+          <button type="button" className="relative group cursor-pointer" onClick={() => setIsAvatarModalOpen(true)} title="Manage profile image" aria-label="Manage profile image">
             <div className="w-20 h-20 rounded-full bg-[#4A3928] text-[#C5A059] font-bold text-2xl border-4 border-[#C5A059]/30 flex items-center justify-center shadow-md overflow-hidden">
               {profileForm.avatarUrl ? (
                 <img src={profileForm.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
@@ -138,7 +194,7 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
             <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
               <Camera className="w-5 h-5 text-white" />
             </div>
-          </div>
+          </button>
 
           <div>
             <div className="flex items-center gap-2">
@@ -191,11 +247,11 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
       </div>
 
       {/* Main Tab Content */}
-      <div className="bg-white rounded-2xl border border-[#E9E4D8] shadow-sm p-6 sm:p-8 space-y-6">
+      <div className="min-h-[700px] bg-white rounded-2xl border border-[#E9E4D8] shadow-sm p-6 sm:p-8 space-y-6">
 
         {/* TAB 1: PERSONAL PROFILE */}
         {activeTab === 'PROFILE' && (
-          <form onSubmit={handleProfileSave} className="space-y-6 max-w-3xl">
+          <form onSubmit={(event) => requestSave(event, 'profile')} onChange={() => markDirty(profileScope)} className="space-y-6 max-w-3xl">
             <div>
               <h3 className="text-sm font-bold text-[#2A1E1B] uppercase tracking-wider mb-1">Personal Details</h3>
               <p className="text-xs text-[#8A8174]">Update your basic profile information used across system communications</p>
@@ -276,7 +332,7 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
         {activeTab === 'SECURITY' && (
           <div className="space-y-8 max-w-3xl">
             {/* Update Password Form */}
-            <form onSubmit={handlePasswordChange} className="space-y-4">
+            <form onSubmit={(event) => requestSave(event, 'password')} onChange={() => markDirty(passwordScope)} className="space-y-4">
               <div>
                 <h3 className="text-sm font-bold text-[#2A1E1B] uppercase tracking-wider mb-1 flex items-center gap-2">
                   <KeyRound className="h-4 w-4 text-[#C5A059]" /> Change Password
@@ -302,9 +358,13 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
                     type="password"
                     required
                     value={passwordForm.newPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                    onChange={(e) => {
+                      setPasswordForm({ ...passwordForm, newPassword: e.target.value });
+                      setPasswordStrength(e.target.value ? evaluatePasswordStrength(e.target.value) : '');
+                    }}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059]"
                   />
+                  {passwordStrength && <p className={`mt-1 text-[11px] font-semibold ${passwordStrengthColor}`}>Password strength: {passwordStrength}</p>}
                 </div>
 
                 <div>
@@ -316,12 +376,14 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
                     onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059]"
                   />
+                  {passwordMismatch && <p className="mt-1 text-[11px] text-red-600">Passwords do not match.</p>}
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="bg-[#3A342B] hover:bg-[#2A241B] text-[#F5F1EA] px-5 py-2.5 rounded-xl text-xs font-bold shadow-md transition-all active:scale-95 border border-[#C5A059]/30"
+                disabled={passwordMismatch}
+                className="bg-[#3A342B] hover:bg-[#2A241B] text-[#F5F1EA] px-5 py-2.5 rounded-xl text-xs font-bold shadow-md transition-all active:scale-95 border border-[#C5A059]/30 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Update Password
               </button>
@@ -330,7 +392,7 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
             <hr className="border-[#E9E4D8]" />
 
             {/* Admin Verification PIN */}
-            <form onSubmit={handlePinChange} className="space-y-4">
+            <form onSubmit={(event) => requestSave(event, 'pin')} onChange={() => markDirty(pinScope)} className="space-y-4">
               <div>
                 <h3 className="text-sm font-bold text-[#2A1E1B] uppercase tracking-wider mb-1 flex items-center gap-2">
                   <Lock className="h-4 w-4 text-[#C5A059]" /> Admin Security PIN
@@ -338,13 +400,13 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
                 <p className="text-xs text-[#8A8174]">Your six-digit PIN is required for login and sensitive management actions.</p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:w-3/4">
+              <div className="flex w-full max-w-[250px] flex-col gap-4">
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Current PIN</label>
                   <input
                     type="password"
                     maxLength={6}
-                    placeholder="••••"
+                    placeholder="••••••"
                     value={pinForm.currentPin}
                     onChange={(e) => setPinForm({ ...pinForm, currentPin: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs text-center font-bold tracking-[0.3em] outline-none focus:border-[#C5A059]"
@@ -356,7 +418,7 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
                   <input
                     type="password"
                     maxLength={6}
-                    placeholder="••••"
+                    placeholder="••••••"
                     value={pinForm.newPin}
                     onChange={(e) => setPinForm({ ...pinForm, newPin: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs text-center font-bold tracking-[0.3em] outline-none focus:border-[#C5A059]"
@@ -368,17 +430,19 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
                   <input
                     type="password"
                     maxLength={6}
-                    placeholder="••••"
+                    placeholder="••••••"
                     value={pinForm.confirmPin}
                     onChange={(e) => setPinForm({ ...pinForm, confirmPin: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs text-center font-bold tracking-[0.3em] outline-none focus:border-[#C5A059]"
                   />
+                  {pinMismatch && <p className="mt-1 text-[11px] text-red-600">PINs do not match.</p>}
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="bg-[#3A342B] hover:bg-[#2A241B] text-[#F5F1EA] px-5 py-2.5 rounded-xl text-xs font-bold shadow-md transition-all active:scale-95 border border-[#C5A059]/30"
+                disabled={pinMismatch}
+                className="bg-[#3A342B] hover:bg-[#2A241B] text-[#F5F1EA] px-5 py-2.5 rounded-xl text-xs font-bold shadow-md transition-all active:scale-95 border border-[#C5A059]/30 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Save New PIN
               </button>
@@ -423,6 +487,19 @@ export default function AccountManagementView({ currentUser, onUserUpdated, show
         )}
 
       </div>
+
+      <ProfilePictureModal
+        isOpen={isAvatarModalOpen}
+        onClose={() => setIsAvatarModalOpen(false)}
+        currentImageUrl={profileForm.avatarUrl}
+        onUpload={handleAvatarImport}
+        onRemove={handleAvatarRemove}
+      />
+      <SaveChangesModal
+        isOpen={Boolean(pendingSave)}
+        onCancel={() => setPendingSave('')}
+        onConfirm={confirmSave}
+      />
 
     </div>
   );

@@ -174,7 +174,7 @@ export default function MemberBookScheduler({
             );
           })}
         </nav>
-        <button type="button" onClick={onLogout} aria-label="Log out" className="mb-3 flex h-10 items-center justify-center text-red-600/80 hover:bg-red-500/10">
+        <button type="button" onClick={onLogout} aria-label="Log out" className="mb-3 flex h-10 items-center justify-center text-red-600 hover:bg-red-50 hover:text-red-700">
           <LogOut className="h-4 w-4" />
         </button>
       </aside>

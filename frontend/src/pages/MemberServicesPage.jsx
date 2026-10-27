@@ -212,7 +212,7 @@ export default function MemberServicesPage({
             type="button"
             onClick={onLogout}
             title={isSidebarCollapsed ? "Log Out" : undefined}
-            className="flex w-full items-center justify-center gap-3 rounded-xl px-3 py-2.5 text-xs font-medium text-red-600/80 transition-all hover:bg-red-500/10 active:scale-95 lg:justify-start"
+            className="flex w-full items-center justify-center gap-3 rounded-xl px-3 py-2.5 text-xs font-medium text-red-600 transition-all hover:bg-red-50 hover:text-red-700 active:scale-95 lg:justify-start"
           >
             <LogOut className="h-4 w-4 shrink-0" />
             {!isSidebarCollapsed && <span>Log Out</span>}

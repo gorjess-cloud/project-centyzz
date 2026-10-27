@@ -11,9 +11,24 @@ import POSReportsView from '../../pages/admin/POSReportsView';
 import OperationalLogsView from '../../pages/admin/OperationalLogsView';
 import InventoryManagementView from '../../pages/admin/InventoryManagementView';
 import ScheduleManagementView from '../../pages/admin/ScheduleManagementView';
-import SettingsView from '../../pages/admin/SettingsView';
+import SuperAdminSettings from './SuperAdminSettings';
+import { defaultMaintenancePreview } from './superadminPreviewData';
 import AccountManagementView from '../../pages/admin/AccountManagementView';
 import './superadmin.css';
+<<<<<<< Updated upstream
+import './superadminContent.css';
+
+const maintenanceKey = 'centyzz-maintenance-ui-preview';
+function readMaintenancePreview() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(maintenanceKey));
+    if (saved && typeof saved.enabled === 'boolean' && typeof saved.message === 'string' && ['30 minutes', '1 hour', '2 hours', '4 hours'].includes(saved.duration)) return saved;
+  } catch { /* Start with the operational preview when storage is unavailable. */ }
+  return defaultMaintenancePreview;
+}
+=======
+import { useUnsavedChanges } from '../UnsavedChangesProvider';
+>>>>>>> Stashed changes
 
 const demoUser = {
   firstName: 'Aljean Mark', lastName: 'Angeles', email: 'aljeanmark@example.com',
@@ -22,14 +37,28 @@ const demoUser = {
 
 export default function SuperAdminLayout({ currentUser = demoUser, onUserUpdated, onLogout = () => { window.location.href = '/'; } }) {
   const [activePage, setActivePage] = useState('dashboard');
+<<<<<<< Updated upstream
+  const [maintenance, setMaintenance] = useState(readMaintenancePreview);
+=======
+  const { guardNavigation } = useUnsavedChanges();
+>>>>>>> Stashed changes
   const workspaceRef = useRef(null);
   const { theme } = useWorkspaceTheme();
+  const preview = Boolean(currentUser?.isDemo && !currentUser?.accessToken);
   const name = currentUser.fullName || currentUser.name
     || [currentUser.firstName, currentUser.lastName].filter(Boolean).join(' ') || 'Super Admin';
 
   function navigate(page) {
-    setActivePage(page);
-    workspaceRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+    if (page === activePage) return;
+    guardNavigation(() => {
+      setActivePage(page);
+      workspaceRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  }
+
+  function saveMaintenancePreview(next) {
+    setMaintenance(next);
+    try { sessionStorage.setItem(maintenanceKey, JSON.stringify(next)); } catch { /* Keep preview changes in memory. */ }
   }
 
   const views = {
@@ -40,10 +69,10 @@ export default function SuperAdminLayout({ currentUser = demoUser, onUserUpdated
     logs: <OperationalLogsView />,
     inventory: <InventoryManagementView />,
     schedule: <ScheduleManagementView />,
-    settings: <SettingsView />,
+    settings: <SuperAdminSettings maintenance={maintenance} onSaveMaintenance={saveMaintenancePreview} />,
     account: <AccountManagementView currentUser={currentUser} onUserUpdated={onUserUpdated} />,
     roles: <RolePermissions />,
-    audit: <AuditTable full token={currentUser?.accessToken} />,
+    audit: <AuditTable full token={currentUser?.accessToken} preview={preview} />,
   };
 
   return (
@@ -57,7 +86,7 @@ export default function SuperAdminLayout({ currentUser = demoUser, onUserUpdated
         />
       <div className="sa-main" ref={workspaceRef}>
         <main className="sa-content" key={activePage}>
-          {activePage === 'dashboard' ? <Overview name={name} token={currentUser?.accessToken} onNavigate={navigate} /> : views[activePage]}
+          {activePage === 'dashboard' ? <Overview name={name} token={currentUser?.accessToken} preview={preview} maintenance={maintenance} onNavigate={navigate} /> : views[activePage]}
         </main>
       </div>
     </div>

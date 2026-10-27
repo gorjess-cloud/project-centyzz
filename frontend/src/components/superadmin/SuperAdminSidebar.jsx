@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, LogOut, Menu, ShieldCheck, X } from 'lucide-react';
 import { superadminNavigationGroups } from './superadminNavigation';
+import HeaderActions from '../workspace/HeaderActions';
 import './SuperAdminSidebar.css';
 
 export default function SuperAdminSidebar({ activePage = 'dashboard', onNavigate, currentUser, onLogout }) {
@@ -25,22 +26,28 @@ export default function SuperAdminSidebar({ activePage = 'dashboard', onNavigate
     if (!mobileOpen) return;
     const menuButton = menuRef.current;
     const previousOverflow = document.body.style.overflow;
+    const workspace = sidebarRef.current.closest('.sa-app');
+    const background = [...workspace.querySelectorAll('.sa-main, .superadmin-mobile-bar')].map(element => ({ element, inert: element.inert }));
+    background.forEach(({ element }) => { element.inert = true; });
     document.body.style.overflow = 'hidden';
-    closeRef.current?.focus();
+    const focusFrame = window.requestAnimationFrame(() => closeRef.current?.focus({ preventScroll: true }));
     function handleKeyDown(event) {
       if (event.key === 'Escape') setMobileOpen(false);
       if (event.key !== 'Tab') return;
       const buttons = [...sidebarRef.current.querySelectorAll('button:not([disabled])')].filter(button => button.getClientRects().length);
       const first = buttons[0];
       const last = buttons[buttons.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      if (!sidebarRef.current.contains(document.activeElement)) { event.preventDefault(); (event.shiftKey ? last : first)?.focus(); }
+      else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
+      window.cancelAnimationFrame(focusFrame);
+      background.forEach(({ element, inert }) => { element.inert = inert; });
       document.removeEventListener('keydown', handleKeyDown);
-      menuButton?.focus();
+      if (menuButton?.getClientRects().length) menuButton.focus({ preventScroll: true });
     };
   }, [mobileOpen]);
 
@@ -51,7 +58,10 @@ export default function SuperAdminSidebar({ activePage = 'dashboard', onNavigate
 
   return (
     <>
-      <button ref={menuRef} type="button" className="superadmin-menu-trigger" aria-label="Open superadmin navigation" aria-controls={sidebarId} aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)}><Menu size={19} /><span>Menu</span></button>
+      <div className="superadmin-mobile-bar" role="banner" aria-label="Superadmin mobile toolbar">
+        <div className="superadmin-mobile-start"><button ref={menuRef} type="button" className="superadmin-menu-trigger" aria-label="Open superadmin navigation" aria-controls={sidebarId} aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)}><Menu size={21} /></button><span>Superadmin</span></div>
+        <HeaderActions />
+      </div>
       {mobileOpen && <button type="button" className="superadmin-sidebar-backdrop" aria-label="Close superadmin navigation" tabIndex={-1} onClick={() => setMobileOpen(false)} />}
       <aside ref={sidebarRef} id={sidebarId} className={`superadmin-sidebar${collapsed ? ' is-collapsed' : ''}${mobileOpen ? ' is-mobile-open' : ''}`} aria-label="Superadmin sidebar" role={mobileOpen ? 'dialog' : undefined} aria-modal={mobileOpen || undefined}>
         <button ref={closeRef} type="button" className="superadmin-sidebar-close" aria-label="Close superadmin navigation" onClick={() => setMobileOpen(false)}><X size={18} /></button>

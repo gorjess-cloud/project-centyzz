@@ -257,7 +257,7 @@ export default function MemberBookingsPage({
           <button
             type="button"
             onClick={onLogout}
-            className="flex w-full items-center justify-center lg:justify-start gap-3 rounded-xl px-3 py-2.5 text-xs font-medium text-red-600/80 hover:bg-red-500/10 transition-all duration-200 active:scale-95"
+            className="flex w-full items-center justify-center lg:justify-start gap-3 rounded-xl px-3 py-2.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-all duration-200 active:scale-95"
             title={isSidebarCollapsed ? "Log Out" : undefined}
           >
             <LogOut className="h-4 w-4 shrink-0" />
