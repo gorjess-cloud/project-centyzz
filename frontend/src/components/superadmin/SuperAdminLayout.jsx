@@ -4,7 +4,7 @@ import { useWorkspaceTheme, WorkspaceNavigationContext } from '../workspace/Work
 import { superadminPages } from './superadminNavigation';
 import Overview, { AuditTable } from './Overview';
 import RolePermissions from './RolePermissions';
-import UserManagementView from '../../pages/admin/UserManagementView';
+import SuperadminUserManagementView from '../../pages/superadmin/UserManagementView';
 import ServiceManagementView from '../../pages/admin/ServiceManagementView';
 import ClientManagementView from '../ClientManagementView';
 import POSReportsView from '../../pages/admin/POSReportsView';
@@ -33,7 +33,7 @@ export default function SuperAdminLayout({ currentUser = demoUser, onUserUpdated
   }
 
   const views = {
-    users: <UserManagementView currentUser={currentUser} />,
+    users: <SuperadminUserManagementView currentUser={currentUser} />,
     services: <ServiceManagementView currentUser={currentUser} />,
     clients: <ClientManagementView currentUser={currentUser} />,
     reports: <POSReportsView currentUser={currentUser} />,
@@ -43,7 +43,7 @@ export default function SuperAdminLayout({ currentUser = demoUser, onUserUpdated
     settings: <SettingsView />,
     account: <AccountManagementView currentUser={currentUser} onUserUpdated={onUserUpdated} />,
     roles: <RolePermissions />,
-    audit: <AuditTable full />,
+    audit: <AuditTable full token={currentUser?.accessToken} />,
   };
 
   return (
@@ -57,7 +57,7 @@ export default function SuperAdminLayout({ currentUser = demoUser, onUserUpdated
         />
       <div className="sa-main" ref={workspaceRef}>
         <main className="sa-content" key={activePage}>
-          {activePage === 'dashboard' ? <Overview name={name} onNavigate={navigate} /> : views[activePage]}
+          {activePage === 'dashboard' ? <Overview name={name} token={currentUser?.accessToken} onNavigate={navigate} /> : views[activePage]}
         </main>
       </div>
     </div>

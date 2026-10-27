@@ -63,3 +63,12 @@
 .sa-role-tabs button,.sa-role-description,.sa-role-save p{font-size:12px;line-height:16px}
 .sa-role-tabs button{font-weight:600;border-radius:12px}
 @container (max-width:290px){.sa-metric-content{flex-direction:column;align-items:stretch;gap:16px}.sa-donut{align-self:center}.sa-legend{width:100%}}
+
+/* Live dashboard states, matching the existing cream-and-gold UI. */
+.sa-audit-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sa-api-error{padding:13px 18px;margin:12px 0 17px;border:1px solid #e9cac4;border-radius:9px;background:#fff5f2;color:#996253;font-size:11px}
+.sa-api-error button{background:none;border:0;text-decoration:underline;color:inherit;font-weight:700;margin-left:8px}
+.sa-loading-cards{padding:70px 20px;text-align:center;background:#fffefa;border:1px solid #eae4d7;border-radius:13px;color:#9b8d76}
+@media(max-width:720px){.sa-audit-actions{justify-content:flex-end}.sa-refresh span{display:none}.sa-audit-heading{flex-wrap:wrap}.sa-audit-heading>div:first-child{flex:1;min-width:160px}}
+.sa-dashboard-tools{display:flex;align-items:center;justify-content:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.sa-dashboard-tools .sa-status{font-size:12px;line-height:16px}

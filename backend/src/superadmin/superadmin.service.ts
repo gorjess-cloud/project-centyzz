@@ -29,82 +29,99 @@ export class SuperadminService {
     };
   }
   
+  /**
+   * Figures reflect tables that actually exist in the current schema.
+   * OTP records represent currently stored verification/recovery codes, not
+   * a historical count of reset requests. Error logs are not security alerts.
+   */
   async getDashboardSummary() {
     const plan = db.raw.sql`
       SELECT
-        (
-          SELECT COUNT(*)
-          FROM public."user"
-        ) AS "totalUsers",
-
-        (
-          SELECT COUNT(*)
-          FROM public."user"
-          WHERE role = 'SUPERADMIN'
-            AND "isActive" = TRUE
-            AND archived_at IS NULL
-        ) AS "activeSuperadmins",
-
-        (
-          SELECT COUNT(*)
-          FROM public."user"
-          WHERE role = 'ADMIN'
-            AND "isActive" = TRUE
-            AND archived_at IS NULL
-        ) AS "activeAdmins",
-
-        (
-          SELECT COUNT(*)
-          FROM public."user"
-          WHERE role = 'STAFF'
-            AND "isActive" = TRUE
-            AND archived_at IS NULL
-        ) AS "activeStaff",
-
-        (
-          SELECT COUNT(*)
-          FROM public."user"
-          WHERE role = 'CUSTOMER'
-            AND "isActive" = TRUE
-            AND archived_at IS NULL
-        ) AS "activeClients",
-
-        (
-          SELECT COALESCE(SUM(grand_total), 0)
-          FROM public.transactions
-          WHERE status = 'COMPLETED'
-            AND completed_at IS NOT NULL
-            AND voided_at IS NULL
-            AND archived_at IS NULL
-        ) AS "totalRevenue"
+        (SELECT COUNT(*) FROM public."user") AS "totalUsers",
+        (SELECT COUNT(*) FROM public."user"
+          WHERE "isActive" = TRUE AND archived_at IS NULL) AS "activeAccounts",
+        (SELECT COUNT(*) FROM public."user"
+          WHERE "isActive" = FALSE AND archived_at IS NULL) AS "inactiveAccounts",
+        (SELECT COUNT(*) FROM public."user"
+          WHERE archived_at IS NOT NULL) AS "archivedAccounts",
+        (SELECT COUNT(*) FROM public."user"
+          WHERE role = 'SUPERADMIN' AND "isActive" = TRUE AND archived_at IS NULL) AS "activeSuperadmins",
+        (SELECT COUNT(*) FROM public."user"
+          WHERE role = 'ADMIN' AND "isActive" = TRUE AND archived_at IS NULL) AS "activeAdmins",
+        (SELECT COUNT(*) FROM public."user"
+          WHERE role = 'STAFF' AND "isActive" = TRUE AND archived_at IS NULL) AS "activeStaff",
+        (SELECT COUNT(*) FROM public."user"
+          WHERE role = 'CUSTOMER' AND "isActive" = TRUE AND archived_at IS NULL) AS "activeClients",
+        (SELECT COUNT(*) FROM public."user"
+          WHERE "otpHash" IS NOT NULL AND "otpExpiresAt" > NOW()
+            AND "emailVerified" = FALSE) AS "verificationCodes",
+        (SELECT COUNT(*) FROM public."user"
+          WHERE "otpHash" IS NOT NULL AND "otpExpiresAt" > NOW()
+            AND "emailVerified" = TRUE) AS "recoveryCodes",
+        (SELECT COUNT(*) FROM public."user"
+          WHERE "otpHash" IS NOT NULL AND "otpExpiresAt" <= NOW()) AS "expiredCodes",
+        (SELECT COUNT(*) FROM public.error_logs
+          WHERE created_at >= NOW() - INTERVAL '24 hours') AS "errorsToday",
+        (SELECT COUNT(*) FROM public.error_logs
+          WHERE created_at >= NOW() - INTERVAL '7 days'
+            AND created_at < NOW() - INTERVAL '24 hours') AS "errorsThisWeek",
+        (SELECT COUNT(*) FROM public.error_logs
+          WHERE created_at < NOW() - INTERVAL '7 days') AS "errorsOlder",
+        (SELECT COALESCE(SUM(amount), 0) FROM public.pos_transactions
+          WHERE UPPER(status) = 'COMPLETED') AS "totalRevenue"
     `
       .returnsRow({
         totalUsers: 'pg/int8@1',
+        activeAccounts: 'pg/int8@1',
+        inactiveAccounts: 'pg/int8@1',
+        archivedAccounts: 'pg/int8@1',
         activeSuperadmins: 'pg/int8@1',
         activeAdmins: 'pg/int8@1',
         activeStaff: 'pg/int8@1',
         activeClients: 'pg/int8@1',
+        verificationCodes: 'pg/int8@1',
+        recoveryCodes: 'pg/int8@1',
+        expiredCodes: 'pg/int8@1',
+        errorsToday: 'pg/int8@1',
+        errorsThisWeek: 'pg/int8@1',
+        errorsOlder: 'pg/int8@1',
         totalRevenue: 'pg/numeric@1',
       })
       .build();
 
-    const [summary] = await db.runtime().query(plan);
+    const [row] = await db.runtime().query(plan);
+    if (!row) throw new NotFoundException('Dashboard summary unavailable');
 
     return {
       success: true,
       message: 'Dashboard summary retrieved successfully',
       data: {
-        totalUsers: Number(summary.totalUsers),
-        activeSuperadmins: Number(summary.activeSuperadmins),
-        activeAdmins: Number(summary.activeAdmins),
-        activeStaff: Number(summary.activeStaff),
-        activeClients: Number(summary.activeClients),
-        totalRevenue: Number(summary.totalRevenue),
+        totalUsers: Number(row.totalUsers),
+        activeSuperadmins: Number(row.activeSuperadmins),
+        activeAdmins: Number(row.activeAdmins),
+        activeStaff: Number(row.activeStaff),
+        activeClients: Number(row.activeClients),
+        totalRevenue: Number(row.totalRevenue),
         currency: 'PHP',
+        accounts: {
+          active: Number(row.activeAccounts),
+          inactive: Number(row.inactiveAccounts),
+          archived: Number(row.archivedAccounts),
+        },
+        codes: {
+          verification: Number(row.verificationCodes),
+          recovery: Number(row.recoveryCodes),
+          expired: Number(row.expiredCodes),
+        },
+        errors: {
+          last24Hours: Number(row.errorsToday),
+          previous6Days: Number(row.errorsThisWeek),
+          older: Number(row.errorsOlder),
+        },
       },
     };
   }
-  
+
   async updateUserRole(
     targetUserId: number,
     newRole: string,
@@ -176,54 +193,78 @@ export class SuperadminService {
   async getAuditLogs(
     pageInput = '1',
     limitInput = '10',
+    searchInput = '',
+    actionInput = '',
   ) {
     const page = Number(pageInput);
     const limit = Number(limitInput);
 
     if (
-      !Number.isSafeInteger(page) ||
-      page < 1 ||
-      !Number.isSafeInteger(limit) ||
-      limit < 1 ||
-      limit > 100
+      !Number.isSafeInteger(page) || page < 1 ||
+      !Number.isSafeInteger(limit) || limit < 1 || limit > 100
     ) {
       throw new BadRequestException(
         'Page must be a positive integer and limit must be between 1 and 100',
       );
     }
 
+    // Both filters are applied in SQL, before pagination and CSV export.
+    if (typeof searchInput !== 'string' || searchInput.length > 150 ||
+        typeof actionInput !== 'string' || !/^[A-Z_]{0,50}$/.test(actionInput)) {
+      throw new BadRequestException('Invalid audit log filters');
+    }
+    const search = searchInput.trim();
+    const action = actionInput.trim();
+    const searchPattern = `%${search.replace(/[!%_]/g, '!$&')}%`;
     const offset = (page - 1) * limit;
-
     if (!Number.isSafeInteger(offset)) {
       throw new BadRequestException('Page number is too large');
     }
 
     const countPlan = db.raw.sql`
       SELECT COUNT(*) AS total
-      FROM public.audit_logs
-      LIMIT 1
+      FROM public.audit_logs AS l
+      LEFT JOIN public."user" AS actor ON actor.id = l.actor_id
+      WHERE (${action} = '' OR l.action = ${action})
+        AND (${search} = '' OR
+          COALESCE(actor."firstName", '') ILIKE ${searchPattern} ESCAPE '!' OR
+          COALESCE(actor."lastName", '') ILIKE ${searchPattern} ESCAPE '!' OR
+          COALESCE(actor.email, '') ILIKE ${searchPattern} ESCAPE '!' OR
+          COALESCE(l.action, '') ILIKE ${searchPattern} ESCAPE '!' OR
+          COALESCE(l.entity_type, '') ILIKE ${searchPattern} ESCAPE '!' OR
+          COALESCE(l.entity_id, '') ILIKE ${searchPattern} ESCAPE '!')
     `
-      .returnsRow({
-        total: 'pg/int8@1',
-      })
+      .returnsRow({ total: 'pg/int8@1' })
       .build();
 
     const logsPlan = db.raw.sql`
       SELECT
-        id::text AS id,
-        actor_id::text AS "actorId",
-        action,
-        entity_type AS "entityType",
-        entity_id AS "entityId",
-        created_at::text AS "createdAt"
-      FROM public.audit_logs
-      ORDER BY created_at DESC, id DESC
-      LIMIT ${limit}
-      OFFSET ${offset}
+        l.id::text AS id,
+        l.actor_id::text AS "actorId",
+        COALESCE(NULLIF(TRIM(CONCAT_WS(' ', actor."firstName", actor."lastName")), ''), 'Unknown user') AS "actorName",
+        COALESCE(actor.role, 'UNKNOWN') AS "actorRole",
+        l.action,
+        l.entity_type AS "entityType",
+        l.entity_id AS "entityId",
+        l.created_at::text AS "createdAt"
+      FROM public.audit_logs AS l
+      LEFT JOIN public."user" AS actor ON actor.id = l.actor_id
+      WHERE (${action} = '' OR l.action = ${action})
+        AND (${search} = '' OR
+          COALESCE(actor."firstName", '') ILIKE ${searchPattern} ESCAPE '!' OR
+          COALESCE(actor."lastName", '') ILIKE ${searchPattern} ESCAPE '!' OR
+          COALESCE(actor.email, '') ILIKE ${searchPattern} ESCAPE '!' OR
+          COALESCE(l.action, '') ILIKE ${searchPattern} ESCAPE '!' OR
+          COALESCE(l.entity_type, '') ILIKE ${searchPattern} ESCAPE '!' OR
+          COALESCE(l.entity_id, '') ILIKE ${searchPattern} ESCAPE '!')
+      ORDER BY l.created_at DESC, l.id DESC
+      LIMIT ${limit} OFFSET ${offset}
     `
       .returnsRow({
         id: 'pg/text@1',
         actorId: { codecId: 'pg/text@1', nullable: true },
+        actorName: 'pg/text@1',
+        actorRole: 'pg/text@1',
         action: 'pg/text@1',
         entityType: { codecId: 'pg/text@1', nullable: true },
         entityId: { codecId: 'pg/text@1', nullable: true },
@@ -235,21 +276,16 @@ export class SuperadminService {
       db.runtime().query(countPlan),
       db.runtime().query(logsPlan),
     ]);
-
     const total = Number(count.total);
 
     return {
       success: true,
       message: 'Audit logs retrieved successfully',
       data: logs,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
+
   async getErrorLogs(
     pageInput = '1',
     limitInput = '10',

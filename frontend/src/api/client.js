@@ -77,6 +77,13 @@ export const api = {
   verifyEmail: (verification) => post('/api/auth/verify-email', verification),
   forgotPassword: (payload) => post('/api/auth/forgot-password', payload),
   resetPassword: (payload) => post('/api/auth/reset-password', payload),
+  getSuperadminDashboardSummary: (token) => get('/api/superadmin/dashboard/summary', token),
+  getSuperadminAuditLogs: (token, { page = 1, limit = 10, search = '', action = '' } = {}) => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (search) params.set('search', search);
+    if (action) params.set('action', action);
+    return get(`/api/superadmin/logs?${params.toString()}`, token);
+  },
   getMyAppointments: (token) => get('/api/appointments/mine', token),
   getMyProfile: (token) => get('/api/auth/me', token),
   updateMyProfile: (token, profile) => patch('/api/auth/me', profile, token),
