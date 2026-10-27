@@ -74,6 +74,9 @@ export const api = {
   changeManagementCredentials: (token, data) => patch('/api/auth/management-credentials', data, token),
   
   register: (user) => post('/api/auth/register', user),
+  forgotPassword: ({ email }) => post('/api/auth/forgot-password', { email }),
+  resetPassword: ({ email, otp, newPassword }) =>
+    post('/api/auth/reset-password', { email, otp, newPassword }),
   verifyEmail: (verification) => post('/api/auth/verify-email', verification),
   forgotPassword: (payload) => post('/api/auth/forgot-password', payload),
   resetPassword: (payload) => post('/api/auth/reset-password', payload),
