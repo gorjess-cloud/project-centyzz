@@ -591,24 +591,9 @@ export default function AuthPage({
               {/* Password */}
               {!isForgotPassword && (
                 <div>
-                  <div className="flex items-center justify-between">
-                    <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
-                      PASSWORD
-                    </label>
-                    
-                    {!isSignup && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormMessage({ type: '', text: '' });
-                          setMode?.('forgot-password');
-                        }}
-                        className="text-[10px] text-[#C5A059] hover:underline font-semibold"
-                      >
-                        Forgot password?
-                      </button>
-                    )}
-                  </div>
+                  <label className={`block text-[11px] font-bold uppercase tracking-[0.18em] ${fieldLabel}`}>
+                    PASSWORD
+                  </label>
 
                   <div className="relative mt-1.5">
                     <input
@@ -633,6 +618,20 @@ export default function AuthPage({
                     </button>
                   </div>
                   {renderFieldError('password')}
+                  {!isSignup && (
+                    <div className="mt-1 text-left">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormMessage({ type: '', text: '' });
+                          setMode?.('forgot-password');
+                        }}
+                        className="text-[10px] font-semibold text-[#C5A059] hover:underline"
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
