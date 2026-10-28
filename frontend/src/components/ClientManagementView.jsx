@@ -1,4 +1,5 @@
-import HeaderActions from './workspace/HeaderActions';
+import {usePageFind} from './workspace/AdminWorkspaceContext';
+import AdminPageHeader from './workspace/AdminPageHeader';
 import { useState, useEffect } from 'react';
 import { 
   Search, 
@@ -44,7 +45,7 @@ export default function ClientManagementView({ currentUser, showHeaderActions = 
   const [clients, setClients] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('ACTIVE');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery,isHighlightSearch] = usePageFind();
   const [tierFilter, setTierFilter] = useState('ALL');
   const [selectedClientIds, setSelectedClientIds] = useState([]);
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -237,8 +238,7 @@ export default function ClientManagementView({ currentUser, showHeaderActions = 
   });
 
   const filteredClients = tabFilteredClients.filter((c) => {
-    const matchesSearch = 
-      (c.fullName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch = isHighlightSearch || (c.fullName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (c.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (c.contactNumber || '').includes(searchQuery);
 
@@ -352,13 +352,7 @@ export default function ClientManagementView({ currentUser, showHeaderActions = 
         </div>
       )}
 
-      <header className="mb-6 flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-[#2A1E1B]">Client Management</h1>
-          <p className="text-xs text-[#8A8174]">Manage customer registry, booking history, lifetime spend, and loyalty tiers</p>
-        </div>
-        {showHeaderActions && (<HeaderActions />)}
-      </header>
+      <AdminPageHeader title="Client Management" subtitle="Manage customer registry, booking history, lifetime spend, and loyalty tiers" showHeaderActions={showHeaderActions}/>
 
       <div className="bg-white rounded-2xl border border-[#E9E4D8] shadow-sm p-6 sm:p-8 space-y-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -391,9 +385,9 @@ export default function ClientManagementView({ currentUser, showHeaderActions = 
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8A8174]" />
               <input
                 type="text"
-                placeholder="Search client name, email, or phone..."
+                placeholder={isHighlightSearch?"Highlight text on this page…":"Search records…"}
                 value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                onChange={(e) => { setSearchQuery(e.target.value); if(!isHighlightSearch)setCurrentPage(1); }}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs text-[#2A1E1B] placeholder-[#8A8174] outline-none focus:border-[#C5A059] transition-all"
               />
             </div>

@@ -1,4 +1,5 @@
-import HeaderActions from '../../components/workspace/HeaderActions';
+import {usePageFind} from '../../components/workspace/AdminWorkspaceContext';
+import AdminPageHeader from '../../components/workspace/AdminPageHeader';
 import { api } from '../../api/client.js';
 import { useState, useEffect } from 'react';
 import { 
@@ -39,7 +40,7 @@ function CredentialCopyValue({ value, label, copied, onCopy, mono = false }) {
   );
 }
 
-export default function UserManagementView({ currentUser, showHeaderActions = true }) {
+export default function UserManagementView({ currentUser, showHeaderActions = true, createStaffOnly = false, onClose, onCreated }) {
   const loggedInRole = (currentUser?.role || 'ADMIN').toUpperCase();
   const loggedInEmail = currentUser?.email || 'admin@centyzz.com';
 
@@ -47,7 +48,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
   const [loading, setLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState('ACTIVE');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery,isHighlightSearch] = usePageFind();
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -57,7 +58,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
   const itemsPerPage = 8;
 
   // Modals
-  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [isAddUserOpen, setIsAddUserOpen] = useState(createStaffOnly);
   const [editingUserId, setEditingUserId] = useState(null);
   const [editForm, setEditForm] = useState({ firstName: '', lastName: '', email: '', contactNumber: '' });
   
@@ -76,8 +77,24 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
     lastName: '',
     email: '',
     role: 'STAFF',
+    staffJobRole: '',
     tempPassword: '',
   });
+
+  const [staffJobRoles,setStaffJobRoles]=useState([]);
+  const [jobRolesLoading,setJobRolesLoading]=useState(false);
+  const [jobRolesError,setJobRolesError]=useState('');
+  const [jobRolesRetry,setJobRolesRetry]=useState(0);
+  useEffect(()=>{
+    if(!isAddUserOpen||(!createStaffOnly&&newUserForm.role!=='STAFF'))return;
+    let active=true;setJobRolesLoading(true);setJobRolesError('');
+    fetch('/api/admin/users/staff-job-roles',{headers:{Authorization:'Bearer '+(currentUser?.accessToken||'')}})
+      .then(async response=>{if(!response.ok)throw new Error('Unable to load staff job roles.');const roles=await response.json();if(!Array.isArray(roles)||!roles.length||roles.some(role=>typeof role!=='string'))throw new Error('Unable to load staff job roles.');return roles;})
+      .then(roles=>{if(active)setStaffJobRoles(roles);}).catch(error=>{if(active)setJobRolesError(error.message);}).finally(()=>{if(active)setJobRolesLoading(false);});
+    return()=>{active=false;};
+  },[isAddUserOpen,createStaffOnly,newUserForm.role,currentUser?.accessToken,jobRolesRetry]);
+
+  const closeCreateAccount = () => { setIsAddUserOpen(false); if(createStaffOnly) onClose?.(); };
 
   const getAuthToken = () => currentUser?.accessToken || '';
 
@@ -101,6 +118,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
   // API FETCH: Get Users from NestJS Backend (Neon DB)
   // -------------------------------------------------------------
   useEffect(() => {
+    if(createStaffOnly){setLoading(false);return;}
     let isMounted = true;
 
     const loadUsersFromApi = async () => {
@@ -141,7 +159,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
     return () => {
       isMounted = false;
     };
-  }, [activeTab]);
+  }, [activeTab, createStaffOnly]);
 
   // Helper function to trigger dynamic table refresh after actions
   const refreshUsers = async () => {
@@ -201,8 +219,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
       // Hide SUPERADMIN accounts from regular Admins
       if (loggedInRole === 'ADMIN' && u.role === 'SUPERADMIN') return false;
 
-      const matchesSearch = 
-        (u.fullName || `${u.firstName || ''} ${u.lastName || ''}`).toLowerCase().includes(searchQuery.toLowerCase()) ||
+      const matchesSearch = isHighlightSearch || (u.fullName || `${u.firstName || ''} ${u.lastName || ''}`).toLowerCase().includes(searchQuery.toLowerCase()) ||
         u.email.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
@@ -263,6 +280,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
     e.preventDefault();
     if (!newUserForm.firstName || !newUserForm.email) return;
 
+    if((createStaffOnly||newUserForm.role==='STAFF')&&!staffJobRoles.includes(newUserForm.staffJobRole)){showToast('Select a staff job role.');return;}
     requestAdminPin(async (verifiedPin) => {
       try {
         const response = await fetch('/api/admin/users', {
@@ -272,7 +290,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
             'X-Management-Pin': verifiedPin,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(newUserForm),
+          body: JSON.stringify({...newUserForm,role:createStaffOnly?'STAFF':newUserForm.role,staffJobRole:(createStaffOnly||newUserForm.role==='STAFF')?newUserForm.staffJobRole:undefined}),
         });
 
         if (response.ok) {
@@ -281,8 +299,9 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
           setCopiedCredentialField(null);
           setCreatedCredentials({ email: result.email, password: result.temporaryPassword, pin: result.temporaryPin });
           setIsAddUserOpen(false);
-          setNewUserForm({ firstName: '', lastName: '', email: '', role: 'STAFF', tempPassword: '' });
-          refreshUsers();
+          setNewUserForm({ firstName: '', lastName: '', email: '', role: 'STAFF', staffJobRole: '', tempPassword: '' });
+          if(createStaffOnly) onCreated?.(result);
+          else refreshUsers();
           showToast(`Successfully created account for ${newUserForm.firstName} ${newUserForm.lastName}`);
         } else {
           const errData = await response.json();
@@ -450,16 +469,9 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
         </div>
       )}
 
+      {!createStaffOnly && <>
       {/* Header Bar */}
-      <header className="mb-6 flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-[#2A1E1B]">User Management</h1>
-          <p className="text-xs text-[#8A8174]">Manage system admin & staff access, roles, and active credentials</p>
-        </div>
-
-        {/* System Quick Actions */}
-        {showHeaderActions && (<HeaderActions />)}
-      </header>
+      <AdminPageHeader title="User Management" subtitle="Manage system admin & staff access, roles, and active credentials" showHeaderActions={showHeaderActions}/>
 
       {/* Main Workspace Card */}
       <div className="bg-white rounded-2xl border border-[#E9E4D8] shadow-sm p-6 sm:p-8 space-y-6">
@@ -505,9 +517,9 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8A8174]" />
               <input
                 type="text"
-                placeholder="Search Here..."
+                placeholder={isHighlightSearch?"Highlight text on this page…":"Search records…"}
                 value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                onChange={(e) => { setSearchQuery(e.target.value); if(!isHighlightSearch)setCurrentPage(1); }}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs text-[#2A1E1B] placeholder-[#8A8174] outline-none focus:border-[#C5A059] transition-all"
               />
             </div>
@@ -820,6 +832,7 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
 
       </div>
 
+      </>}
       {/* MODAL: ADMIN PIN CONFIRMATION */}
       {isPinModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-[60] animate-fadeIn">
@@ -879,18 +892,18 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
             <p className="text-sm leading-relaxed">Email: <CredentialCopyValue label="email" value={createdCredentials.email} copied={copiedCredentialField === 'email'} onCopy={handleCopyCredential} /></p>
             <p className="text-sm leading-relaxed">Temporary password: <CredentialCopyValue label="password" mono value={createdCredentials.password} copied={copiedCredentialField === 'password'} onCopy={handleCopyCredential} /></p>
             <p className="text-sm leading-relaxed">Temporary PIN: <CredentialCopyValue label="PIN" mono value={createdCredentials.pin} copied={copiedCredentialField === 'PIN'} onCopy={handleCopyCredential} /></p>
-            <button type="button" onClick={() => setCreatedCredentials(null)} className="rounded-lg bg-[#3A342B] px-4 py-2 text-sm text-white">I've saved these credentials</button>
+            <button type="button" onClick={() => {setCreatedCredentials(null);if(createStaffOnly)onClose?.();}} className="rounded-lg bg-[#3A342B] px-4 py-2 text-sm text-white">I've saved these credentials</button>
           </div>
         </div>
       )}
 
       {/* MODAL: ADD USER */}
       {isAddUserOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+        <div role="dialog" aria-modal="true" aria-label="Create System User Account" className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className="bg-white rounded-2xl border border-[#E9E4D8] shadow-2xl w-full max-w-md p-6 space-y-5">
             <div className="flex items-center justify-between border-b border-[#E9E4D8] pb-3">
               <h3 className="text-base font-bold text-[#2A1E1B]">Create System User Account</h3>
-              <button onClick={() => setIsAddUserOpen(false)} className="text-[#8A8174] hover:text-[#2A1E1B]">
+              <button type="button" aria-label="Close account form" onClick={closeCreateAccount} className="text-[#8A8174] hover:text-[#2A1E1B]">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -898,8 +911,8 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
             <form onSubmit={handleAddUserSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">First Name</label>
-                  <input
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="create-account-field-1">First Name</label>
+                  <input id="create-account-field-1"
                     type="text"
                     required
                     placeholder="Millicent"
@@ -909,8 +922,8 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Last Name</label>
-                  <input
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="create-account-field-2">Last Name</label>
+                  <input id="create-account-field-2"
                     type="text"
                     required
                     placeholder="Campillo"
@@ -922,8 +935,8 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Email Address</label>
-                <input
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="create-account-field-3">Email Address</label>
+                <input id="create-account-field-3"
                   type="email"
                   required
                   placeholder="admin@centyzz.com"
@@ -934,27 +947,37 @@ export default function UserManagementView({ currentUser, showHeaderActions = tr
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Role Assignment</label>
-                <select
-                  value={newUserForm.role}
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="create-account-field-4">Role Assignment</label>
+                <select id="create-account-field-4"
+                  value={createStaffOnly ? 'STAFF' : newUserForm.role}
                   onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs font-semibold text-[#443523] outline-none focus:border-[#C5A059]"
                 >
                   <option value="STAFF">STAFF</option>
-                  <option value="ADMIN">ADMIN</option>
+                  {!createStaffOnly && <option value="ADMIN">ADMIN</option>}
                 </select>
               </div>
+
+              {(createStaffOnly||newUserForm.role==='STAFF') && <div>
+                <label htmlFor="create-staff-job-role" className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-[#8A8174]">Staff Job Role</label>
+                <select id="create-staff-job-role" required disabled={jobRolesLoading} value={newUserForm.staffJobRole} onChange={e=>setNewUserForm({...newUserForm,staffJobRole:e.target.value})} className="w-full rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] px-3.5 py-2.5 text-xs font-semibold text-[#443523] outline-none focus:border-[#C5A059] disabled:opacity-50">
+                  <option value="">{jobRolesLoading?'Loading job roles…':'Select a job role'}</option>
+                  {staffJobRoles.map(role=><option key={role} value={role}>{role}</option>)}
+                </select>
+                {jobRolesError && <p role="alert" className="mt-2 text-xs text-red-600">{jobRolesError} <button type="button" onClick={()=>setJobRolesRetry(n=>n+1)} className="underline">Retry</button></p>}
+              </div>}
 
               <div className="pt-2 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsAddUserOpen(false)}
+                  onClick={closeCreateAccount}
                   className="px-4 py-2.5 rounded-xl text-xs font-semibold text-[#8A8174] hover:bg-[#F6F4EF]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
+                  disabled={(createStaffOnly||newUserForm.role==='STAFF')&&(jobRolesLoading||Boolean(jobRolesError)||!staffJobRoles.length)}
                   className="px-5 py-2.5 rounded-xl bg-[#3A342B] hover:bg-[#2A241B] text-[#F5F1EA] text-xs font-bold shadow-md border border-[#C5A059]/30"
                 >
                   Create Account

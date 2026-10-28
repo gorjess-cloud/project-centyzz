@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, CreditCard, Trash2, CalendarClock, Tag, Check } from 'lucide-react';
+import { Search, CreditCard, Trash2, CalendarClock, Tag, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Toast, useToast, Badge, EmptyState, ConfirmModal, peso, card, input } from '../../components/staff/ui';
 import useModalScrollLock from '../../hooks/useModalScrollLock';
 import { api } from '../../api/client';
@@ -12,6 +12,9 @@ export default function StaffScheduleView({ currentUser }) {
   const [code, setCode] = useState('');
   const [appt, setAppt] = useState(null);
   const [appointments, setAppointments] = useState([]);
+  const [appointmentView,setAppointmentView]=useState('active');
+  const [appointmentPage,setAppointmentPage]=useState(1);
+  const appointmentsPerPage=5;
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [appointmentsError, setAppointmentsError] = useState('');
   const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0);
@@ -32,24 +35,29 @@ export default function StaffScheduleView({ currentUser }) {
     }
     setAppointmentsLoading(true);
     setAppointmentsError('');
-    api.getStaffAppointments(currentUser.accessToken)
+    api.getStaffAppointments(currentUser.accessToken,appointmentView==='archived')
       .then((result) => { if (current) setAppointments(result.data ?? []); })
       .catch((error) => { if (current) setAppointmentsError(error.message); })
       .finally(() => { if (current) setAppointmentsLoading(false); });
     return () => { current = false; };
-  }, [currentUser?.accessToken, appointmentsRefreshKey]);
+  }, [currentUser?.accessToken, appointmentsRefreshKey,appointmentView]);
 
   const subtotal = appt ? appt.items.reduce((s, i) => s + i.price, 0) : 0;
   const discount = promoApplied ? Math.min(promoType.includes('PERCENT') ? subtotal * promoValue / 100 : promoValue, subtotal) : 0;
   const tax = (subtotal - discount) * TAX;
   const total = subtotal - discount + tax;
   const query = code.trim().toLowerCase();
-  const activeAppointments = appointments.filter((appointment) => !['CANCELLED', 'NO_SHOW'].includes(appointment.status));
+  const activeAppointments = appointmentView==='archived'?appointments:appointments.filter((appointment) => !['CANCELLED', 'NO_SHOW'].includes(appointment.status));
   const matches = query ? activeAppointments.filter((appointment) =>
     [appointment.referenceCode, appointment.customerName, appointment.service?.name]
       .some((value) => String(value ?? '').toLowerCase().includes(query)),
   ) : [];
   const visibleAppointments = query ? matches : activeAppointments;
+
+  const appointmentPages=Math.max(1,Math.ceil(visibleAppointments.length/appointmentsPerPage));
+  const paginatedAppointments=visibleAppointments.slice((appointmentPage-1)*appointmentsPerPage,appointmentPage*appointmentsPerPage);
+  useEffect(()=>setAppointmentPage(1),[code,appointmentView]);
+  useEffect(()=>setAppointmentPage(page=>Math.min(page,appointmentPages)),[appointmentPages]);
 
   const lookup = (value = code) => {
     const key = String(value).trim().toLowerCase();
@@ -81,6 +89,7 @@ export default function StaffScheduleView({ currentUser }) {
   };
   const reset = () => { setAppt(null); setCode(''); setPromoApplied(false); setPromoValue(0); setPromo(''); };
   const changeAppointmentStatus = async (status, successMessage) => {
+    if(appointmentView==='archived'||appt?.isArchived)return;
     try {
       await api.updateStaffAppointmentStatus(currentUser.accessToken, appt.id, status);
       say(successMessage);
@@ -107,6 +116,9 @@ export default function StaffScheduleView({ currentUser }) {
             <h2 className="text-sm font-bold text-[#2A1E1B]">{['ADMIN', 'SUPERADMIN'].includes(currentUser?.role) ? 'Salon Appointments' : 'My Assigned Appointments'}</h2>
             <div className="flex items-center gap-3"><span className="text-[11px] text-[#8A8174]">{appointments.length} appointments</span><button type="button" onClick={() => setAppointmentsRefreshKey((n) => n + 1)} className="text-xs font-bold text-[#8B5E3C] hover:underline">Refresh</button></div>
           </div>
+          <div className="mb-3 flex rounded-xl border border-[#E7DFD4] bg-[#F8F5F0] p-1">
+            {['active','archived'].map(view=><button key={view} type="button" aria-pressed={appointmentView===view} onClick={()=>{setAppointmentView(view);setAppointments([]);setAppointmentPage(1);reset();}} className={`flex-1 rounded-lg px-2 py-2 text-[11px] font-bold ${appointmentView===view?'bg-[#4A3928] text-white':'text-[#8A8174]'}`}>{view==='active'?'Active appointments':'Archived appointments'}</button>)}
+          </div>
           <div className={`${card} mb-3 flex items-center gap-3 px-3 transition focus-within:border-[#C5A059] focus-within:ring-2 focus-within:ring-[#C5A059]/20`}>
             <Search size={16} className="shrink-0 text-[#8A8174]" />
             <input aria-label="Search appointments" value={code} onChange={(e) => { setCode(e.target.value); setAppt(null); setPromoApplied(false); setPromoValue(0); setPromo(''); }} onKeyDown={(e) => e.key === 'Enter' && matches.length === 1 && lookup(matches[0].referenceCode || matches[0].id)}
@@ -118,7 +130,7 @@ export default function StaffScheduleView({ currentUser }) {
               : appointmentsError ? <p role="alert" className="text-xs text-red-600">{appointmentsError}</p>
               : !appointments.length ? <p className="text-xs text-[#8A8174]">No appointments assigned yet.</p>
               : !visibleAppointments.length ? <p className="text-xs text-[#8A8174]">No appointments found.</p>
-              : visibleAppointments.slice(0, 30).map((item) => {
+              : paginatedAppointments.map((item) => {
                 const status = String(item.status || '').toUpperCase();
                 const statusColor = status === 'PENDING'
                   ? 'bg-orange-100 text-orange-800'
@@ -142,8 +154,8 @@ export default function StaffScheduleView({ currentUser }) {
                 );
               })}
           </div>
+          <div className="mt-3 flex items-center justify-between gap-2 border-t border-[#E7DFD4] pt-3 text-[11px] text-[#8A8174]"><span>Page {appointmentPage} of {appointmentPages}</span><div className="flex gap-2"><button type="button" aria-label="Previous appointments page" disabled={appointmentPage===1||appointmentsLoading} onClick={()=>setAppointmentPage(page=>Math.max(1,page-1))} className="rounded-lg border border-[#E7DFD4] p-2 disabled:opacity-40"><ChevronLeft size={14}/></button><button type="button" aria-label="Next appointments page" disabled={appointmentPage===appointmentPages||appointmentsLoading} onClick={()=>setAppointmentPage(page=>Math.min(appointmentPages,page+1))} className="rounded-lg border border-[#E7DFD4] p-2 disabled:opacity-40"><ChevronRight size={14}/></button></div></div>
         </section>
-
         <section className="flex min-h-0 flex-col gap-4 lg:col-span-2">
           <div className={`${card} min-h-64 flex-1 overflow-y-auto p-4`}>
             {appt ? (
@@ -175,7 +187,7 @@ export default function StaffScheduleView({ currentUser }) {
             ) : <EmptyState icon={CalendarClock} title={appointmentsLoading ? 'Loading appointments' : appointmentsError || 'Appointments will appear here'} hint="Search by reference code, guest, or service." />}
           </div>
 
-          <div className={`${card} grid shrink-0 items-center gap-5 p-5 md:grid-cols-2 xl:grid-cols-[1fr_1fr_auto]`}>
+          {appointmentView==='active' ? <div className={`${card} grid shrink-0 items-center gap-5 p-5 md:grid-cols-2 xl:grid-cols-[1fr_1fr_auto]`}>
         <div>
           <p className="mb-2 text-[10px] font-bold uppercase text-[#443523]">Promo Code</p>
           <div className="flex gap-2">
@@ -194,7 +206,7 @@ export default function StaffScheduleView({ currentUser }) {
           <button disabled={!appt || appt.status === 'CONFIRMED'} onClick={pay} className="flex items-center justify-center gap-2 rounded-lg bg-[#4A3928] px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#2A1E1B] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"><CreditCard size={14} />{appt?.status === 'CONFIRMED' ? ' Already Confirmed' : ' Confirm Appointment'}</button>
           <button disabled={!appt || appt.status !== 'CONFIRMED'} onClick={noShow} className={`flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${appt?.status === 'CONFIRMED' ? 'border border-red-200 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white active:scale-95' : 'border border-red-100 bg-red-50/50 text-red-300'}`}><Trash2 size={14} /> Mark as “No Show”</button>
         </div>
-      </div>
+      </div> : <div className={`${card} p-5 text-xs text-[#8A8174]`}>Archived appointments are read-only. Staff assignment and booking history are retained.</div>}
         </section>
       </div>
       <Toast msg={toast} />

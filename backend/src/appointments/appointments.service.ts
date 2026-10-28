@@ -1,3 +1,5 @@
+import { Optional } from '@nestjs/common';
+import { SalonConfigService,defaultBookingDay } from '../salon/salon-config.service.js';
 import {
   BadRequestException,
   ConflictException,
@@ -24,6 +26,8 @@ interface CreateAppointmentInput {
 
 @Injectable()
 export class AppointmentsService {
+  constructor(@Optional() private readonly salon?:SalonConfigService) {}
+  private operatingDay(date:string){return this.salon?this.salon.bookingDay(date):Promise.resolve(defaultBookingDay());}
   private readonly logger = new Logger(AppointmentsService.name);
 
   async findForStaff(role: string) {
@@ -148,6 +152,7 @@ export class AppointmentsService {
     this.validateDate(appointmentDate);
 
     const startMinutes = this.timeToMinutes(startTime);
+    const operating=await this.operatingDay(appointmentDate);
 
     try {
       const salonNow = this.salonDateTime();
@@ -172,9 +177,9 @@ export class AppointmentsService {
       if (
         !Number.isFinite(durationMinutes) ||
         durationMinutes <= 0 ||
-        startMinutes < 12 * 60 ||
-        endMinutes > 21 * 60 ||
-        startMinutes % 30 !== 0
+        operating.closed || startMinutes < operating.open ||
+        endMinutes > operating.close ||
+        (startMinutes-operating.open) % operating.interval !== 0
       ) {
         throw new BadRequestException('Appointment time is outside operating hours');
       }
@@ -259,9 +264,10 @@ export class AppointmentsService {
         ),
       );
 
-      const openingMinutes = 12 * 60;
-      const closingMinutes = 21 * 60;
-      const slotInterval = 30;
+      const operating=await this.operatingDay(date);
+      const openingMinutes=operating.open;
+      const closingMinutes=operating.closed?operating.open:operating.close;
+      const slotInterval=operating.interval;
       const salonNow = this.salonDateTime();
 
       const slots: {
@@ -346,15 +352,16 @@ export class AppointmentsService {
 
     const startMinutes = this.timeToMinutes(requestedTime);
 
-    if (startMinutes < 12 * 60 || startMinutes >= 21 * 60) {
+    const operating=await this.operatingDay(date);
+    if (operating.closed || startMinutes < operating.open || startMinutes >= operating.close) {
       throw new BadRequestException(
-        'Appointments must start between 12:00 and 20:30',
+        'Appointments must start within salon operating hours',
       );
     }
 
-    if (startMinutes % 30 !== 0) {
+    if ((startMinutes-operating.open) % operating.interval !== 0) {
       throw new BadRequestException(
-        'Appointment start times must be in 30-minute intervals',
+        'Appointment start time must match the saved booking interval',
       );
     }
 
@@ -405,7 +412,7 @@ export class AppointmentsService {
         if (
           !Number.isFinite(durationMinutes) ||
           durationMinutes <= 0 ||
-          endMinutes > 21 * 60
+          endMinutes > operating.close
         ) {
           throw new BadRequestException(
             'The selected service cannot fit within salon operating hours',

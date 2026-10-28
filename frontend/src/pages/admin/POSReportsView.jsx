@@ -1,902 +1,989 @@
-import HeaderActions from '../../components/workspace/HeaderActions';
-import { useState, useEffect, useCallback } from 'react';
-import ConfirmationModal from '../../components/ConfirmationModal';
-import { 
-  TrendingUp, 
-  Clock, 
-  CheckCircle2,
-  DollarSign,
-  Printer,
-  FileText,
-  CreditCard,
-  ChevronDown,
+import { useEffect, useState } from "react";
+import {
+  CalendarDays,
   Download,
-  AlertTriangle,
+  RefreshCw,
+  Wallet,
+  CreditCard,
+  FileText,
+  Printer,
   X,
-  SlidersHorizontal,
-  FileQuestion
-} from 'lucide-react';
+  Link2,
+  AlertTriangle,
+} from "lucide-react";
+import AdminPageHeader from "../../components/workspace/AdminPageHeader";
+import AdminAuthorizationDialog from "../../components/AdminAuthorizationDialog";
+import { readJsonResponse } from "../../api/client";
+import useSalonProfile from "../../hooks/useSalonProfile";
+import { usePageFind } from "../../components/workspace/AdminWorkspaceContext";
 
-export default function POSReportsView({ currentUser, showHeaderActions = true }) {
-  const [selectedDate, setSelectedDate] = useState('August 20, 2026');
-  const [activeFilter, setActiveFilter] = useState('ALL');
-  const [actualCashCount, setActualCashCount] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-
-  // API Data States
-  const [kpiData, setKpiData] = useState({
-    totalSales: '₱0.00',
-    totalSalesGrowth: '+12.4% vs yesterday',
-    cashPayments: '₱0.00',
-    cashShare: '0% of total',
-    digitalPayments: '₱0.00',
-    digitalMethods: 'GCash, Maya, Card',
-    voidedRefunds: '₱0.00',
-    voidedCount: '0 transactions'
-  });
-  const [transactions, setTransactions] = useState([]);
-  const [closeoutInfo, setCloseoutInfo] = useState({
-    register: 'Register 1',
-    cashier: 'Aljean Mark A. Angeles',
-    shift: '8:00 AM – 8:00 PM',
-    openingCash: 5000,
-    totalCashSales: 0,
-    totalDigitalSales: 0,
-    voidedRefunded: '₱0.00 / ₱0.00',
-    expectedCash: 5000,
-    actualCashCount: 0,
-    discrepancy: 0,
-    isClosed: false
-  });
-
-  // Modals & Notifications
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [isCloseoutModalOpen, setIsCloseoutModalOpen] = useState(false);
-  const [isReportsListModalOpen, setIsReportsListModalOpen] = useState(false);
-  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
-  const [savedCloseoutReports, setSavedCloseoutReports] = useState([]);
-  const [toastMessage, setToastMessage] = useState('');
-  const [filterSearch, setFilterSearch] = useState('');
-  const [selectedReportForInvoice, setSelectedReportForInvoice] = useState(null);
-  const [pendingDeleteReport, setPendingDeleteReport] = useState(null);
-
-  const showToast = (msg) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(''), 4000);
-  };
-
-  const getAuthHeaders = useCallback(() => {
-    const token = currentUser?.accessToken || localStorage.getItem('token');
-    return token ? { 'Authorization': `Bearer ${token}` } : {};
-  }, [currentUser]);
-
-  const fetchPosData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/admin/reports/pos?date=${encodeURIComponent(selectedDate)}`, {
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'application/json',
-        },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setKpiData(data.kpiData);
-        setTransactions(data.transactions);
-        setCloseoutInfo(data.closeoutInfo);
-        if (data.closeoutInfo.actualCashCount != null && data.closeoutInfo.isClosed) {
-          setActualCashCount(String(data.closeoutInfo.actualCashCount));
-        } else {
-          setActualCashCount('');
-        }
-        setLoadError('');
-      } else {
-        throw new Error(`Unable to load POS report (HTTP ${res.status}).`);
-      }
-    } catch (err) {
-      setLoadError(err.message || 'Unable to load POS report.');
-      console.error('Error fetching POS report:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedDate, getAuthHeaders]);
-
-  const fetchCloseoutReports = useCallback(async () => {
-    try {
-      const res = await fetch('/api/admin/reports/closeouts', {
-        headers: getAuthHeaders(),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setSavedCloseoutReports(data);
-      }
-    } catch (err) {
-      console.error('Error fetching closeout reports list:', err);
-    }
-  }, [getAuthHeaders]);
-
-  useEffect(() => {
-    let isSubscribed = true;
-
-    const loadData = async () => {
-      setIsLoading(true);
-      try {
-        const res = await fetch(`/api/admin/reports/pos?date=${encodeURIComponent(selectedDate)}`, {
-          headers: {
-            ...getAuthHeaders(),
-            'Content-Type': 'application/json',
-          },
-        });
-        if (res.ok && isSubscribed) {
-          setLoadError('');
-          const data = await res.json();
-          setKpiData(data.kpiData);
-          setTransactions(data.transactions);
-          setCloseoutInfo(data.closeoutInfo);
-          if (data.closeoutInfo.actualCashCount != null && data.closeoutInfo.isClosed) {
-            setActualCashCount(String(data.closeoutInfo.actualCashCount));
-          } else {
-            setActualCashCount('');
-          }
-        }
-      } catch (err) {
-        if (isSubscribed) {
-          setLoadError('Unable to connect to backend service.');
-          console.error('Error fetching POS report:', err);
-        }
-      } finally {
-        if (isSubscribed) setIsLoading(false);
-      }
-
-      try {
-        const resCloseout = await fetch('/api/admin/reports/closeouts', {
-          headers: getAuthHeaders(),
-        });
-        if (resCloseout.ok && isSubscribed) {
-          const dataCloseout = await resCloseout.json();
-          setSavedCloseoutReports(dataCloseout);
-        }
-      } catch (err) {
-        console.error('Error fetching closeout reports list:', err);
-      }
-    };
-
-    loadData();
-
-    return () => {
-      isSubscribed = false;
-    };
-  }, [selectedDate, currentUser, getAuthHeaders]);
-
-  const openingCash = closeoutInfo.openingCash;
-  const totalCashSales = closeoutInfo.totalCashSales;
-  const totalDigitalSales = closeoutInfo.totalDigitalSales;
-  const expectedCash = closeoutInfo.expectedCash;
-
-  const actualCashNum = parseFloat(actualCashCount.replace(/[^0-9.]/g, '')) || 0;
-  const discrepancy = actualCashCount !== '' ? actualCashNum - expectedCash : closeoutInfo.discrepancy;
-
-  const handleConfirmExportCSV = () => {
-    const BOM = '\uFEFF';
-    const companyHeader = [
-      `CENTY'ZZ SALON - POINT OF SALE TRANSACTION REPORT`,
-      `Report Date: "${selectedDate}"`,
-      `Generated On: "${new Date().toLocaleString()}"`,
-      `Generated By: "${closeoutInfo.cashier || 'Aljean Mark A. Angeles'}"`,
-      ``,
-    ].join('\n');
-
-    const summaryHeader = [
-      `--- EXECUTIVE FINANCIAL SUMMARY ---`,
-      `Total Sales Revenue,"PHP ${kpiData.totalSales || '₱0.00'}"`,
-      `Total Cash Receipts,"PHP ${kpiData.cashPayments || '₱0.00'}"`,
-      `Total Digital Payments,"PHP ${kpiData.digitalPayments || '₱0.00'}"`,
-      `Voided / Refunded Total,"PHP ${kpiData.voidedRefunds || '₱0.00'}"`,
-      ``,
-    ].join('\n');
-
-    const tableHeader = `--- TRANSACTION LOGS ---\nTxn ID,Time,Cashier,Service / Item,Payment Method,Amount (PHP),Status\n`;
-
-    const tableRows = transactions.length > 0 
-      ? transactions.map((t) => {
-          const safeService = `"${(t.service || '').replace(/"/g, '""')}"`;
-          const formattedAmount = `"PHP ${Number(t.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}"`;
-          return `${t.txnId},${t.time},${t.cashier},${safeService},${t.method},${formattedAmount},${t.status}`;
-        }).join('\n')
-      : 'No transactions recorded on this day.';
-
-    const csvContent = BOM + companyHeader + summaryHeader + tableHeader + tableRows;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Centyzz_POS_Report_${selectedDate.replace(/\s+/g, '_')}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-
-    setIsExportModalOpen(false);
-    showToast(`Successfully downloaded POS Report CSV for ${selectedDate}`);
-  };
-
-  const handleConfirmCloseout = async () => {
-    try {
-      const res = await fetch('/api/admin/reports/closeout', {
-        method: 'POST',
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ reportDate: selectedDate, actualCash: actualCashNum }),
-      });
-
-      if (res.ok) {
-        setIsCloseoutModalOpen(false);
-        showToast(`Register closed successfully for ${selectedDate}`);
-        fetchPosData();
-        fetchCloseoutReports();
-      }
-    } catch (err) {
-      console.error('Error submitting closeout:', err);
-    }
-  };
-
-  const handleDeleteReport = async (id, reportDate) => {
-    try {
-      const res = await fetch(`/api/admin/reports/closeout/${id}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
-      if (res.ok) {
-        showToast(`Deleted closeout report for ${reportDate}`);
-        fetchCloseoutReports();
-        fetchPosData();
-      }
-    } catch (err) {
-      console.error('Error deleting report:', err);
-    }
-  };
-
-const handleViewReportInvoice = async (report) => {
-    try {
-      const res = await fetch(`/api/admin/reports/pos?date=${encodeURIComponent(report.date)}`, {
-        headers: getAuthHeaders(),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        
-        const rawTxns = data.transactions || [];
-        const cashSales = Number(data.closeoutInfo?.totalCashSales || 0);
-        const digitalSales = Number(data.closeoutInfo?.totalDigitalSales || 0);
-        const totalRevenue = cashSales + digitalSales;
-
-        // STRICT CHECK: Must have actual transactions OR non-zero total revenue
-        const hasRealData = rawTxns.length > 0 || totalRevenue > 0;
-
-        setSelectedReportForInvoice({
-          date: report.date,
-          cashier: report.cashier || data.closeoutInfo?.cashier || 'Aljean Mark A. Angeles',
-          register: data.closeoutInfo?.register || 'Register 1',
-          shift: data.closeoutInfo?.shift || '8:00 AM – 8:00 PM',
-          openingCash: Number(data.closeoutInfo?.openingCash || 0),
-          totalCashSales: cashSales,
-          totalDigitalSales: digitalSales,
-          voidedRefundsTotal: Number(data.kpiData?.voidedRefunds?.replace(/[^0-9.]/g, '') || 0),
-          expectedCash: Number(data.closeoutInfo?.expectedCash || 0),
-          actualCashCount: Number(data.closeoutInfo?.actualCashCount || 0),
-          discrepancy: Number(data.closeoutInfo?.discrepancy || 0),
-          hasTransactions: hasRealData, // <--- This now forces false when sales are 0!
-        });
-        setIsReportsListModalOpen(false);
-        setIsInvoiceModalOpen(true);
-      }
-    } catch (err) {
-      console.error('Error fetching report details for invoice:', err);
-    }
-  };
-
-  const filteredTransactions = transactions.filter(t => {
-    if (activeFilter === 'CASH') return t.method === 'Cash';
-    if (activeFilter === 'DIGITAL') return t.method === 'GCash' || t.method === 'Maya' || t.method === 'Card';
-    if (activeFilter === 'VOIDED') return t.status === 'Voided' || t.status === 'Refunded';
-    return true;
-  });
-
-  const filteredReportsList = savedCloseoutReports.filter(r => 
-    r.date.toLowerCase().includes(filterSearch.toLowerCase())
+const today = () =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+const shift = (day, n) =>
+  new Date(Date.parse(day + "T00:00:00Z") + n * 86400000)
+    .toISOString()
+    .slice(0, 10);
+const money = (value) =>
+  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(
+    value ?? 0,
   );
-
-  const renderStatusBadge = (status) => {
-    if (status === 'Completed') {
-      return (
-        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-          <CheckCircle2 size={10} /> Completed
-        </span>
-      );
+const card = "rounded-2xl border border-[#E7DFD4] bg-white p-5 shadow-sm";
+const input =
+  "rounded-xl border border-[#E7DFD4] bg-[#FFFDF8] px-3 py-2.5 text-sm outline-none focus:border-[#B58D54]";
+const button =
+  "inline-flex items-center justify-center gap-2 rounded-xl bg-[#8B5E3C] px-4 py-2.5 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50";
+function csvCell(value) {
+  let text = String(value ?? "");
+  if (!/^-?\d+(?:\.\d+)?$/.test(text) && /^[\s]*[=+\-@\t\r]/.test(text))
+    text = "'" + text;
+  return '"' + text.replace(/"/g, '""') + '"';
+}
+function downloadCsv(name, rows) {
+  const blob = new Blob(
+    ["\uFEFF" + rows.map((row) => row.map(csvCell).join(",")).join("\r\n")],
+    { type: "text/csv;charset=utf-8" },
+  );
+  const url = URL.createObjectURL(blob),
+    a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+async function reportRequest(token, path, options = {}) {
+  if (!token) throw Error("Sign in as an Admin to view reports.");
+  const response = await fetch("/api/admin/reports/" + path, {
+    method: options.method || "GET",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json",
+      ...(options.pin ? { "x-management-pin": options.pin } : {}),
+    },
+    ...(options.body ? { body: JSON.stringify(options.body) } : {}),
+  });
+  const data = await readJsonResponse(response);
+  if (!response.ok)
+    throw Error(
+      Array.isArray(data.message)
+        ? data.message.join(" ")
+        : data.message || "Unable to load the report.",
+    );
+  return data;
+}
+export default function POSReportsView({
+  currentUser,
+  showHeaderActions = true,
+}) {
+  const [range, setRange] = useState(() => ({
+      from: shift(today(), -6),
+      to: today(),
+    })),
+    [draft, setDraft] = useState(() => ({
+      from: shift(today(), -6),
+      to: today(),
+    })),
+    [result, setResult] = useState(null),
+    [refresh, setRefresh] = useState(0),
+    [tab, setTab] = useState("transactions"),
+    [filter, setFilter] = useState("ALL"),
+    [notice, setNotice] = useState(""),
+    [formError, setFormError] = useState(""),
+    [opening, setOpening] = useState("0.00"),
+    [actual, setActual] = useState(""),
+    [authorization, setAuthorization] = useState(null),
+    [selectedCloseout, setSelectedCloseout] = useState(null),
+    [linkTarget, setLinkTarget] = useState(null),
+    [lookups, setLookups] = useState(null),
+    [linkForm, setLinkForm] = useState({ item: "", cashier: "" });
+  const [findQuery, setFindQuery] = usePageFind();
+  const salon = useSalonProfile(),
+    token = currentUser?.accessToken,
+    min = shift(today(), -29),
+    max = today(),
+    key = [range.from, range.to, token, refresh].join(":");
+  const ready = result?.key === key,
+    data = ready ? result.data : null,
+    closeouts = ready ? result.closeouts : [],
+    error = ready ? result.error : "",
+    loading = !ready;
+  useEffect(() => {
+    let active = true;
+    const query = "from=" + range.from + "&to=" + range.to;
+    Promise.all([
+      reportRequest(token, "pos?" + query),
+      reportRequest(token, "closeouts?" + query),
+    ])
+      .then(([data, closeouts]) => {
+        if (active) setResult({ key, data, closeouts, error: "" });
+      })
+      .catch((e) => {
+        if (active)
+          setResult({ key, data: null, closeouts: [], error: e.message });
+      });
+    return () => {
+      active = false;
+    };
+  }, [token, range.from, range.to, key]);
+  useEffect(() => {
+    if (!linkTarget) return;
+    let active = true;
+    reportRequest(token, "lookups")
+      .then((data) => {
+        if (active) setLookups(data);
+      })
+      .catch((e) => {
+        if (active) setFormError(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [linkTarget, token]);
+  useEffect(() => {
+    const refresh = () => setRefresh((n) => n + 1);
+    const timer = setInterval(refresh, 60000);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("admin-sales-updated", refresh);
+    const channel =
+      typeof BroadcastChannel !== "undefined"
+        ? new BroadcastChannel("centyzz-pos-events")
+        : null;
+    if (channel) channel.onmessage = refresh;
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("admin-sales-updated", refresh);
+      channel?.close();
+    };
+  }, []);
+  const apply = (value) => {
+    setFormError("");
+    if (value.from < min || value.to > max || value.from > value.to) {
+      setFormError("Choose an ordered range within the latest 30 days.");
+      return;
     }
-    if (status === 'Voided') {
-      return (
-        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
-          Voided
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-        Refunded
-      </span>
+    setRange({ ...value });
+    setDraft({ ...value });
+    setActual("");
+    setOpening("0.00");
+    setNotice("");
+  };
+  const totals = data?.totals,
+    day = range.from === range.to,
+    closed = data?.closeoutInfo?.isClosed,
+    openingValue = closed
+      ? data.closeoutInfo.openingCash
+      : Number(opening || 0),
+    expected = openingValue + (totals?.cashSales ?? 0),
+    difference = actual === "" ? null : Number(actual) - expected;
+  const rows = (data?.transactions ?? []).filter(
+    (row) =>
+      filter === "ALL" ||
+      (filter === "CASH" && row.cashAmount !== 0) ||
+      (filter === "DIGITAL" && row.digitalAmount !== 0) ||
+      (filter === "ADJUSTMENTS" && ["VOIDED", "REFUNDED"].includes(row.status)),
+  );
+  const exportSales = () => {
+    if (!data) return;
+    downloadCsv("Centyzz_POS_" + range.from + "_to_" + range.to + ".csv", [
+      [salon.salonName + " — POS report"],
+      ["From", range.from, "To", range.to],
+      [
+        "Generated (Philippine time)",
+        new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" }),
+      ],
+      ["Gross completed sales", totals.grossSales.toFixed(2)],
+      ["Refunds", totals.refunds.toFixed(2)],
+      ["Net sales", totals.netSales.toFixed(2)],
+      ["Voided (excluded)", totals.voided.toFixed(2)],
+      ["Net cash", totals.cashSales.toFixed(2)],
+      ["Net digital", totals.digitalSales.toFixed(2)],
+      ["Unallocated / payment difference", totals.unallocatedSales.toFixed(2)],
+      [],
+      [
+        "Date",
+        "Transaction",
+        "Time",
+        "Staff / cashier",
+        "Service / item",
+        "Payment method",
+        "Recorded amount (PHP)",
+        "Status",
+        "Source",
+        "References linked",
+      ],
+      ...data.transactions.map((row) => [
+        row.date,
+        row.txnId,
+        row.time,
+        row.cashier,
+        row.service,
+        row.method,
+        row.amount.toFixed(2),
+        row.status,
+        row.source,
+        row.unlinked ? "No" : "Yes",
+      ]),
+    ]);
+    setNotice("Exported all report rows for the selected dates.");
+  };
+  const exportCloseouts = () => {
+    downloadCsv(
+      "Centyzz_Closeouts_" + range.from + "_to_" + range.to + ".csv",
+      [
+        [salon.salonName + " — Saved closeouts"],
+        ["From", range.from, "To", range.to],
+        ["Only saved closeouts are included."],
+        [],
+        [
+          "Date",
+          "Scope",
+          "Closed by",
+          "Opening cash (PHP)",
+          "Net cash sales (PHP)",
+          "Net digital sales (PHP)",
+          "Net sales (PHP)",
+          "Expected cash (PHP)",
+          "Actual cash (PHP)",
+          "Difference (PHP)",
+          "Saved at",
+        ],
+        ...closeouts.map((row) => [
+          row.date,
+          row.scope,
+          row.cashier,
+          row.openingCash.toFixed(2),
+          row.cashSales.toFixed(2),
+          row.digitalSales.toFixed(2),
+          row.totalSales.toFixed(2),
+          row.expectedCash.toFixed(2),
+          row.actualCash.toFixed(2),
+          row.discrepancy.toFixed(2),
+          new Date(row.closedAt).toLocaleString("en-PH", {
+            timeZone: "Asia/Manila",
+          }),
+        ]),
+      ],
+    );
+    setNotice(
+      "Exported " +
+        closeouts.length +
+        " saved closeouts for the selected dates.",
     );
   };
-
+  const saveCloseout = (e) => {
+    e.preventDefault();
+    setAuthorization({
+      action: "Save the closeout for " + range.from,
+      run: async (pin) => {
+        await reportRequest(token, "closeout", {
+          method: "POST",
+          pin,
+          body: {
+            reportDate: range.from,
+            openingCash: opening,
+            actualCash: actual,
+          },
+        });
+        setAuthorization(null);
+        setNotice(
+          "Daily closeout saved. Its counted cash and sales snapshot are retained.",
+        );
+        setRefresh((n) => n + 1);
+        window.dispatchEvent(new Event("admin-notifications-changed"));
+      },
+    });
+  };
+  const saveLinks = (e) => {
+    e.preventDefault();
+    const [kind, id] = linkForm.item.split(":");
+    setAuthorization({
+      action:
+        "Link report row " +
+        linkTarget.txnId +
+        " to a service/item and Staff account",
+      run: async (pin) => {
+        await reportRequest(
+          token,
+          "transactions/" + linkTarget.legacyId + "/links",
+          {
+            method: "PATCH",
+            pin,
+            body: {
+              serviceId: kind === "service" ? Number(id) : null,
+              productId: kind === "product" ? Number(id) : null,
+              cashierId: Number(linkForm.cashier),
+            },
+          },
+        );
+        setAuthorization(null);
+        setLinkTarget(null);
+        setRefresh((n) => n + 1);
+        setNotice("References saved. The charged amount was preserved.");
+      },
+    });
+  };
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-2 bg-[#3A342B] text-[#F5F1EA] px-4 py-3 rounded-xl shadow-xl border border-[#C5A059]/40 text-xs font-semibold animate-fadeIn">
-          <CheckCircle2 className="h-4 w-4 text-[#C5A059]" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
-      {/* Header with Date Dropdown */}
-      <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-[#2A1E1B] truncate">POS Reports</h1>
-          {loadError && <p role="alert" className="mt-1 text-xs text-rose-700 font-semibold">{loadError}</p>}
-          <p className="mt-0.5 text-xs text-[#8A8174] truncate">
-            Analyze daily revenue, drawer closeouts, and transaction history
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 shrink-0">
-          <div className="flex items-center gap-2 border-r border-[#E7DFD4] pr-3">
-            <div className="relative">
-              <select 
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="appearance-none bg-[#F8F5F0] hover:bg-[#E7DFD4] border border-[#E7DFD4] text-[#2A1E1B] font-bold text-xs px-3.5 py-2 pr-8 rounded-xl outline-none cursor-pointer transition-colors shadow-2xs"
-              >
-                <option value="August 20, 2026">August 20, 2026</option>
-                <option value="August 19, 2026">August 19, 2026</option>
-                <option value="August 18, 2026">August 18, 2026</option>
-                <option value="August 17, 2026">August 17, 2026</option>
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 text-[#8A8174] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-
-            <button 
-              onClick={() => setIsExportModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#E7DFD4] bg-white text-[#2A1E1B] hover:bg-[#F6F0E6] text-xs font-bold transition-colors shadow-2xs"
-            >
-              <Download size={14} className="text-[#C5A059]" />
-              <span>Export CSV</span>
-            </button>
+    <div className="space-y-6 pb-10 text-[#2A1E1B]">
+      <AdminPageHeader
+        title="POS Reports"
+        subtitle="Review accurate sales and saved closeouts for the latest 30 days"
+        showHeaderActions={showHeaderActions}
+      />
+      <section className={card}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm font-bold">
+            <CalendarDays size={18} className="text-[#8B5E3C]" />
+            Report dates
           </div>
-
-          {showHeaderActions && (<HeaderActions />)}
-        </div>
-      </header>
-
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-        <div className="bg-[#B58D54] text-white p-6 rounded-2xl shadow-sm border border-[#9E7B3B] flex flex-col justify-between">
-          <div className="flex justify-between items-start mb-4">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm bg-black/20 px-2 py-0.5 rounded-md">₱</span>
-              <span className="text-xs font-bold uppercase tracking-wider text-white/90">Total Sales</span>
-            </div>
-            <span className="text-[10px] text-white/80 font-mono">{selectedDate}</span>
-          </div>
-          <div>
-            <div className="text-3xl font-bold tracking-tight">{kpiData.totalSales}</div>
-            <div className="flex items-center gap-1 text-[11px] text-emerald-100 mt-1 font-medium">
-              <TrendingUp size={12} />
-              <span>{kpiData.totalSalesGrowth}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-[#F8F5F0] p-6 rounded-2xl border border-[#E7DFD4] shadow-xs flex flex-col justify-between">
-          <div className="flex justify-between items-start mb-4">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-white text-[#C5A059] rounded-lg border border-[#E7DFD4]">
-                <DollarSign size={16} />
-              </div>
-              <span className="text-xs font-bold uppercase tracking-wider text-gray-600">Cash Payments</span>
-            </div>
-          </div>
-          <div>
-            <div className="text-3xl font-bold text-[#2A1E1B]">{kpiData.cashPayments}</div>
-            <p className="text-[11px] text-[#8A8174] mt-1 font-medium">{kpiData.cashShare}</p>
-          </div>
-        </div>
-
-        <div className="bg-[#F8F5F0] p-6 rounded-2xl border border-[#E7DFD4] shadow-xs flex flex-col justify-between">
-          <div className="flex justify-between items-start mb-4">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-white text-[#C5A059] rounded-lg border border-[#E7DFD4]">
-                <CreditCard size={16} />
-              </div>
-              <span className="text-xs font-bold uppercase tracking-wider text-gray-600">Digital Payments</span>
-            </div>
-          </div>
-          <div>
-            <div className="text-3xl font-bold text-[#2A1E1B]">{kpiData.digitalPayments}</div>
-            <p className="text-[11px] text-[#8A8174] mt-1 font-medium">{kpiData.digitalMethods}</p>
-          </div>
-        </div>
-
-        <div className="bg-[#F8F5F0] p-6 rounded-2xl border border-[#E7DFD4] shadow-xs flex flex-col justify-between">
-          <div className="flex justify-between items-start mb-4">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-white text-rose-600 rounded-lg border border-[#E7DFD4]">
-                <Clock size={16} />
-              </div>
-              <span className="text-xs font-bold uppercase tracking-wider text-gray-600">Voided/Refunds</span>
-            </div>
-          </div>
-          <div>
-            <div className="text-3xl font-bold text-rose-700">{kpiData.voidedRefunds}</div>
-            <p className="text-[11px] text-rose-600 mt-1 font-medium">{kpiData.voidedCount}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Grid Workspace */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        <div className="lg:col-span-8 bg-white rounded-2xl border border-[#E7DFD4] shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-[#E7DFD4] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#FDFBF7]">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-[#2A1E1B]">Transaction History</h2>
-                <span className="bg-[#F8F5F0] text-[#B58D54] border border-[#E7DFD4] text-[10px] font-bold px-2 py-0.5 rounded-full">
-                  {filteredTransactions.length} total
-                </span>
-              </div>
-              <p className="text-xs text-[#8A8174] mt-0.5">Real-time point of sale transactions list</p>
-            </div>
-
-            <button 
-              onClick={() => setIsReportsListModalOpen(true)}
-              className="bg-[#2A1E1B] hover:bg-[#C5A059] text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2"
-            >
-              <FileText size={14} className="text-[#C5A059]" />
-              <span>Closeout Reports</span>
-            </button>
-          </div>
-
-          <div className="p-4 bg-[#F8F5F0] border-b border-[#E7DFD4] flex items-center gap-2 overflow-x-auto">
-            {['ALL', 'CASH', 'DIGITAL', 'VOIDED'].map((filter) => (
+          <div className="flex flex-wrap gap-2">
+            {[
+              ["Today", 0],
+              ["Last 7 days", 6],
+              ["Last 30 days", 29],
+            ].map(([label, n]) => (
               <button
-                key={filter}
-                onClick={() => setActiveFilter(filter)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeFilter === filter 
-                    ? 'bg-[#2A1E1B] text-white shadow-xs' 
-                    : 'bg-white text-gray-600 hover:bg-[#E7DFD4] hover:text-[#2A1E1B] border border-[#E7DFD4]'
-                }`}
+                type="button"
+                key={label}
+                onClick={() => apply({ from: shift(max, -n), to: max })}
+                className={
+                  "rounded-lg border px-3 py-2 text-xs font-semibold " +
+                  (range.from === shift(max, -n) && range.to === max
+                    ? "border-[#8B5E3C] bg-[#F6EEE4] text-[#8B5E3C]"
+                    : "border-[#E7DFD4]")
+                }
               >
-                {filter === 'ALL' ? 'All Services' : filter === 'CASH' ? 'Cash' : filter === 'DIGITAL' ? 'Digital' : 'Voided / Refunded'}
+                {label}
               </button>
             ))}
           </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[#F8F5F0] text-[10px] uppercase font-bold text-gray-500 tracking-wider border-b border-[#E7DFD4]">
-                  <th className="p-4 pl-6">Txn ID</th>
-                  <th className="p-4">Time</th>
-                  <th className="p-4">Cashier</th>
-                  <th className="p-4">Service / Item</th>
-                  <th className="p-4">Method</th>
-                  <th className="p-4">Amount</th>
-                  <th className="p-4 pr-6 text-right">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#E7DFD4]/60 text-xs">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan="7" className="p-8 text-center text-[#8A8174]">Loading transactions from Neon DB...</td>
-                  </tr>
-                ) : filteredTransactions.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="p-12 text-center text-[#8A8174]">
-                      <div className="flex flex-col items-center justify-center space-y-2">
-                        <FileQuestion size={32} className="text-[#C5A059]/60" />
-                        <span className="font-bold text-sm text-[#2A1E1B]">No transactions made on this day.</span>
-                        <span className="text-xs text-[#8A8174]">There were no registered POS sales for {selectedDate}.</span>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredTransactions.map((t) => (
-                    <tr key={t.txnId} className="hover:bg-[#FDFBF7] transition-colors">
-                      <td className="p-4 pl-6 font-mono font-bold text-[#2A1E1B]">{t.txnId}</td>
-                      <td className="p-4 font-mono text-gray-500">{t.time}</td>
-                      <td className="p-4 text-gray-600 font-medium">{t.cashier}</td>
-                      <td className="p-4 font-bold text-[#2A1E1B] truncate max-w-40">{t.service}</td>
-                      <td className="p-4 text-gray-600">{t.method}</td>
-                      <td className="p-4 font-bold text-[#2A1E1B]">₱{t.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                      <td className="p-4 pr-6 text-right">{renderStatusBadge(t.status)}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
         </div>
-
-        {/* Right Section: End of Day Closeout Card */}
-        <div className="lg:col-span-4 bg-white rounded-2xl border border-[#E7DFD4] shadow-sm p-6 space-y-5">
-          <div className="border-b border-[#E7DFD4] pb-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-bold text-[#2A1E1B]">End of Day Closeout</h2>
-              <p className="text-xs text-[#8A8174]">Shift reconciliation report</p>
-            </div>
-            {closeoutInfo.isClosed ? (
-              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2.5 py-1 rounded-full border border-emerald-200">
-                CLOSED
-              </span>
-            ) : (
-              <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2.5 py-1 rounded-full border border-amber-200">
-                OPEN SHIFT
-              </span>
-            )}
-          </div>
-
-          <div className="bg-[#F8F5F0] border border-[#E7DFD4] p-4 rounded-xl space-y-3 text-xs">
-            <div className="flex justify-between items-center text-gray-600">
-              <span>Register</span>
-              <strong className="text-[#2A1E1B]">{closeoutInfo.register}</strong>
-            </div>
-            <div className="flex justify-between items-center text-gray-600">
-              <span>Cashier on duty</span>
-              <strong className="text-[#2A1E1B]">{closeoutInfo.cashier}</strong>
-            </div>
-            <div className="flex justify-between items-center text-gray-600 pb-2 border-b border-dashed border-[#E7DFD4]">
-              <span>Shift</span>
-              <strong className="text-[#2A1E1B]">{closeoutInfo.shift}</strong>
-            </div>
-            <div className="flex justify-between items-center text-gray-600">
-              <span>Opening Cash</span>
-              <span className="font-bold text-[#2A1E1B]">₱{openingCash.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between items-center text-gray-600">
-              <span>Total Cash Sales</span>
-              <span className="font-bold text-[#2A1E1B]">₱{totalCashSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between items-center text-gray-600">
-              <span>Total Digital Sales</span>
-              <span className="font-bold text-[#2A1E1B]">₱{totalDigitalSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between items-center text-gray-600 pb-3 border-b border-dashed border-[#E7DFD4]">
-              <span>Voided / Refunded</span>
-              <span className="font-bold text-rose-600">{closeoutInfo.voidedRefunded}</span>
-            </div>
-            <div className="flex justify-between items-center pt-1 text-sm font-bold text-[#2A1E1B]">
-              <span>Expected Cash Drawer</span>
-              <span>₱{expectedCash.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-            </div>
-
-            <div className="pt-2 space-y-1">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174]">
-                Actual Physical Cash Count
-              </label>
-              <input
-                type="text"
-                disabled={closeoutInfo.isClosed}
-                placeholder="Enter counted cash amount..."
-                value={actualCashCount}
-                onChange={(e) => setActualCashCount(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7DFD4] bg-white text-xs font-bold text-[#2A1E1B] outline-none focus:border-[#C5A059] transition-all disabled:opacity-60"
-              />
-            </div>
-
-            <div className="flex justify-between items-center pt-2 text-xs font-bold">
-              <span className="text-[#8A8174]">Discrepancy / Over-Short</span>
-              <span className={discrepancy < 0 ? 'text-rose-600' : discrepancy > 0 ? 'text-emerald-600' : 'text-emerald-700'}>
-                ₱{discrepancy.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-2 pt-1">
-            <button
-              onClick={() => {
-                if (!actualCashCount) {
-                  showToast('Please enter physical cash count before closeout.');
-                  return;
-                }
-                setIsCloseoutModalOpen(true);
-              }}
-              disabled={closeoutInfo.isClosed}
-              className="w-full py-3 rounded-xl bg-[#2A1E1B] hover:bg-[#C5A059] text-white font-bold text-xs tracking-wider uppercase transition-all shadow-sm disabled:opacity-50"
-            >
-              {closeoutInfo.isClosed ? 'Register Closed For Day' : 'Submit & Close Register'}
-            </button>
-
-            <button
-              onClick={() => {
-                setSelectedReportForInvoice({
-                  date: selectedDate,
-                  cashier: closeoutInfo.cashier || 'Aljean Mark A. Angeles',
-                  register: closeoutInfo.register || 'Register 1',
-                  shift: closeoutInfo.shift || '8:00 AM – 8:00 PM',
-                  openingCash: Number(closeoutInfo.openingCash || 5000),
-                  totalCashSales: Number(closeoutInfo.totalCashSales || 0),
-                  totalDigitalSales: Number(closeoutInfo.totalDigitalSales || 0),
-                  voidedRefundsTotal: Number(kpiData?.voidedRefunds?.replace(/[^0-9.]/g, '') || 0),
-                  expectedCash: Number(closeoutInfo.expectedCash || 5000),
-                  actualCashCount: actualCashNum || Number(closeoutInfo.actualCashCount || 0),
-                  discrepancy: discrepancy,
-                  hasTransactions: transactions.length > 0 || !!closeoutInfo.isClosed,
-                });
-                setIsInvoiceModalOpen(true);
-              }}
-              className="w-full py-2.5 rounded-xl border border-[#E7DFD4] bg-white hover:bg-[#F8F5F0] text-[#2A1E1B] font-bold text-xs transition-colors flex items-center justify-center gap-2"
-            >
-              <Printer size={14} />
-              <span>Print A4 Invoice Summary</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Modals */}
-      {isExportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-3xl border border-[#E7DFD4] shadow-2xl max-w-md w-full p-6 space-y-5 text-[#2A1E1B]">
-            <div className="flex items-center justify-between border-b border-[#E7DFD4] pb-3">
-              <div className="flex items-center gap-2">
-                <Download className="text-[#C5A059] h-5 w-5" />
-                <h3 className="font-bold text-base">Confirm CSV Export</h3>
-              </div>
-              <button onClick={() => setIsExportModalOpen(false)} className="text-gray-400 hover:text-black">
-                <X size={18} />
-              </button>
-            </div>
-            <p className="text-xs text-gray-600 leading-relaxed">
-              Are you sure you want to download transaction logs for <strong className="text-[#2A1E1B]">{selectedDate}</strong>?
-            </p>
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button onClick={() => setIsExportModalOpen(false)} className="px-4 py-2.5 rounded-xl border border-[#E7DFD4] text-xs font-bold text-gray-600 hover:bg-[#F8F5F0]">Cancel</button>
-              <button onClick={handleConfirmExportCSV} className="px-5 py-2.5 rounded-xl bg-[#2A1E1B] text-white text-xs font-bold hover:bg-[#C5A059] shadow-md transition-all flex items-center gap-2">
-                <Download size={14} />
-                <span>Export & Download</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <form
+          className="mt-4 flex flex-wrap items-end gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            apply(draft);
+          }}
+        >
+          <label className="flex flex-col gap-1 text-xs font-semibold">
+            From
+            <input
+              type="date"
+              required
+              min={min}
+              max={draft.to || max}
+              value={draft.from}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, from: e.target.value }))
+              }
+              className={input}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-semibold">
+            To
+            <input
+              type="date"
+              required
+              min={draft.from || min}
+              max={max}
+              value={draft.to}
+              onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
+              className={input}
+            />
+          </label>
+          <button className={button}>Apply dates</button>
+          <button
+            type="button"
+            onClick={() => setRefresh((n) => n + 1)}
+            className="rounded-xl border border-[#E7DFD4] p-3"
+            aria-label="Refresh reports"
+          >
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+          </button>
+          <span className="pb-2 text-xs text-[#8A8174]">
+            {range.from} – {range.to} · Philippine time
+          </span>
+        </form>
+      </section>
+      {formError && (
+        <p
+          role="alert"
+          className="rounded-xl bg-red-50 p-4 text-sm text-red-700"
+        >
+          {formError}
+        </p>
       )}
-
-      {isReportsListModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-[#F9F8EF] rounded-[28px] border-2 border-[#B3A772] shadow-2xl max-w-2xl w-full overflow-hidden text-[#443523]">
-            <div className="p-6 sm:p-8 pb-4 flex items-start justify-between">
-              <div>
-                <p className="text-[11px] text-[#8A8174]">Closeout reports</p>
-                <h2 className="text-2xl font-bold text-[#443B2C] mt-0.5">Closeout Reports</h2>
-              </div>
-              <button onClick={() => setIsReportsListModalOpen(false)} className="text-[#8A8174] hover:text-[#2A1E1B] p-1"><X size={22} /></button>
-            </div>
-
-            <div className="px-6 sm:px-8 pb-4">
-              <div className="inline-flex items-center gap-2 bg-white border border-[#E0D8C3] rounded-xl px-3.5 py-2 text-xs text-[#443523] w-48 shadow-2xs">
-                <SlidersHorizontal size={14} className="text-[#8A8174]" />
-                <input 
-                  type="text" 
-                  placeholder="Filter date..."
-                  value={filterSearch}
-                  onChange={(e) => setFilterSearch(e.target.value)}
-                  className="bg-transparent outline-none w-full text-xs font-semibold placeholder:text-[#8A8174]"
-                />
-              </div>
-            </div>
-
-            <div className="px-6 sm:px-8 space-y-3 max-h-80 overflow-y-auto mb-8">
-              {filteredReportsList.map((report) => (
-                <div key={report.id} className="bg-white rounded-2xl border border-[#B3A772]/60 p-4 sm:px-6 flex items-center justify-between shadow-2xs">
-                  <span className="text-base font-bold text-[#2A1E1B]">{report.date}</span>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => setPendingDeleteReport(report)} className="px-4 py-2 rounded-xl border border-[#A29883] text-[#5C5243] hover:bg-[#F6F4EF] text-xs font-bold">Delete</button>
-                    <button onClick={() => handleViewReportInvoice(report)} className="px-5 py-2 rounded-xl bg-[#675B4B] hover:bg-[#4A3F32] text-white text-xs font-bold shadow-2xs">View</button>
+      {notice && (
+        <p
+          role="status"
+          className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800"
+        >
+          {notice}
+        </p>
+      )}
+      {error && (
+        <p
+          role="alert"
+          className="rounded-xl bg-red-50 p-4 text-sm text-red-700"
+        >
+          {error}{" "}
+          <button
+            className="underline"
+            onClick={() => setRefresh((n) => n + 1)}
+          >
+            Retry
+          </button>
+        </p>
+      )}
+      {loading ? (
+        <div className={card} role="status">
+          Loading reports…
+        </div>
+      ) : (
+        data && (
+          <>
+            {data.warnings.map((text) => (
+              <p
+                key={text}
+                className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900"
+              >
+                <AlertTriangle size={16} className="shrink-0" />
+                {text}
+              </p>
+            ))}
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                {
+                  label: "Net sales",
+                  value: totals.netSales,
+                  hint: data.kpiData.totalSalesGrowth,
+                  Icon: Wallet,
+                },
+                {
+                  label: "Net cash",
+                  value: totals.cashSales,
+                  hint: "Completed cash minus cash refunds",
+                  Icon: Wallet,
+                },
+                {
+                  label: "Net digital",
+                  value: totals.digitalSales,
+                  hint: "Recorded non-cash payments",
+                  Icon: CreditCard,
+                },
+                {
+                  label: "Refunds",
+                  value: totals.refunds,
+                  hint: money(totals.voided) + " voided (excluded)",
+                  Icon: FileText,
+                },
+              ].map(({ label, value, hint, Icon }) => (
+                <div key={label} className={card}>
+                  <div className="flex justify-between text-xs font-bold uppercase text-[#8A8174]">
+                    <span>{label}</span>
+                    <Icon size={17} className="text-[#B58D54]" />
                   </div>
+                  <p className="mt-5 text-2xl font-bold">{money(value)}</p>
+                  <p className="mt-2 text-[11px] text-[#8A8174]">{hint}</p>
                 </div>
               ))}
-              {filteredReportsList.length === 0 && <div className="text-center py-8 text-xs text-[#8A8174]">No closeout reports found.</div>}
             </div>
-            <div className="h-12 bg-[#B8A97A] w-full" />
-          </div>
-        </div>
-      )}
-
-      {isCloseoutModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-3xl border border-[#E7DFD4] shadow-2xl max-w-md w-full p-6 space-y-5 text-[#2A1E1B]">
-            <div className="flex items-center justify-between border-b border-[#E7DFD4] pb-3">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="text-amber-600 h-5 w-5" />
-                <h3 className="font-bold text-base">Confirm Register Closeout</h3>
-              </div>
-              <button onClick={() => setIsCloseoutModalOpen(false)} className="text-gray-400 hover:text-black"><X size={18} /></button>
-            </div>
-            <p className="text-xs text-gray-600 leading-relaxed">
-              Are you sure you want to lock and submit the End of Day shift reconciliation for <strong className="text-[#2A1E1B]">{selectedDate}</strong>?
-            </p>
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button onClick={() => setIsCloseoutModalOpen(false)} className="px-4 py-2.5 rounded-xl border border-[#E7DFD4] text-xs font-bold text-gray-600 hover:bg-[#F8F5F0]">Cancel</button>
-              <button onClick={handleConfirmCloseout} className="px-5 py-2.5 rounded-xl bg-[#2A1E1B] text-white text-xs font-bold hover:bg-[#C5A059] shadow-md">Confirm Closeout</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isInvoiceModalOpen && selectedReportForInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-[#E7DFD4] shadow-2xl max-w-3xl w-full p-8 my-8 text-[#2A1E1B] space-y-6">
-            <div className="flex items-center justify-between border-b border-[#E7DFD4] pb-4 print:hidden">
-              <div className="flex items-center gap-2">
-                <FileText className="text-[#C5A059] h-5 w-5" />
-                <h3 className="font-bold text-base">A4 Non-Tax Invoice Closeout Document</h3>
-              </div>
-              <div className="flex items-center gap-2">
-                {selectedReportForInvoice.hasTransactions && (
-                  <button
-                    onClick={() => {
-                      window.print();
-                      showToast('Sending A4 Invoice Summary to printer...');
-                    }}
-                    className="px-4 py-2 rounded-xl bg-[#2A1E1B] text-white hover:bg-[#C5A059] text-xs font-bold flex items-center gap-2 shadow-sm transition-all"
-                  >
-                    <Printer size={14} />
-                    <span>Print Invoice</span>
-                  </button>
-                )}
-                <button onClick={() => setIsInvoiceModalOpen(false)} className="text-gray-400 hover:text-black p-1">
-                  <X size={20} />
+            {totals.unallocatedSales !== 0 && (
+              <p className="rounded-xl border border-amber-200 p-4 text-sm">
+                Unallocated / payment difference:{" "}
+                <strong>{money(totals.unallocatedSales)}</strong>
+              </p>
+            )}
+            <section className={card}>
+              <div className="mb-5 flex flex-wrap justify-between gap-3">
+                <div className="flex gap-1 rounded-xl bg-[#F6F4EF] p-1">
+                  {[
+                    ["transactions", "Transactions"],
+                    ["closeouts", "Closeout Reports"],
+                  ].map(([id, label]) => (
+                    <button
+                      key={id}
+                      onClick={() => setTab(id)}
+                      className={
+                        "rounded-lg px-4 py-2 text-xs font-bold " +
+                        (tab === id
+                          ? "bg-[#2A1E1B] text-white"
+                          : "text-[#8A8174]")
+                      }
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className={button}
+                  disabled={
+                    tab === "transactions"
+                      ? !data.transactions.length
+                      : !closeouts.length
+                  }
+                  onClick={
+                    tab === "transactions" ? exportSales : exportCloseouts
+                  }
+                >
+                  <Download size={15} />
+                  {tab === "transactions"
+                    ? "Export date range CSV"
+                    : "Batch export closeouts"}
                 </button>
               </div>
-            </div>
-
-            <div className="bg-[#FFFDF8] border border-[#E7DFD4] p-8 rounded-xl shadow-xs space-y-6 text-xs font-sans">
-              <div className="flex justify-between items-start border-b-2 border-[#2A1E1B] pb-6">
-                <div>
-                  <h1 className="text-2xl font-serif font-bold text-[#2A1E1B] tracking-wide">CENTY'ZZ SALON</h1>
-                  <p className="text-[10px] uppercase tracking-widest text-[#C5A059] font-bold">Hair & Beauty Studio</p>
-                  <p className="text-[11px] text-[#8A8174] mt-1">123 Salon Avenue, Metro Manila</p>
-                  <p className="text-[11px] text-[#8A8174]">Contact: +63 995 234 7123</p>
-                </div>
-
-                <div className="text-right">
-                  <span className="bg-[#F8F5F0] text-[#2A1E1B] border border-[#E7DFD4] text-xs font-bold px-3 py-1 rounded-md uppercase">
-                    OFFICIAL INVOICE
-                  </span>
-                  <p className="text-[11px] font-bold text-[#2A1E1B] mt-2">
-                    Invoice Date: <span className="font-mono">{selectedReportForInvoice.date}</span>
-                  </p>
-                  <p className="text-[10px] text-rose-700 font-bold mt-1 uppercase">*** NON-TAX STATEMENT ***</p>
-                </div>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-[#8A8174]">
+                  {tab === "transactions"
+                    ? data.transactions.length +
+                      " recorded rows · historical charges are retained"
+                    : closeouts.length +
+                      " saved closeouts · selected dates only"}
+                </p>
+                <input
+                  aria-label="Find text in reports"
+                  placeholder="Highlight text on this page…"
+                  className={input}
+                  value={findQuery}
+                  onChange={(e) => setFindQuery(e.target.value)}
+                />
               </div>
-
-              {selectedReportForInvoice.hasTransactions ? (
+              {tab === "transactions" ? (
                 <>
-                  <div className="grid grid-cols-3 gap-4 bg-[#F8F5F0] p-4 rounded-xl border border-[#E7DFD4]">
-                    <div>
-                      <p className="text-[10px] text-gray-500 uppercase font-bold">Register ID</p>
-                      <p className="font-bold text-[#2A1E1B] mt-0.5">{selectedReportForInvoice.register}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-gray-500 uppercase font-bold">Cashier On Duty</p>
-                      <p className="font-bold text-[#2A1E1B] mt-0.5">{selectedReportForInvoice.cashier}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-gray-500 uppercase font-bold">Shift Hours</p>
-                      <p className="font-bold text-[#2A1E1B] mt-0.5">{selectedReportForInvoice.shift}</p>
-                    </div>
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    {[
+                      ["ALL", "All"],
+                      ["CASH", "Cash"],
+                      ["DIGITAL", "Digital"],
+                      ["ADJUSTMENTS", "Voids & refunds"],
+                    ].map(([id, label]) => (
+                      <button
+                        key={id}
+                        onClick={() => setFilter(id)}
+                        className={
+                          "rounded-lg border px-3 py-1.5 text-xs font-semibold " +
+                          (filter === id
+                            ? "border-[#8B5E3C] bg-[#F6EEE4]"
+                            : "border-[#E7DFD4]")
+                        }
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
-
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#2A1E1B]">Revenue & Settlement Summary</h4>
-                    <table className="w-full border-collapse border border-[#E7DFD4] text-xs">
-                      <thead>
-                        <tr className="bg-[#2A1E1B] text-white text-[10px] uppercase font-bold">
-                          <th className="p-2.5 text-left">Category / Description</th>
-                          <th className="p-2.5 text-center">Payment Method</th>
-                          <th className="p-2.5 text-right">Amount (PHP)</th>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[#F8F5F0] text-[10px] uppercase text-[#8A8174]">
+                        <tr>
+                          {[
+                            "Date / transaction",
+                            "Staff / cashier",
+                            "Service / item",
+                            "Method",
+                            "Amount",
+                            "Status",
+                          ].map((x) => (
+                            <th key={x} className="p-3">
+                              {x}
+                            </th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#E7DFD4]">
-                        <tr>
-                          <td className="p-2.5 font-bold">Cash Drawer Opening Float</td>
-                          <td className="p-2.5 text-center">Cash Float</td>
-                          <td className="p-2.5 text-right font-mono">₱{selectedReportForInvoice.openingCash.toFixed(2)}</td>
-                        </tr>
-                        <tr>
-                          <td className="p-2.5 font-bold">Total Cash Receipts</td>
-                          <td className="p-2.5 text-center">Physical Cash</td>
-                          <td className="p-2.5 text-right font-mono">₱{selectedReportForInvoice.totalCashSales.toFixed(2)}</td>
-                        </tr>
-                        <tr>
-                          <td className="p-2.5 font-bold">Digital Sales (GCash / Maya / Cards)</td>
-                          <td className="p-2.5 text-center">Digital E-Wallet</td>
-                          <td className="p-2.5 text-right font-mono">₱{selectedReportForInvoice.totalDigitalSales.toFixed(2)}</td>
-                        </tr>
-                        <tr className="bg-[#F8F5F0]">
-                          <td className="p-2.5 font-bold text-rose-700">Less: Voided / Refunded Transactions</td>
-                          <td className="p-2.5 text-center text-rose-700">Reversals</td>
-                          <td className="p-2.5 text-right font-mono font-bold text-rose-700">
-                            {selectedReportForInvoice.voidedRefundsTotal > 0 
-                              ? `-₱${selectedReportForInvoice.voidedRefundsTotal.toFixed(2)}` 
-                              : 'None (₱0.00)'}
-                          </td>
-                        </tr>
+                        {rows.map((row) => (
+                          <tr key={row.id}>
+                            <td className="p-3">
+                              <strong className="block">{row.txnId}</strong>
+                              <span className="text-[10px] text-[#8A8174]">
+                                {row.date} · {row.time}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              {row.cashier}
+                              {!row.cashierId && (
+                                <span className="mt-1 block text-[9px] text-amber-700">
+                                  Unlinked historical name
+                                </span>
+                              )}
+                            </td>
+                            <td className="max-w-xs p-3">
+                              <span>{row.service}</span>
+                              {row.source === "legacy" && (
+                                <button
+                                  className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-[#8B5E3C]"
+                                  onClick={() => {
+                                    setLinkTarget(row);
+                                    setLinkForm({
+                                      item: "",
+                                      cashier: String(row.cashierId || ""),
+                                    });
+                                    setFormError("");
+                                  }}
+                                >
+                                  <Link2 size={12} />
+                                  {row.unlinked
+                                    ? "Link details"
+                                    : "Edit references"}
+                                </button>
+                              )}
+                            </td>
+                            <td className="p-3">{row.method}</td>
+                            <td className="whitespace-nowrap p-3 font-bold">
+                              {money(row.amount)}
+                            </td>
+                            <td className="p-3">
+                              <span
+                                className={
+                                  "rounded-full px-2 py-1 text-[9px] font-bold " +
+                                  (row.status === "COMPLETED"
+                                    ? "bg-emerald-50 text-emerald-800"
+                                    : "bg-amber-50 text-amber-800")
+                                }
+                              >
+                                {row.status.replaceAll("_", " ")}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                        {!rows.length && (
+                          <tr>
+                            <td
+                              colSpan={6}
+                              className="p-10 text-center text-[#8A8174]"
+                            >
+                              No matching transaction records for these dates.
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>
-
-                  <div className="flex justify-end pt-2">
-                    <div className="w-72 space-y-2 border border-[#E7DFD4] bg-[#F8F5F0] p-4 rounded-xl text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Expected Cash Drawer:</span>
-                        <span className="font-bold">₱{selectedReportForInvoice.expectedCash.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Actual Counted Cash:</span>
-                        <span className="font-bold">₱{selectedReportForInvoice.actualCashCount.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between border-t border-[#E7DFD4] pt-2 font-bold text-sm">
-                        <span>Discrepancy:</span>
-                        <span className={selectedReportForInvoice.discrepancy < 0 ? 'text-rose-600' : 'text-emerald-700'}>
-                          ₱{selectedReportForInvoice.discrepancy.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-8 border-t border-[#E7DFD4] space-y-6">
-                    <div className="grid grid-cols-2 gap-12 text-center text-xs">
-                      <div>
-                        <div className="border-b border-[#2A1E1B] pb-1 font-bold text-[#2A1E1B]">
-                          {selectedReportForInvoice.cashier}
-                        </div>
-                        <p className="text-[10px] text-gray-500 mt-1">Cashier Signature & Date</p>
-                      </div>
-                      <div>
-                        <div className="border-b border-[#2A1E1B] pb-1 font-bold text-[#2A1E1B]">Millicent Campillos</div>
-                        <p className="text-[10px] text-gray-500 mt-1">Manager / Owner Approval</p>
-                      </div>
-                    </div>
-                  </div>
                 </>
               ) : (
-                /* EMPTY STATE FOR DAYS WITHOUT TRANSACTIONS */
-                <div className="py-20 text-center space-y-3">
-                  <FileQuestion size={48} className="mx-auto text-[#C5A059]" />
-                  <h3 className="text-lg font-bold text-[#2A1E1B]">No transaction made this day</h3>
-                  <p className="text-xs text-[#8A8174] max-w-sm mx-auto">
-                    There are no recorded point-of-sale transactions or register closeouts for {selectedReportForInvoice.date}.
-                  </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#F8F5F0] text-[10px] uppercase text-[#8A8174]">
+                      <tr>
+                        {[
+                          "Date",
+                          "Scope",
+                          "Closed by",
+                          "Net sales",
+                          "Actual cash",
+                          "Difference",
+                          "Details",
+                        ].map((x) => (
+                          <th key={x} className="p-3">
+                            {x}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E7DFD4]">
+                      {closeouts.map((row) => (
+                        <tr key={row.id}>
+                          <td className="p-3 font-bold">{row.date}</td>
+                          <td className="p-3">{row.scope}</td>
+                          <td className="p-3">{row.cashier}</td>
+                          <td className="p-3">{money(row.totalSales)}</td>
+                          <td className="p-3">{money(row.actualCash)}</td>
+                          <td className="p-3">{money(row.discrepancy)}</td>
+                          <td className="p-3">
+                            <button
+                              className="font-bold text-[#8B5E3C]"
+                              onClick={() => setSelectedCloseout(row)}
+                            >
+                              View saved report
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {!closeouts.length && (
+                        <tr>
+                          <td
+                            colSpan={7}
+                            className="p-10 text-center text-[#8A8174]"
+                          >
+                            No saved closeouts for these dates. Batch export
+                            includes saved records only.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               )}
-
+            </section>
+            <section className={card}>
+              <h2 className="text-base font-bold">Daily Cash Closeout</h2>
+              <p className="mt-1 text-xs text-[#8A8174]">
+                A saved closeout keeps the actual cash count and a snapshot of
+                that day’s recorded sales.
+              </p>
+              {!day ? (
+                <p className="mt-5 rounded-xl bg-[#F8F5F0] p-4 text-sm">
+                  Select a single calendar day to count and close the register.
+                </p>
+              ) : closed ? (
+                <div className="mt-5 space-y-3">
+                  <p className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">
+                    Closeout already saved for {range.from}. Closed by{" "}
+                    {data.closeoutInfo.cashier}.
+                  </p>
+                  <p className="text-sm">
+                    Recorded count: {money(data.closeoutInfo.actualCashCount)}
+                  </p>
+                  {data.closeoutInfo.sourceChanged && (
+                    <p
+                      role="alert"
+                      className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900"
+                    >
+                      Sales changed after this closeout. The live totals above
+                      and the original saved snapshot may differ; review the
+                      saved report.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <form
+                  onSubmit={saveCloseout}
+                  className="mt-5 grid gap-4 sm:grid-cols-3"
+                >
+                  <label className="flex flex-col gap-2 text-xs font-semibold">
+                    Opening cash (PHP)
+                    <input
+                      type="number"
+                      min="0"
+                      max="100000000"
+                      step="0.01"
+                      required
+                      value={opening}
+                      onChange={(e) => setOpening(e.target.value)}
+                      className={input}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2 text-xs font-semibold">
+                    Actual counted cash (PHP)
+                    <input
+                      type="number"
+                      min="0"
+                      max="100000000"
+                      step="0.01"
+                      required
+                      value={actual}
+                      onChange={(e) => setActual(e.target.value)}
+                      className={input}
+                    />
+                  </label>
+                  <div className="rounded-xl bg-[#F8F5F0] p-4 text-xs">
+                    <p>
+                      Expected cash: <strong>{money(expected)}</strong>
+                    </p>
+                    <p className="mt-2">
+                      Difference:{" "}
+                      <strong>
+                        {difference === null
+                          ? "Enter actual cash"
+                          : money(difference)}
+                      </strong>
+                    </p>
+                  </div>
+                  <button
+                    className={button}
+                    disabled={actual === "" || totals.unallocatedSales !== 0}
+                  >
+                    Save closeout with PIN
+                  </button>
+                </form>
+              )}
+            </section>
+          </>
+        )
+      )}
+      {selectedCloseout && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="Saved closeout report"
+            className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6"
+          >
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="font-bold">Saved Closeout Report</h2>
+              <div className="flex gap-2">
+                <button
+                  className="rounded-xl border p-2"
+                  aria-label="Print saved closeout"
+                  onClick={() => window.print()}
+                >
+                  <Printer size={17} />
+                </button>
+                <button
+                  className="rounded-xl border p-2"
+                  aria-label="Close saved report"
+                  onClick={() => setSelectedCloseout(null)}
+                >
+                  <X size={17} />
+                </button>
+              </div>
             </div>
-          </div>
+            <div className="admin-report-print">
+              <h3 className="text-xl font-bold">{salon.salonName}</h3>
+              <p className="text-xs text-[#8A8174]">
+                {salon.address} · {salon.phone}
+              </p>
+              <p className="my-4 font-bold">
+                {selectedCloseout.date} · Closed by {selectedCloseout.cashier}
+              </p>
+              {selectedCloseout.legacy && (
+                <p className="mb-4 text-xs text-amber-700">
+                  Legacy saved summary: no transaction snapshot was stored with
+                  this record.
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {[
+                  ["Opening cash", selectedCloseout.openingCash],
+                  ["Net cash sales", selectedCloseout.cashSales],
+                  ["Net digital sales", selectedCloseout.digitalSales],
+                  ["Net sales", selectedCloseout.totalSales],
+                  ["Expected cash", selectedCloseout.expectedCash],
+                  ["Actual cash", selectedCloseout.actualCash],
+                  ["Difference", selectedCloseout.discrepancy],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="rounded-xl border border-[#E7DFD4] p-3"
+                  >
+                    <p className="text-xs text-[#8A8174]">{label}</p>
+                    <strong>{money(value)}</strong>
+                  </div>
+                ))}
+              </div>
+              {selectedCloseout.snapshot?.transactions && (
+                <table className="mt-5 w-full text-left text-xs">
+                  <thead>
+                    <tr>
+                      {[
+                        "Transaction",
+                        "Cashier",
+                        "Service / item",
+                        "Amount",
+                        "Status",
+                      ].map((x) => (
+                        <th className="border-b p-2" key={x}>
+                          {x}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedCloseout.snapshot.transactions.map((row) => (
+                      <tr key={row.id}>
+                        <td className="border-b p-2">{row.txnId}</td>
+                        <td className="border-b p-2">{row.cashier}</td>
+                        <td className="border-b p-2">{row.service}</td>
+                        <td className="border-b p-2">{money(row.amount)}</td>
+                        <td className="border-b p-2">{row.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </section>
+          <style>
+            {
+              "@media print{body *{visibility:hidden}.admin-report-print,.admin-report-print *{visibility:visible}.admin-report-print{position:absolute;left:0;top:0;width:100%;padding:20px}}"
+            }
+          </style>
         </div>
       )}
-
-      {pendingDeleteReport && (
-        <ConfirmationModal 
-          title="Delete closeout report?" 
-          message={`This will permanently delete the closeout report for ${pendingDeleteReport.date}.`} 
-          confirmLabel="Delete report" 
-          danger 
-          onCancel={() => setPendingDeleteReport(null)} 
-          onConfirm={() => { 
-            handleDeleteReport(pendingDeleteReport.id, pendingDeleteReport.date); 
-            setPendingDeleteReport(null); 
-          }} 
+      {linkTarget && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/50 p-4">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="Link report references"
+            className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6"
+          >
+            <h2 className="text-base font-bold">Link Report References</h2>
+            <p className="text-xs text-[#8A8174]">
+              {linkTarget.txnId} · {money(linkTarget.amount)}. This changes
+              references only; the charged amount stays unchanged.
+            </p>
+            <form onSubmit={saveLinks} className="space-y-4">
+              <label className="flex flex-col gap-2 text-xs font-semibold">
+                Service or item
+                <select
+                  className={input}
+                  required
+                  value={linkForm.item}
+                  onChange={(e) =>
+                    setLinkForm((v) => ({ ...v, item: e.target.value }))
+                  }
+                >
+                  <option value="">Choose from the catalog</option>
+                  <optgroup label="Services">
+                    {lookups?.services.map((s) => (
+                      <option key={s.id} value={"service:" + s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Inventory items">
+                    {lookups?.products.map((s) => (
+                      <option key={s.id} value={"product:" + s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </label>
+              <label className="flex flex-col gap-2 text-xs font-semibold">
+                Staff / cashier
+                <select
+                  className={input}
+                  required
+                  value={linkForm.cashier}
+                  onChange={(e) =>
+                    setLinkForm((v) => ({ ...v, cashier: e.target.value }))
+                  }
+                >
+                  <option value="">Choose a Staff account</option>
+                  {lookups?.staff.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  className="rounded-xl border px-4 py-2 text-xs"
+                  onClick={() => setLinkTarget(null)}
+                >
+                  Cancel
+                </button>
+                <button className={button} disabled={!lookups}>
+                  Save with PIN
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+      {authorization && (
+        <AdminAuthorizationDialog
+          action={authorization.action}
+          onClose={() => setAuthorization(null)}
+          onConfirm={authorization.run}
         />
       )}
     </div>

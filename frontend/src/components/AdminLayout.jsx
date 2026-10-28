@@ -1,3 +1,4 @@
+import AdminWorkspaceProvider from './workspace/AdminWorkspaceProvider';
 import { useState } from 'react';
 import { useUnsavedChanges } from './UnsavedChangesProvider';
 import { useWorkspaceTheme, WorkspaceNavigationContext } from './workspace/WorkspaceContext';
@@ -35,6 +36,7 @@ export default function AdminLayout({ currentUser, onLogout, onUserUpdated }) {
 
   return (
     <WorkspaceNavigationContext.Provider value={{ items: workspacePages, navigate }}>
+    <AdminWorkspaceProvider currentUser={currentUser} pageKey={activePage}>
     <div data-theme={theme} className="workspace-theme flex h-screen w-screen bg-[#F6F4EF] text-[#443523] overflow-hidden transition-colors duration-300">
       {/* 1. Perfect 1:1 Matched Sidebar */}
       <AdminSidebar 
@@ -45,10 +47,10 @@ export default function AdminLayout({ currentUser, onLogout, onUserUpdated }) {
       />
 
       {/* 2. Main Admin Workspace Area */}
-      <main className="min-w-0 flex-1 h-full overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
+      <main data-admin-page className="min-w-0 flex-1 h-full overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl">
           {activePage === 'dashboard' && (
-            <DashboardView currentUser={currentUser} />
+            <DashboardView currentUser={currentUser} onNavigate={navigate} />
           )}
 
           {/* USER MANAGEMENT ROUTE */}
@@ -61,7 +63,7 @@ export default function AdminLayout({ currentUser, onLogout, onUserUpdated }) {
           )}
 
           {activePage === 'inventory' && (
-            <InventoryManagementView />
+            <InventoryManagementView currentUser={currentUser} />
           )}
 
           {activePage === 'clients' && (
@@ -77,16 +79,17 @@ export default function AdminLayout({ currentUser, onLogout, onUserUpdated }) {
             <OperationalLogsView currentUser={currentUser} />
           )}
 
-          {activePage === 'schedule' && <ScheduleManagementView />}
+          {activePage === 'schedule' && <ScheduleManagementView currentUser={currentUser} />}
 
           {activePage === 'settings' && (
-            <SettingsView />
+            <SettingsView currentUser={currentUser} onNavigate={navigate} />
           )}
 
           {activePage === 'account' && <AccountManagementView currentUser={currentUser} onUserUpdated={onUserUpdated} />}
         </div>
       </main>
     </div>
+    </AdminWorkspaceProvider>
     </WorkspaceNavigationContext.Provider>
   );
 }

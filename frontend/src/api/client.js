@@ -89,7 +89,7 @@ export const api = {
   updateMyProfile: (token, profile) => patch('/api/auth/me', profile, token),
   getServices: () => get('/api/services'),
   getPublicPromos: () => get('/api/promos'),
-  getStaffAppointments: (token) => get('/api/appointments/staff', token),
+  getStaffAppointments: (token,archived=false) => get('/api/appointments/staff'+(archived?'?archived=true':''), token),
   updateStaffAppointmentStatus: (token, id, status) =>
     patch(`/api/appointments/${encodeURIComponent(id)}/staff-status`, { status }, token),
   validatePromo: (promoCode) => post('/api/promos/validate', { promoCode }),

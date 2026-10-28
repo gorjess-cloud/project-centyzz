@@ -1,4 +1,5 @@
-import HeaderActions from '../../components/workspace/HeaderActions';
+import {usePageFind} from '../../components/workspace/AdminWorkspaceContext';
+import AdminPageHeader from '../../components/workspace/AdminPageHeader';
 
 import { useState, useEffect, useCallback } from 'react';
 
@@ -95,7 +96,7 @@ export default function OperationalLogsView({ currentUser, showHeaderActions = t
 
   // Filters State
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery,isHighlightSearch] = usePageFind();
 
   const [dateFilter, setDateFilter] = useState('');
 
@@ -143,9 +144,7 @@ export default function OperationalLogsView({ currentUser, showHeaderActions = t
 
 
 
-    const matchesSearch = 
-
-      log.details.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch = isHighlightSearch || log.details.toLowerCase().includes(searchQuery.toLowerCase()) ||
 
       log.event.toLowerCase().includes(searchQuery.toLowerCase()) ||
 
@@ -293,25 +292,7 @@ export default function OperationalLogsView({ currentUser, showHeaderActions = t
 
       {/* Header Bar matching Inventory */}
 
-      <header className="mb-6 flex items-center justify-between gap-4">
-
-        <div className="min-w-0">
-
-          <h1 className="text-xl font-bold text-[#2A1E1B] truncate">Operational Activity Logs</h1>
-
-          <p className="mt-0.5 text-xs text-[#8A8174] truncate">
-
-            {isAdminView ? 'Review Admin and Staff activity, including sign-ins and sign-outs' : 'Track system audits, user actions, inventory movements, and financial overrides'}
-
-          </p>
-
-        </div>
-
-
-
-        {showHeaderActions && (<HeaderActions />)}
-
-      </header>
+      <AdminPageHeader title="Operational Activity Logs" subtitle={isAdminView ? 'Review Admin and Staff activity, including sign-ins and sign-outs' : 'Track system audits, user actions, inventory movements, and financial overrides'} showHeaderActions={showHeaderActions}/>
 
 
 
@@ -399,11 +380,11 @@ export default function OperationalLogsView({ currentUser, showHeaderActions = t
 
                 type="text"
 
-                placeholder="Search event, user, details..."
+                placeholder={isHighlightSearch?"Highlight text on this page…":"Search records…"}
 
                 value={searchQuery}
 
-                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                onChange={(e) => { setSearchQuery(e.target.value); if(!isHighlightSearch)setCurrentPage(1); }}
 
                 className="w-full pl-10 pr-4 py-2 rounded-xl border border-[#E7DFD4] bg-[#F8F5F0] text-xs text-[#2A1E1B] placeholder-[#8A8174] outline-none focus:border-[#C5A059] transition-all font-medium"
 

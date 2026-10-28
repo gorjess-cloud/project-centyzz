@@ -72,8 +72,8 @@ export class AppointmentsController {
 
   @Get('staff')
   @UseGuards(JwtAuthGuard)
-  getStaffAppointments(@Req() request: AuthenticatedRequest) {
-    return this.guestBookings.listForStaff(request.user.sub, request.user.role);
+  getStaffAppointments(@Req() request: AuthenticatedRequest,@Query('archived') archived?:string) {
+    return this.guestBookings.listForStaff(request.user.sub, request.user.role,archived==='true');
   }
 
   @Patch(':id/staff-status')

@@ -15,6 +15,9 @@ import { ManagementActionPinGuard } from './management-action-pin.guard.js';
 export class UsersController {
   constructor(private readonly usersService: UsersService, private readonly recovery: CredentialRecoveryService) {}
 
+  @Get('staff-job-roles')
+  getStaffJobRoles() { return this.usersService.getStaffJobRoles(); }
+
  @Get()
   
   async getUsers(@Query('archived') archived?: string) {

@@ -1,3 +1,6 @@
+import { Optional } from '@nestjs/common';
+import { SalonConfigService,defaultBookingDay } from '../salon/salon-config.service.js';
+import { BOOKABLE_STAFF_JOB_ROLES } from '../admin/users/staff-job-roles.js';
 import 'dotenv/config';
 import {
   BadRequestException,
@@ -53,18 +56,21 @@ const HOLD_SQL = `a.status IN ('PENDING', 'CONFIRMED') OR (a.status = 'AWAITING_
 
 @Injectable()
 export class GuestBookingService {
+  constructor(@Optional() private readonly salon?:SalonConfigService) {}
+  private operatingDay(date:string){return this.salon?this.salon.bookingDay(date):Promise.resolve(defaultBookingDay());}
   private checkDate(date: string) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date || date < salonNow().date) {
       throw new BadRequestException('Choose a valid current or future appointment date');
     }
   }
-  private checkStart(date: string, startTime: string) {
+  private async checkStart(date: string, startTime: string) {
     this.checkDate(date);
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) throw new BadRequestException('startTime must be HH:mm');
     const start = minutes(startTime);
     const now = salonNow();
-    if (start < 720 || start >= 1260 || start % 30 || (date === now.date && start <= now.minutes)) {
-      throw new BadRequestException('Choose a future slot within salon hours (12:00–21:00)');
+    const day=await this.operatingDay(date);
+    if (day.closed || start < day.open || start >= day.close || (start-day.open) % day.interval || (date === now.date && start <= now.minutes)) {
+      throw new BadRequestException('Choose a future slot within the salon’s saved operating hours');
     }
     return start;
   }
@@ -73,7 +79,8 @@ export class GuestBookingService {
       FROM public.staff st JOIN public."user" u ON u.id = st.user_id
       WHERE st.is_active = TRUE AND st.archived_at IS NULL
         AND u.role = 'STAFF' AND u."isActive" = TRUE AND u.archived_at IS NULL
-      ORDER BY u."firstName", u."lastName"`);
+        AND st.job_title = ANY($1::text[])
+      ORDER BY u."firstName", u."lastName"`, [BOOKABLE_STAFF_JOB_ROLES]);
     return result.rows.map((row: {id: string; firstName: string; lastName: string}) => ({ id: row.id, name: `${row.firstName} ${row.lastName}`.trim() }));
   }
   private async service(client: PoolClient, serviceId: number) {
@@ -91,7 +98,8 @@ export class GuestBookingService {
     const result = await client.query(`SELECT st.id, u."firstName", u."lastName"
       FROM public.staff st JOIN public."user" u ON u.id = st.user_id
       WHERE st.id = $1::uuid AND st.is_active = TRUE AND st.archived_at IS NULL
-        AND u.role = 'STAFF' AND u."isActive" = TRUE AND u.archived_at IS NULL`, [stylistId]);
+        AND u.role = 'STAFF' AND u."isActive" = TRUE AND u.archived_at IS NULL
+        AND st.job_title = ANY($2::text[])`, [stylistId,BOOKABLE_STAFF_JOB_ROLES]);
     if (!result.rowCount) throw new BadRequestException('Selected specialist is unavailable');
     return result.rows[0] as { id: string; firstName: string; lastName: string };
   }
@@ -114,8 +122,10 @@ export class GuestBookingService {
       const duration = Number(service.duration);
       if (!Number.isSafeInteger(duration) || duration <= 0) throw new InternalServerErrorException('Invalid service duration');
       const now = salonNow();
-      const slots = [];
-      for (let start = 720; start + duration <= 1260; start += 30) {
+      const slots: {startTime:string;endTime:string;available:boolean}[] = [];
+      const day=await this.operatingDay(date);
+      if(day.closed)return {date,serviceId,stylistId,serviceDurationMinutes:duration,slots};
+      for (let start = day.open; start + duration <= day.close; start += day.interval) {
         const end = start + duration;
         slots.push({ startTime: hhmm(start), endTime: hhmm(end), available: !(date === now.date && start <= now.minutes) && !this.overlapping(rows, stylistId, start, end) });
       }
@@ -131,7 +141,7 @@ export class GuestBookingService {
       throw new ForbiddenException('Demo checkout is disabled in production');
     }
     const { serviceId, stylistId, appointmentDate, startTime } = input;
-    const start = this.checkStart(appointmentDate, startTime);
+    const start = await this.checkStart(appointmentDate, startTime);
     const name = String(input.customerName ?? '').trim();
     const email = String(input.customerEmail ?? '').trim().toLowerCase();
     const phone = String(input.customerPhone ?? '').trim();
@@ -148,7 +158,7 @@ export class GuestBookingService {
       const stylist = await this.stylist(client, stylistId);
       const duration = Number(service.duration);
       const end = start + duration;
-      if (!Number.isSafeInteger(duration) || duration <= 0 || end > 1260) throw new BadRequestException('Service does not fit this slot');
+      if (!Number.isSafeInteger(duration) || duration <= 0 || end > (await this.operatingDay(appointmentDate)).close) throw new BadRequestException('Service does not fit this slot');
       if (this.overlapping(await this.existing(client, appointmentDate), stylistId, start, end)) {
         throw new ConflictException('That time was just reserved. Choose another available time.');
       }
@@ -230,8 +240,7 @@ export class GuestBookingService {
     if (!found.rowCount) throw new NotFoundException('A paid, scheduled booking is required to add to calendar');
     return Number(found.rows[0].id);
   }
-
-  async listForStaff(id: number, role: string) {
+  async listForStaff(id: number, role: string, archived=false) {
     const isAdmin = ['ADMIN', 'SUPERADMIN'].includes(String(role).toUpperCase());
     if (!isAdmin && String(role).toUpperCase() !== 'STAFF') throw new ForbiddenException('Staff access required');
     const result = await pool.query(`SELECT a.*, s.name AS service_name, s.price AS service_price, s.duration_minutes,
@@ -241,15 +250,17 @@ export class GuestBookingService {
       LEFT JOIN public."user" u ON u.id = st.user_id
       WHERE ($1::boolean = TRUE OR EXISTS (
         SELECT 1 FROM public.staff mine WHERE mine.id = a.staff_id AND mine.user_id = $2
-          AND mine.is_active = TRUE AND mine.archived_at IS NULL
+          AND ($3::boolean OR (mine.is_active = TRUE AND mine.archived_at IS NULL))
       ))
-        AND a.status NOT IN ('AWAITING_DEPOSIT','PAYMENT_REVIEW','CANCELLED')
-      ORDER BY a.appointment_date DESC, a.start_time DESC LIMIT 250`, [isAdmin, id]);
+        AND (a.archived_at IS NOT NULL OR a.status='CANCELLED')=$3
+        AND ($3::boolean OR a.status NOT IN ('AWAITING_DEPOSIT','PAYMENT_REVIEW','CANCELLED'))
+      ORDER BY a.appointment_date DESC, a.start_time DESC LIMIT 1000`, [isAdmin, id,archived]);
     return { success: true, data: result.rows.map((a) => ({
       id: a.id, referenceCode: a.reference_code, userId: a.user_id, serviceId: a.service_id,
       customerName: a.customer_name, customerEmail: a.customer_email, appointmentDate: a.appointment_date,
       startTime: String(a.start_time), endTime: String(a.end_time), status: a.status, notes: a.notes,
       stylistId: a.staff_id, stylistName: [a.stylist_first, a.stylist_last].filter(Boolean).join(' ') || 'Unassigned',
+      isArchived:a.archived_at!=null||a.status==='CANCELLED',archivedAt:a.archived_at,archiveReason:a.archive_reason||'',
       paymentStatus: a.payment_status, depositAmount: a.deposit_amount ? Number(a.deposit_amount) : null,
       totalAmount: a.total_amount ? Number(a.total_amount) : null,
       service: { id: a.service_id, name: a.service_name, price: Number(a.service_price), durationMinutes: a.duration_minutes },
@@ -265,7 +276,7 @@ export class GuestBookingService {
         SELECT 1 FROM public.staff mine WHERE mine.id = appointments.staff_id AND mine.user_id = $4
           AND mine.is_active = TRUE AND mine.archived_at IS NULL
       ))
-      AND status IN ('PENDING','CONFIRMED') RETURNING id, status`, [id, normalized, isAdmin, userId]);
+      AND archived_at IS NULL AND status IN ('PENDING','CONFIRMED') RETURNING id, status`, [id, normalized, isAdmin, userId]);
     if (!found.rowCount) throw new NotFoundException('Appointment not found or not assigned to you');
     return { success: true, data: found.rows[0] };
   }
