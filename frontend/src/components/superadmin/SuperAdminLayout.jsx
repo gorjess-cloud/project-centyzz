@@ -1,14 +1,14 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import SuperAdminSidebar from './SuperAdminSidebar';
 import { useWorkspaceTheme, WorkspaceNavigationContext } from '../workspace/WorkspaceContext';
 import { superadminPages } from './superadminNavigation';
-import Overview, { AuditTable } from './Overview';
-import RolePermissions from './RolePermissions';
+import Overview from './Overview';
 import SuperadminUserManagementView from '../../pages/superadmin/UserManagementView';
 import ServiceManagementView from '../../pages/admin/ServiceManagementView';
 import ClientManagementView from '../ClientManagementView';
-import POSReportsView from '../../pages/admin/POSReportsView';
-import OperationalLogsView from '../../pages/admin/OperationalLogsView';
+import SuperadminPOSReportsView from '../../pages/superadmin/POSReportsView';
+import SuperadminOperationalLogsView from '../../pages/superadmin/OperationalLogsView';
+import SuperadminSystemAuditLogsView from '../../pages/superadmin/SystemAuditLogsView';
 import InventoryManagementView from '../../pages/admin/InventoryManagementView';
 import ScheduleManagementView from '../../pages/admin/ScheduleManagementView';
 import SuperAdminSettings from './SuperAdminSettings';
@@ -18,15 +18,6 @@ import './superadmin.css';
 import { useUnsavedChanges } from '../UnsavedChangesProvider';
 import './superadminContent.css';
 
-const maintenanceKey = 'centyzz-maintenance-ui-preview';
-function readMaintenancePreview() {
-  try {
-    const saved = JSON.parse(sessionStorage.getItem(maintenanceKey));
-    if (saved && typeof saved.enabled === 'boolean' && typeof saved.message === 'string' && ['30 minutes', '1 hour', '2 hours', '4 hours'].includes(saved.duration)) return saved;
-  } catch { /* Start with the operational preview when storage is unavailable. */ }
-  return defaultMaintenancePreview;
-}
-
 const demoUser = {
   firstName: 'Aljean Mark', lastName: 'Angeles', email: 'aljeanmark@example.com',
   role: 'SUPERADMIN', isDemo: true,
@@ -35,7 +26,7 @@ const demoUser = {
 export default function SuperAdminLayout({ currentUser = demoUser, onUserUpdated, onLogout = () => { window.location.href = '/'; } }) {
   const [activePage, setActivePage] = useState('dashboard');
   const { guardNavigation } = useUnsavedChanges();
-  const [maintenance, setMaintenance] = useState(readMaintenancePreview);
+  const [maintenance, setMaintenance] = useState(defaultMaintenancePreview);
   const workspaceRef = useRef(null);
   const { theme } = useWorkspaceTheme();
   const preview = Boolean(currentUser?.isDemo && !currentUser?.accessToken);
@@ -50,23 +41,35 @@ export default function SuperAdminLayout({ currentUser = demoUser, onUserUpdated
     });
   }
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!currentUser?.accessToken) return;
+    fetch('/api/superadmin/settings/maintenance', {
+      headers: { Authorization: `Bearer ${currentUser.accessToken}` },
+    }).then(async response => {
+      if (!response.ok) return null;
+      return response.json();
+    }).then(body => {
+      if (!cancelled && body?.data) setMaintenance(body.data);
+    }).catch(() => { /* Settings page shows the actionable load error. */ });
+    return () => { cancelled = true; };
+  }, [currentUser?.accessToken]);
+
   function saveMaintenancePreview(next) {
     setMaintenance(next);
-    try { sessionStorage.setItem(maintenanceKey, JSON.stringify(next)); } catch { /* Keep preview changes in memory. */ }
   }
 
   const views = {
     users: <SuperadminUserManagementView currentUser={currentUser} />,
     services: <ServiceManagementView currentUser={currentUser} />,
     clients: <ClientManagementView currentUser={currentUser} />,
-    reports: <POSReportsView currentUser={currentUser} />,
-    logs: <OperationalLogsView />,
+    reports: <SuperadminPOSReportsView currentUser={currentUser} />,
+    logs: <SuperadminOperationalLogsView currentUser={currentUser} />,
     inventory: <InventoryManagementView />,
     schedule: <ScheduleManagementView />,
-    settings: <SuperAdminSettings maintenance={maintenance} onSaveMaintenance={saveMaintenancePreview} />,
+    settings: <SuperAdminSettings currentUser={currentUser} maintenance={maintenance} onSaveMaintenance={saveMaintenancePreview} />,
     account: <AccountManagementView currentUser={currentUser} onUserUpdated={onUserUpdated} />,
-    roles: <RolePermissions />,
-    audit: <AuditTable full token={currentUser?.accessToken} preview={preview} />,
+    audit: <SuperadminSystemAuditLogsView currentUser={currentUser} />,
   };
 
   return (

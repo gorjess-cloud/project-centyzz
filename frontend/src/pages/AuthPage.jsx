@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -8,8 +8,6 @@ import {
   Moon, 
   Sun, 
   Delete, 
-  LogIn, 
-  UserCheck 
 } from 'lucide-react';
 import { api } from '../api/client.js';
 import { GoogleLogin } from '@react-oauth/google';
@@ -55,6 +53,7 @@ export default function AuthPage({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const otpInputRefs = useRef([]);
   const pinInputRef = useRef(null);
+  const pinSubmittingRef = useRef(false);
 
   const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const passwordRules = [
@@ -273,28 +272,33 @@ export default function AuthPage({
   };
 
   const handlePinNumpadClick = (num) => {
+    if (isSubmitting || pinSubmittingRef.current) return;
     const emptyIdx = pin.findIndex((v) => v === '');
     if (emptyIdx !== -1) {
       clearPinError();
       const nextPin = [...pin];
       nextPin[emptyIdx] = num.toString();
       setPin(nextPin);
+      pinInputRef.current?.focus();
     }
   };
 
   const handlePinBackspace = () => {
+    if (isSubmitting || pinSubmittingRef.current) return;
     clearPinError();
     const lastFilledIdx = pin.map(v => v !== '').lastIndexOf(true);
     if (lastFilledIdx !== -1) {
       const nextPin = [...pin];
       nextPin[lastFilledIdx] = '';
       setPin(nextPin);
+      pinInputRef.current?.focus();
     }
   };
 
   // Employee 2FA PIN Verification Handler
   const handleVerifyPin = async (e) => {
     if (e) e.preventDefault();
+    if (pinSubmittingRef.current) return;
     const enteredPin = pin.join('');
 
     if (enteredPin.length !== 6) {
@@ -306,6 +310,7 @@ export default function AuthPage({
       setFormMessage({ type: 'error', text: 'Verification session expired. Please sign in again.' });
       return;
     }
+    pinSubmittingRef.current = true;
     setIsSubmitting(true);
     try {
       const result = await api.verifyManagementPin(pendingAccessToken, enteredPin);
@@ -318,9 +323,47 @@ export default function AuthPage({
       setIsPinError(/invalid.*pin|pin.*invalid/i.test(error?.message || ''));
       setFormMessage({ type: 'error', text: error?.message || 'PIN verification failed. Please try again.' });
     } finally {
+      pinSubmittingRef.current = false;
       setIsSubmitting(false);
+      pinInputRef.current?.focus();
     }
   };
+
+  // Verify as soon as the sixth digit is entered. Lock prevents duplicate POSTs.
+  useEffect(() => {
+    if (isPinStep && pendingAccessToken && pin.join('').length === 6 && !pinSubmittingRef.current) {
+      void handleVerifyPin();
+    }
+  }, [pin, isPinStep, pendingAccessToken]);
+
+  // The keyboard works even after clicking the on-screen keypad.
+  useEffect(() => {
+    if (!isPinStep) return undefined;
+    pinInputRef.current?.focus();
+    const onKey = (event) => {
+      if (event.ctrlKey || event.metaKey || event.altKey || pinSubmittingRef.current) return;
+      if (event.target === pinInputRef.current) return;
+      if (event.target?.closest?.('input, textarea, select, [contenteditable=true]')) return;
+      if (/^\d$/.test(event.key)) {
+        event.preventDefault();
+        setIsPinError(false);
+        setPin((current) => {
+          const index = current.findIndex((v) => v === '');
+          if (index < 0) return current;
+          const next = [...current]; next[index] = event.key; return next;
+        });
+      } else if (event.key === 'Backspace') {
+        event.preventDefault();
+        setPin((current) => {
+          const index = current.map(Boolean).lastIndexOf(true);
+          if (index < 0) return current;
+          const next = [...current]; next[index] = ''; return next;
+        });
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isPinStep]);
 
   const handleOtpChange = (index, value) => {
     const digits = value.replace(/\D/g, '');
@@ -780,14 +823,7 @@ export default function AuthPage({
                   </button>
                 ))}
 
-                <button
-                  type="button"
-                  onClick={handleVerifyPin}
-                  className="h-11 rounded-xl bg-[#C5A059]/20 hover:bg-[#C5A059]/30 text-[#C5A059] border border-[#C5A059]/40 flex items-center justify-center transition-all"
-                  title="Submit PIN"
-                >
-                  <LogIn size={18} />
-                </button>
+                <div aria-hidden="true" className="h-11" />
 
                 <button
                   type="button"
@@ -811,15 +847,9 @@ export default function AuthPage({
                 </button>
               </div>
 
-              {/* CTA */}
-              <button
-                type="button"
-                onClick={handleVerifyPin}
-                disabled={isSubmitting}
-                className="w-full py-3.5 rounded-xl bg-[#3A342B] hover:bg-[#2A241B] text-[#D1B06D] font-extrabold text-xs tracking-widest uppercase shadow-xl border border-[#C5A059]/40 transition-all flex items-center justify-center gap-2 mt-2"
-              >
-                <UserCheck size={16} /> Start Shift & Log In
-              </button>
+              <p aria-live="polite" className="text-center text-xs text-[#C5A059]">
+                {isSubmitting ? 'Verifying PIN…' : 'Enter all six digits to continue automatically.'}
+              </p>
 
               <div className="pt-2">
                 <button

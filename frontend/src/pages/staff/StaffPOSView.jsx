@@ -3,7 +3,7 @@ import {useUnsavedChanges} from '../../components/UnsavedChangesProvider';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Bell, Plus, Minus, ChevronDown, ChevronRight, Scissors, Flower2, Hand, ShoppingBag, Trash2, X, Moon, Sun } from 'lucide-react';
 import { Toast, useToast, Badge, EmptyState, ConfirmModal, peso, card, input } from '../../components/staff/ui';
-import { PaymentMethods, SplitPayment, CashModal, QrModal, ReceiptSummary } from '../../components/staff/payment';
+import { PaymentMethods, SplitPayment, CashModal, QrModal, ReceiptSummary, DemoReceiptModal } from '../../components/staff/payment';
 import { useWorkspaceTheme } from '../../components/workspace/WorkspaceContext';
 import { api } from '../../api/client';
 import { getServiceImage } from '../../utils/serviceImages';
@@ -101,6 +101,8 @@ export default function StaffPOSView({ onSale,currentUser }) {
   const [modal, setModal] = useState(null); // { type: 'cash'|'qr', amount, split }
   const [splitPayments, setSplitPayments] = useState([]);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [demoReceipt, setDemoReceipt] = useState(null);
+  const [demoMode,setDemoMode]=useState(false);
 
   useEffect(() => {
     let current = true;
@@ -146,6 +148,7 @@ export default function StaffPOSView({ onSale,currentUser }) {
 
   // Clear the cart only after an authenticated, idempotent database save succeeds.
   const finalize = async (payments,discount=0) => {
+    if(demoMode){const sale={id:`DEMO-${Date.now()}`,customer:customerId,items:cart.map(({id,name,price,qty})=>({id,name,price,qty})),subtotal,discount,total:subtotal-discount,payments,paidAt:new Date().toISOString(),isDemo:true};setDemoReceipt(sale);setCart([]);setSplitPayments([]);setModal(null);setView('pos');markSaved(cartScope);return;}
     if(running.current)return;running.current=true;setSaving(true);setSaveError('');setCanReviewCheckout(false);
     if(!checkoutKey.current)checkoutKey.current=crypto.randomUUID();
     const request=pending.current||{idempotencyKey:checkoutKey.current,items:cart.map(i=>({serviceId:i.id,quantity:i.qty})),discount:Number(discount).toFixed(2),expectedTotal:(subtotal-discount).toFixed(2),payments:payments.map(p=>({...p,amount:Number(p.amount).toFixed(2),...(p.tendered!==undefined?{tendered:Number(p.tendered).toFixed(2)}:{})}))};
@@ -183,7 +186,7 @@ export default function StaffPOSView({ onSale,currentUser }) {
     <div aria-busy={saving} className="fade-in flex flex-col gap-4 md:h-[calc(100vh-2.5rem)] md:flex-row">
       {saving&&<div role="status" className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-6"><div className="rounded-2xl bg-white p-6 text-sm font-bold text-[#443523]">Saving checkout… Please keep this page open.</div></div>}
       {saveError&&<div role="alert" className="fixed bottom-5 left-1/2 z-[110] w-[min(90vw,600px)] -translate-x-1/2 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800"><p>{saveError}</p>{pendingCheckout&&<button className="mt-3 rounded-lg bg-[#4A3928] px-4 py-2 text-xs font-bold text-white" disabled={saving} onClick={()=>finalize([])}>Retry saving the same checkout</button>}{canReviewCheckout&&<button className="ml-2 mt-3 rounded-lg border px-4 py-2 text-xs font-bold" onClick={()=>setConfirmReview(true)}>Review retained cart</button>}</div>}
-      {view === 'methods' && <PaymentMethods total={subtotal} onBack={() => setView('pos')} onSelect={selectMethod} />}
+      {view === 'methods' && <PaymentMethods demo={demoMode} total={subtotal} onBack={() => setView('pos')} onSelect={selectMethod} />}
       {view === 'split' && <SplitPayment total={subtotal} payments={splitPayments} onBack={() => setView('methods')} onCharge={(m, amt) => {if(!pending.current)setModal({ type: m, amount: amt, split: true });}} />}
       {view === 'pos' && (
         <section className="min-w-0 flex-1 md:overflow-y-auto md:pr-1">
@@ -253,14 +256,15 @@ export default function StaffPOSView({ onSale,currentUser }) {
         <CartPanel cart={cart} subtotal={subtotal} customerId={customerId} editable={view === 'pos'}
           onChange={change} onRemove={remove} onClear={() => {if(!pending.current)setConfirmClear(true);}}
           footer={view === 'pos' && (
-            <button disabled={!cart.length||registerClosed||Boolean(pendingCheckout)} onClick={() => setView('methods')} className="mt-4 rounded-full bg-[#4A3928] py-3.5 text-sm font-bold text-white shadow-md transition hover:bg-[#2A1E1B] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40">{registerClosed?'Your register is closed':'Proceed to Checkout'}</button>
+            <div className="flex flex-col"><button disabled={!cart.length||registerClosed||Boolean(pendingCheckout)} onClick={() => {setDemoMode(false);setView('methods');}} className="mt-4 rounded-full bg-[#4A3928] py-3.5 text-sm font-bold text-white shadow-md transition hover:bg-[#2A1E1B] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40">{registerClosed?'Your register is closed':'Proceed to Checkout'}</button><button type="button" className="mt-2 p-2 text-xs underline" disabled={Boolean(pendingCheckout)||splitPayments.length>0} onClick={()=>{setDemoMode(true);setView('methods');}}>Demo checkout (no sale recorded)</button></div>
           )} />
       )}
 
       {modal?.type === 'cash' && <CashModal items={cart} subtotal={subtotal} amount={modal.amount} allowDiscount={!modal.split} busy={saving} onConfirm={onCash} onCancel={() => setModal(null)} />}
-      {modal?.type === 'qr' && <QrModal items={cart} subtotal={subtotal} amount={modal.amount} busy={saving} onConfirm={onQr} onCancel={() => setModal(null)} />}
+      {modal?.type === 'qr' && <QrModal items={cart} subtotal={subtotal} amount={modal.amount} busy={saving} demo={demoMode} onConfirm={onQr} onCancel={() => setModal(null)} />}
       {confirmReview&&<ConfirmModal message="This save was rejected. Verify any cash or wallet payment already received before reviewing the cart. Returning to the cart does not refund a payment." onCancel={()=>setConfirmReview(false)} onConfirm={()=>{pending.current=null;checkoutKey.current=null;setPendingCheckout(null);setSplitPayments([]);setSaveError('');setCanReviewCheckout(false);setConfirmReview(false);setView('pos');}}/>}
       {confirmClear && <ConfirmModal message="Clear all services from the current cart?" danger onCancel={() => setConfirmClear(false)} onConfirm={() => { setCart([]); setConfirmClear(false);markSaved(cartScope); }} />}
+      {demoReceipt && <DemoReceiptModal sale={demoReceipt} onClose={() => setDemoReceipt(null)} />}
       <Toast msg={toast} />
     </div>
   );
