@@ -34,7 +34,6 @@ function toDateKey(year, month, day) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-const guestSessionKey = 'centyzz-guest-checkout';
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phonePattern = /^[0-9+\-\s()]{7,15}$/;
 
@@ -60,6 +59,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const [loadingStylists, setLoadingStylists] = useState(false);
   const [checkout, setCheckout] = useState(null);
   const [checkoutStatus, setCheckoutStatus] = useState(null);
+  const [openingCalendar, setOpeningCalendar] = useState(false);
   const [submittingCheckout, setSubmittingCheckout] = useState(false);
 
   const initialSalonDate = getSalonToday();
@@ -94,23 +94,10 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   useEffect(() => {
     if (!isOpen) return undefined;
     let active = true;
-    // PayMongo return redirects recreate the modal and restore a local checkout reference.
-    const returningFromCheckout = new URLSearchParams(window.location.search).has('centyzz_booking');
-    const stored = (() => { try { return JSON.parse(sessionStorage.getItem(guestSessionKey) || 'null'); } catch { return null; } })();
-    if (returningFromCheckout && stored?.referenceCode && stored?.token) {
-      setCheckout(stored);
-      setStep('result');
-      api.getGuestCheckoutStatus(stored.referenceCode, stored.token)
-        .then((status) => { if (active) setCheckoutStatus(status); })
-        .catch((err) => { if (active) setFormError(err.message); });
-      const url = new URL(window.location.href);
-      url.searchParams.delete('centyzz_booking');
-      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
-    } else {
-      setStep('form');
-      setCheckout(null);
-      setCheckoutStatus(null);
-    }
+    // A demo checkout stays inside this modal; no PayMongo redirect is required.
+    setStep('form');
+    setCheckout(null);
+    setCheckoutStatus(null);
     setFormError('');
     setStylistId('');
     setStylists([]);
@@ -283,14 +270,8 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
         customerPhone: phone.trim(),
       });
       setCheckout(created);
-      if (created.mode === 'PAYMONGO_TEST' && created.checkoutUrl) {
-        sessionStorage.setItem(guestSessionKey, JSON.stringify({referenceCode: created.referenceCode, token: created.token}));
-        window.location.assign(created.checkoutUrl);
-      } else if (created.mode === 'DEMO') {
-        setStep('demo');
-      } else {
-        throw new Error('Unsupported payment mode returned by server');
-      }
+      if (created.mode !== 'DEMO') throw new Error('Demo booking is not available.');
+      setStep('demo');
     } catch (err) {
       setFormError(err.message || 'Unable to start checkout.');
       if (/time|slot|reserved|unavailable|expired/i.test(String(err.message))) {
@@ -302,16 +283,36 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
     } finally { setSubmittingCheckout(false); }
   };
 
-  const finishDemo = async () => {
+  const completeDemo = async () => {
     if (!checkout?.id || !checkout?.token) return;
-    setSubmittingCheckout(true); setFormError('');
+    setSubmittingCheckout(true);
+    setFormError('');
     try {
-      await api.finishGuestDemo(checkout.id, checkout.token);
-      const status = await api.getGuestCheckoutStatus(checkout.referenceCode, checkout.token);
-      setCheckoutStatus(status);
+      const completed = await api.finishGuestDemo(checkout.id, checkout.token);
+      // The response is returned only after the demo reservation commits.
+      setCheckoutStatus(completed);
       setStep('result');
-    } catch (err) { setFormError(err.message || 'Demo checkout failed.'); }
-    finally { setSubmittingCheckout(false); }
+    } catch (err) {
+      setFormError(err.message || 'Unable to complete demo booking.');
+    } finally {
+      setSubmittingCheckout(false);
+    }
+  };
+
+  const openGoogleCalendar = async () => {
+    if (!checkout?.referenceCode || !checkout?.token) return;
+    const tab = window.open('about:blank', '_blank'); // Open during the click to avoid popup blocking.
+    setOpeningCalendar(true);
+    try {
+      const result = await api.getGuestCalendar(checkout.referenceCode, checkout.token);
+      const url = new URL(result.googleCalendarUrl);
+      if (url.origin !== 'https://calendar.google.com') throw new Error('Invalid calendar destination');
+      if (tab) { tab.opener = null; tab.location.replace(url.toString()); }
+      else window.location.assign(url.toString());
+    } catch (error) {
+      tab?.close();
+      setFormError(error.message || 'Unable to open Google Calendar');
+    } finally { setOpeningCalendar(false); }
   };
 
   const refreshStatus = async () => {
@@ -629,7 +630,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                 50% Partial Payment
               </h3>
               <p className={`text-xs ${mutedText} max-w-xs mx-auto`}>
-                Confirm your details to hold this appointment briefly and start a TEST payment. No real payment is collected in demo mode.
+                Confirm your details to reserve this appointment using a simulated 50% deposit. No money is charged.
               </p>
             </div>
 
@@ -662,7 +663,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
 
             <div className="flex flex-col gap-2 pt-2 max-w-xs mx-auto">
               <p className={`text-xs ${mutedText}`}>
-                The backend will recheck this specialist and time, then hold your slot for 15 minutes during TEST checkout.
+                Your selected time is held for 15 minutes while you finish the demo checkout. No real payment is collected.
               </p>
               {formError && <p role="alert" className="text-xs text-red-500">{formError}</p>}
               <button
@@ -672,7 +673,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                 className={`w-full py-3.5 rounded-2xl ${primaryButton} disabled:opacity-50 disabled:cursor-not-allowed font-bold text-xs tracking-widest uppercase transition-all shadow-md flex items-center justify-center gap-2`}
               >
                 {submittingCheckout && <Loader2 className="w-4 h-4 animate-spin" />}
-                <span>{submittingCheckout ? 'Preparing secure test checkout…' : 'Continue to 50% test deposit'}</span>
+                <span>{submittingCheckout ? 'Preparing demo booking…' : 'Continue to demo deposit'}</span>
               </button>
               
               <button 
@@ -685,42 +686,49 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
           </div>
         )}
 
-        {/* STEP 3: Explicit no-money demo, only if enabled on the backend. */}
+        {/* STEP 3: Clearly labeled no-money prototype checkout. */}
         {step === 'demo' && (
           <div className="p-8 text-center space-y-5">
-            <CreditCard className="w-12 h-12 mx-auto text-[#C5A059]" />
-            <h3 className={`text-xl font-bold ${primaryText}`}>Temporary PayMongo Demo</h3>
-            <p className={`text-xs ${mutedText}`}>Prototype only. The next action simulates a deposit; it does not contact PayMongo or charge any money.</p>
-            <div className={`${insetSurface} p-4 rounded-2xl border text-sm space-y-2`}>
-              <p>Booking: <strong>{checkout?.referenceCode}</strong></p>
-              <p>Specialist: <strong>{checkout?.stylistName}</strong></p>
-              <p>Simulated 50% deposit: <strong>₱{Number(checkout?.depositAmount || 0).toFixed(2)}</strong></p>
-            </div>
+            <CheckCircle2 className="w-12 h-12 mx-auto text-[#C5A059]" />
+            <h3 className={`text-xl font-bold ${primaryText}`}>Demo Deposit Checkout</h3>
+            <p className={`text-xs ${mutedText}`}>
+              Simulate the 50% deposit of ₱{depositAmount.toFixed(2)}. No PayMongo connection and no real money transfer.
+            </p>
+            <p className={`text-xs ${mutedText}`}>Reservation: <strong>{checkout?.referenceCode}</strong></p>
             {formError && <p role="alert" className="text-xs text-red-500">{formError}</p>}
-            <button type="button" disabled={submittingCheckout} onClick={finishDemo} className={`w-full py-3.5 rounded-2xl ${primaryButton} font-bold text-xs disabled:opacity-50`}>
-              {submittingCheckout ? 'Processing demo…' : 'Simulate successful TEST deposit'}
+            <button type="button" disabled={submittingCheckout} onClick={completeDemo}
+              className={`w-full py-3 rounded-xl ${primaryButton} font-bold text-xs disabled:opacity-50`}>
+              {submittingCheckout ? 'Confirming demo…' : 'Simulate deposit and confirm booking'}
             </button>
-            <button type="button" onClick={handleResetAndClose} className={`w-full py-2 rounded-xl border ${fieldStyle}`}>Close</button>
+            <button type="button" onClick={handleResetAndClose} className={`w-full py-2 rounded-xl border ${fieldStyle}`}>Cancel</button>
           </div>
         )}
 
-        {/* STEP 4: A browser redirect never verifies a payment: server status does. */}
+        {/* STEP 4: Result is read from Neon, not assumed from a browser redirect. */} 
         {step === 'result' && (
           <div className="p-8 text-center space-y-5">
-            {['DEMO_PAID', 'TEST_PAID'].includes(checkoutStatus?.paymentStatus)
+            {['PAID', 'TEST_PAID', 'DEMO_PAID'].includes(checkoutStatus?.paymentStatus)
               ? <CheckCircle2 className="w-12 h-12 mx-auto text-[#C5A059]" />
               : <AlertCircle className="w-12 h-12 mx-auto text-[#C5A059]" />}
             <h3 className={`text-xl font-bold ${primaryText}`}>Booking Payment Status</h3>
             <p className={`text-xs ${mutedText}`}>Reference: <strong>{checkoutStatus?.referenceCode || checkout?.referenceCode || 'Unavailable'}</strong></p>
             <p className={`text-xs ${mutedText}`}>
-              {checkoutStatus?.paymentStatus === 'DEMO_PAID' ? 'DEMO deposit recorded; no money was charged. Appointment is pending stylist confirmation.'
-              : checkoutStatus?.paymentStatus === 'TEST_PAID' ? 'PayMongo TEST deposit was verified by the backend. Appointment is pending stylist confirmation.'
-              : checkoutStatus?.status === 'PAYMENT_REVIEW' ? 'A test payment was received but the slot requires manual review; contact the salon.'
+              {checkoutStatus?.paymentStatus === 'DEMO_PAID' ? 'Demo deposit recorded (simulation only). Your appointment is awaiting stylist confirmation.'
+              : checkoutStatus?.paymentStatus === 'PAID' ? 'Payment verified by the provider. Your appointment is awaiting stylist confirmation.'
+              : checkoutStatus?.paymentStatus === 'TEST_PAID' ? 'PayMongo sandbox payment verified (no real money charged). Appointment is awaiting confirmation.'
+              : checkoutStatus?.status === 'PAYMENT_REVIEW' ? 'Payment was received but the slot requires manual review; contact the salon.'
               : checkoutStatus?.holdExpired ? 'The temporary reservation expired. Start a new booking.'
               : 'Payment is not yet verified. A redirect back to the salon is not proof of payment.'}
             </p>
             {formError && <p role="alert" className="text-xs text-red-500">{formError}</p>}
-            {checkoutStatus?.paymentStatus !== 'DEMO_PAID' && checkoutStatus?.paymentStatus !== 'TEST_PAID' &&
+            {['PAID', 'TEST_PAID', 'DEMO_PAID'].includes(checkoutStatus?.paymentStatus) && ['PENDING', 'CONFIRMED'].includes(checkoutStatus?.status) && (
+              <button type="button" disabled={openingCalendar} onClick={openGoogleCalendar}
+                className={`w-full py-3 rounded-xl ${primaryButton} font-bold text-xs disabled:opacity-50`}>
+                <CalendarIcon className="inline-block mr-2 h-4 w-4" />
+                {openingCalendar ? 'Opening calendar…' : 'Add to Google Calendar'}
+              </button>
+            )}
+            {!['PAID', 'TEST_PAID', 'DEMO_PAID'].includes(checkoutStatus?.paymentStatus) &&
               <button type="button" onClick={refreshStatus} disabled={submittingCheckout} className={`w-full py-3 rounded-xl ${primaryButton} font-bold text-xs`}>
                 {submittingCheckout ? 'Checking…' : 'Refresh payment status'}
               </button>}

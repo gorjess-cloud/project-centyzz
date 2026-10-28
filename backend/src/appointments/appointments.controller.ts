@@ -1,11 +1,7 @@
 import {
   Body,
-  Headers,
   Controller,
   Get,
-  HttpCode,
-  HttpStatus,
-  BadRequestException,
   GoneException,
   Param,
   Patch,
@@ -22,7 +18,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthenticatedRequest } from '../auth/jwt-auth.guard.js';
 import { AppointmentsService } from './appointments.service.js';
 import { CreateAppointmentDto } from './dto/create-appointment.dto.js';
-import { GuestCheckoutDto, DemoFinishDto } from './dto/guest-booking.dto.js';
+import { GuestCheckoutDto } from './dto/guest-booking.dto.js';
 import { GuestBookingService } from './guest-booking.service.js';
 
 @Controller('api/appointments')
@@ -52,28 +48,26 @@ export class AppointmentsController {
   ) { return this.guestBookings.availableSlots(date, serviceId, stylistId); }
 
   @Post('guest-checkout')
-  async guestCheckout(@Body() booking: GuestCheckoutDto) {
-    // Never trust Host/Origin supplied by a browser for payment callback URLs.
-    const publicOrigin = process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173';
-    return this.guestBookings.createCheckout(booking, publicOrigin);
+  guestCheckout(@Body() booking: GuestCheckoutDto) {
+    return this.guestBookings.createCheckout(booking);
   }
 
+  // Prototype only: a token holder can confirm a simulated deposit in development.
   @Post('guest-demo/:id/complete')
-  completeGuestDemo(@Param('id', ParseIntPipe) id: number, @Body() body: DemoFinishDto) {
-    return this.guestBookings.completeDemo(id, body.token);
-  }
+  completeDemo(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { token?: string },
+  ) { return this.guestBookings.completeDemo(id, body.token ?? ''); }
 
   @Get('guest-checkout-status')
   guestCheckoutStatus(@Query('reference') reference: string, @Query('token') token: string) {
     return this.guestBookings.status(reference, token);
   }
 
-  @Post('paymongo-webhook')
-  @HttpCode(HttpStatus.OK)
-  paymongoWebhook(@Req() request: import('express').Request & { rawBody?: Buffer },
-    @Headers('paymongo-signature') signature?: string) {
-    if (!request.rawBody) throw new BadRequestException('Raw webhook body unavailable');
-    return this.guestBookings.paymongoWebhook(signature, request.rawBody, request.body);
+  @Post('guest-calendar')
+  async guestCalendar(@Body() body: { reference?: string; token?: string }) {
+    const id = await this.guestBookings.getGuestCalendarAppointmentId(body.reference ?? '', body.token ?? '');
+    return this.appointmentsService.getCalendarLink(id);
   }
 
   @Get('staff')

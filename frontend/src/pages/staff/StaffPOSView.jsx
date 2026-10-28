@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Bell, Plus, Minus, ChevronDown, ChevronRight, Scissors, Flower2, Hand, ShoppingBag, Trash2, X, Moon, Sun } from 'lucide-react';
 import { Toast, useToast, Badge, EmptyState, ConfirmModal, peso, card, input } from '../../components/staff/ui';
-import { PaymentMethods, SplitPayment, CashModal, QrModal, ReceiptSummary } from '../../components/staff/payment';
+import { PaymentMethods, SplitPayment, CashModal, QrModal, ReceiptSummary, DemoReceiptModal } from '../../components/staff/payment';
 import { useWorkspaceTheme } from '../../components/workspace/WorkspaceContext';
 import { api } from '../../api/client';
 import { getServiceImage } from '../../utils/serviceImages';
@@ -73,7 +73,7 @@ function CartPanel({ cart, subtotal, customerId, editable, onChange, onRemove, o
   );
 }
 
-export default function StaffPOSView({ onSale }) {
+export default function StaffPOSView() {
   const { theme, toggleTheme } = useWorkspaceTheme();
   const isDark = theme === 'dark';
   const [group, setGroup] = useState(-1);
@@ -94,6 +94,7 @@ export default function StaffPOSView({ onSale }) {
   const [modal, setModal] = useState(null); // { type: 'cash'|'qr', amount, split }
   const [splitPayments, setSplitPayments] = useState([]);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [demoReceipt, setDemoReceipt] = useState(null);
 
   useEffect(() => {
     let current = true;
@@ -136,17 +137,17 @@ export default function StaffPOSView({ onSale }) {
   const remove = (id) => setCart((c) => c.filter((x) => x.id !== id));
   const subtotal = useMemo(() => cart.reduce((s, i) => s + i.price * i.qty, 0), [cart]);
 
-  // Records the sale, clears the cart and returns to the POS screen.
+  // Demo receipt only: this does not record a sale or collect funds.
   const finalize = (payments, discount = 0) => {
     const sale = {
-      id: `SALE${Date.now()}`,
+      id: `DEMO-${Date.now()}`,
       customer: customerId,
       items: cart.map(({ id, name, price, qty }) => ({ id, name, price, qty })),
       subtotal, discount, total: subtotal - discount,
-      payments, paidAt: new Date().toISOString(),
+      payments, paidAt: new Date().toISOString(), isDemo: true,
     };
-    onSale?.(sale); // hook up to your backend / sales store here
-    say(`Payment received: ${peso(sale.total)}`);
+    setDemoReceipt(sale);
+    say('Demo checkout complete — no money was collected.');
     setCart([]); setSplitPayments([]); setModal(null); setView('pos');
   };
 
@@ -249,6 +250,7 @@ export default function StaffPOSView({ onSale }) {
       {modal?.type === 'cash' && <CashModal items={cart} subtotal={subtotal} amount={modal.amount} allowDiscount={!modal.split} onConfirm={onCash} onCancel={() => setModal(null)} />}
       {modal?.type === 'qr' && <QrModal items={cart} subtotal={subtotal} amount={modal.amount} onConfirm={onQr} onCancel={() => setModal(null)} />}
       {confirmClear && <ConfirmModal message="Clear all services from the current cart?" danger onCancel={() => setConfirmClear(false)} onConfirm={() => { setCart([]); setConfirmClear(false); }} />}
+      {demoReceipt && <DemoReceiptModal sale={demoReceipt} onClose={() => setDemoReceipt(null)} />}
       <Toast msg={toast} />
     </div>
   );

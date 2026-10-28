@@ -15,6 +15,8 @@ export class MaintenanceAccessGuard implements CanActivate {
     if (req.method === 'OPTIONS') return true;
     const path = (req.originalUrl || req.url).split('?')[0];
     if (path === '/api/maintenance/status') return true;
+    // PayMongo authenticates this route with its own signed webhook header.
+    if (path === '/api/appointments/paymongo-webhook' && req.method === 'POST') return true;
     // Allow entry/authentication and password recovery, then block restricted business APIs.
     if (req.method === 'POST' && /^\/api\/auth\/(login|google|verify-management-pin|complete-management-setup|register|verify-email|forgot-password|reset-password)$/.test(path)) return true;
     if (!path.startsWith('/api/')) return true;
