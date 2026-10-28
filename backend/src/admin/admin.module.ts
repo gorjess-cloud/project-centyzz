@@ -1,3 +1,6 @@
+import { WorkspaceModule } from './workspace/workspace.module.js';
+import { ScheduleModule } from './schedule/schedule.module.js';
+import { InventoryModule } from './inventory/inventory.module.js';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AdminSessionActivityInterceptor } from './operational-logs/admin-session-activity.interceptor.js';
 import { Module } from '@nestjs/common';
@@ -10,6 +13,6 @@ import { OperationalLogsModule } from './operational-logs/operational-logs.modul
 
 @Module({
   providers: [{ provide: APP_INTERCEPTOR, useClass: AdminSessionActivityInterceptor }],
-  imports: [UsersModule, ServicesModule, PromosModule, ClientsModule, ReportsModule, OperationalLogsModule],
+  imports: [WorkspaceModule, ScheduleModule, InventoryModule, UsersModule, ServicesModule, PromosModule, ClientsModule, ReportsModule, OperationalLogsModule],
 })
 export class AdminModule {}

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Injectable, NotFoundException, OnModuleDestroy } from '@nestjs/common';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 
 export type RecordOperationalEvent = {
   module: string;
@@ -12,6 +12,14 @@ export type RecordOperationalEvent = {
   actorUserId?: number | null;
 };
 
+// Shared transaction-aware writer: callers supply the trusted actor and their open transaction.
+export async function insertOperationalEvent(input:RecordOperationalEvent,transaction:Pick<PoolClient,'query'>){
+  const result=await transaction.query(
+    `INSERT INTO public.operational_logs (module,event,actor_user_id,user_name,user_role,details,status)
+     VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [input.module,input.event,input.actorUserId??null,input.userName,input.userRole,input.details??'',input.status??'Logged']);
+  return result.rows[0];
+}
 @Injectable()
 export class OperationalLogsService implements OnModuleDestroy {
   private readonly pool: Pool;
@@ -68,15 +76,8 @@ export class OperationalLogsService implements OnModuleDestroy {
   }
 
   // Call this only from trusted backend business operations, never from an arbitrary frontend payload.
-  async record(input: RecordOperationalEvent) {
-    const result = await this.pool.query(
-      `INSERT INTO public.operational_logs
-       (module, event, actor_user_id, user_name, user_role, details, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [input.module, input.event, input.actorUserId ?? null, input.userName,
-       input.userRole, input.details ?? '', input.status ?? 'Logged'],
-    );
-    return this.format(result.rows[0]);
+  async record(input: RecordOperationalEvent, transaction?: Pick<PoolClient, 'query'>) {
+    return this.format(await insertOperationalEvent(input,transaction??this.pool));
   }
 
   async archive(id: string, actorId: number | null, adminOnly = false) {

@@ -1,10 +1,2 @@
-import { Module } from '@nestjs/common';
-import { ReportsController } from './reports.controller.js';
-import { ReportsService } from './reports.service.js';
-
-@Module({
-  controllers: [ReportsController],
-  providers: [ReportsService],
-  exports: [ReportsService],
-})
-export class ReportsModule {}
+import {Module} from '@nestjs/common';import {AuthModule} from '../../auth/auth.module.js';import {ManagementActionPinGuard} from '../../auth/management-action-pin.guard.js';import {ReportsService} from './reports.service.js';import {ReportsController} from './reports.controller.js';
+@Module({imports:[AuthModule],controllers:[ReportsController],providers:[ReportsService,ManagementActionPinGuard],exports:[ReportsService]}) export class ReportsModule{}

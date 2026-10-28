@@ -65,9 +65,10 @@ export default function StaffSettingsView({ currentUser, onUserUpdated }) {
   const changePassword = async () => {
     if (c.next !== c.repeat) return say('Passwords do not match');
     try {
-      await api.changeManagementCredentials(currentUser?.accessToken, {
+      const result = await api.changeManagementCredentials(currentUser?.accessToken, {
         currentPassword: c.old, newPassword: c.next,
       });
+      if(result.data) onUserUpdated?.(result.data);
       say('Password updated');
       cancel();
       markSaved(credentialScope);

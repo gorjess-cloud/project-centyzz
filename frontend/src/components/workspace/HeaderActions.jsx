@@ -1,8 +1,10 @@
+import {AdminWorkspaceContext} from './AdminWorkspaceContext';
+import AdminHeaderActions from './AdminHeaderActions';
 import { useContext, useEffect, useId, useRef, useState } from 'react';
 import { Bell, Moon, Search, Sun, X } from 'lucide-react';
 import { useWorkspaceTheme, WorkspaceNavigationContext } from './WorkspaceContext';
 
-export default function HeaderActions({ className = '' }) {
+function LegacyHeaderActions({ className = '' }) {
   const { theme, toggleTheme } = useWorkspaceTheme();
   const { items, navigate } = useContext(WorkspaceNavigationContext);
   const [panel, setPanel] = useState(null);
@@ -71,3 +73,5 @@ export default function HeaderActions({ className = '' }) {
     </div>
   );
 }
+
+export default function HeaderActions(props){const admin=useContext(AdminWorkspaceContext);return admin?<AdminHeaderActions {...props}/>:<LegacyHeaderActions {...props}/>;}

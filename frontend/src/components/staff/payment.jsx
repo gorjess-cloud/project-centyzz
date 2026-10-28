@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { ArrowLeft, Banknote, QrCode, Split } from 'lucide-react';
 import { peso, input, btn, btnGhost, card, Modal } from './ui';
 
 const cents = (n) => Math.round((Number(n) || 0) * 100);
-export const toNum = (s) => (s === '' || s == null ? 0 : Number(String(s).replace(/,/g, '')) || 0);
+const toNum = (s) => (s === '' || s == null ? 0 : Number(String(s).replace(/,/g, '')) || 0);
 
 /* ---------- shared bits ---------- */
 
@@ -50,7 +50,7 @@ const half = 'flex flex-col gap-3 sm:w-1/2';
 
 /* ---------- Cash modal ---------- */
 // amount: what this cash payment must cover. allowDiscount: only for full (non-split) payments.
-export function CashModal({ items, subtotal, amount, allowDiscount = true, onConfirm, onCancel }) {
+export function CashModal({ items, subtotal, amount, allowDiscount = true, onConfirm, onCancel,busy=false }) {
   const [pay, setPay] = useState('');
   const [disc, setDisc] = useState('');
   const discount = allowDiscount ? Math.min(Math.max(toNum(disc), 0), amount) : 0;
@@ -79,10 +79,10 @@ export function CashModal({ items, subtotal, amount, allowDiscount = true, onCon
                 onChange={(e) => setDisc(e.target.value.replace(/[^\d.]/g, ''))} />
             </Field>
           )}
-          <Field label="Charge"><input readOnly className={input} value={peso(change)} /></Field>
+          <Field label="Change"><input readOnly className={input} value={peso(change)} /></Field>
           {pay !== '' && !enough && <p className="text-[11px] font-bold text-rose-600">Short by {peso(Math.max(0, due - tendered))}</p>}
           <div className="mt-auto flex flex-col gap-2 pt-2">
-            <button type="submit" disabled={!enough} className={btn}>Proceed</button>
+            <button type="submit" disabled={!enough||busy} className={btn}>Proceed</button>
             <button type="button" className={btnGhost} onClick={onCancel}>Cancel</button>
           </div>
         </div>
@@ -92,60 +92,17 @@ export function CashModal({ items, subtotal, amount, allowDiscount = true, onCon
 }
 
 /* ---------- QR Ph modal ---------- */
-// Placeholder QR. Replace <QrPlaceholder/> with a real QR Ph payload (e.g. from your payment gateway).
-function QrPlaceholder({ seed }) {
-  const N = 25;
-  const cellsOn = useMemo(() => {
-    let s = Math.round(seed * 100) + 7;
-    const rnd = () => ((s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296);
-    return Array.from({ length: N * N }, () => rnd() > 0.5);
-  }, [seed]);
-  const finder = (x, y) => {
-    const inF = (ox, oy) => x >= ox && x < ox + 7 && y >= oy && y < oy + 7;
-    const ring = (ox, oy) => { const dx = x - ox, dy = y - oy; return dx === 0 || dx === 6 || dy === 0 || dy === 6 || (dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4); };
-    if (inF(0, 0)) return ring(0, 0);
-    if (inF(N - 7, 0)) return ring(N - 7, 0);
-    if (inF(0, N - 7)) return ring(0, N - 7);
-    return null;
-  };
-  return (
-    <svg viewBox={`0 0 ${N} ${N}`} className="h-full w-full" shapeRendering="crispEdges" role="img" aria-label="QR Ph code">
-      <rect width={N} height={N} fill="#fff" />
-      {cellsOn.map((on, i) => {
-        const x = i % N, y = Math.floor(i / N);
-        const f = finder(x, y);
-        return (f === null ? on : f) ? <rect key={i} x={x} y={y} width="1" height="1" fill="#2A1E1B" /> : null;
-      })}
-    </svg>
-  );
+// Record an externally received QR payment only after the cashier explicitly verifies it.
+export function QrModal({items,subtotal,amount,onConfirm,onCancel,busy=false}){
+ const [reference,setReference]=useState(''),[verified,setVerified]=useState(false);
+ return <Modal title="Check Out · External QR Payment" onClose={onCancel}><div className={split2}><div className={half}><ServicesList items={items}/><ReceiptSummary subtotal={subtotal} discount={0}/></div><form className={half} onSubmit={e=>{e.preventDefault();if(verified&&reference.trim())onConfirm({amount,reference:reference.trim(),verified:true});}}><p className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900">Use the salon’s actual QR or payment terminal. This screen records a payment you have verified; it does not charge the customer or generate a payment QR.</p><p className="text-xl font-bold">{peso(amount)}</p><Field label="Receipt / transaction reference"><input className={input} required maxLength={100} value={reference} onChange={e=>setReference(e.target.value)}/></Field><label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={verified} onChange={e=>setVerified(e.target.checked)}/>I confirmed receipt of this payment in the salon’s wallet or terminal.</label><button className={btn} disabled={busy||!verified||!reference.trim()}>Record confirmed payment</button><button type="button" className={btnGhost} disabled={busy} onClick={onCancel}>Cancel</button></form></div></Modal>;
 }
 
-export function QrModal({ items, subtotal, amount, onConfirm, onCancel }) {
-  return (
-    <Modal title="Check Out · QR Ph" onClose={onCancel}>
-      <div className={split2}>
-        <div className={half}>
-          <ServicesList items={items} />
-          <ReceiptSummary subtotal={subtotal} discount={0} />
-        </div>
-        <div className={`${half} items-center`}>
-          <div className="aspect-square w-full max-w-48 rounded-xl border border-[#E7DFD4] bg-white p-2"><QrPlaceholder seed={amount} /></div>
-          <p className="text-xs text-[#8A8174]">Amount to pay</p>
-          <p className="-mt-2 text-2xl font-bold text-[#2A1E1B]">{peso(amount)}</p>
-          <div className="mt-auto flex w-full flex-col gap-2 pt-2">
-            <button className={btn} onClick={() => onConfirm({ amount })}>Proceed</button>
-            <button className={btnGhost} onClick={onCancel}>Cancel</button>
-          </div>
-        </div>
-      </div>
-    </Modal>
-  );
-}
+function PaymentMethodIcon({icon:Icon}){return <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#F6F0E6] text-[#4A3928] transition group-hover:bg-[#EBDBC8]"><Icon size={28} strokeWidth={1.5} /></span>;}
 
 /* ---------- Payment Methods screen ---------- */
 export function PaymentMethods({ total, onBack, onSelect }) {
   const tile = `${card} group flex items-center gap-4 p-5 text-left transition hover:-translate-y-0.5 hover:border-[#C5A059] hover:shadow-md active:scale-95`;
-  const Icon = ({ i: I }) => <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#F6F0E6] text-[#4A3928] transition group-hover:bg-[#EBDBC8]"><I size={28} strokeWidth={1.5} /></span>;
   return (
     <section className="fade-in min-w-0 flex-1">
       <button onClick={onBack} className="mb-4 flex items-center gap-1.5 rounded-lg text-xs font-bold text-[#443523] hover:text-[#2A1E1B]"><ArrowLeft size={14} /> Back</button>
@@ -157,9 +114,9 @@ export function PaymentMethods({ total, onBack, onSelect }) {
         <p className="rounded-full bg-[#EBDBC8] px-4 py-1.5 text-xs font-bold text-[#8C6D3B]">Total due {peso(total)}</p>
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <button className={tile} onClick={() => onSelect('cash')}><Icon i={Banknote} /><span><span className="block text-base font-bold text-[#2A1E1B]">Cash</span><span className="text-[11px] text-[#8A8174]">Enter amount received, get change</span></span></button>
-        <button className={tile} onClick={() => onSelect('qr')}><Icon i={QrCode} /><span><span className="block text-base font-bold text-[#2A1E1B]">QR Ph</span><span className="text-[11px] text-[#8A8174]">Customer scans to pay</span></span></button>
-        <button className={tile} onClick={() => onSelect('split')}><Icon i={Split} /><span><span className="block text-base font-bold text-[#2A1E1B]">Split</span><span className="text-[11px] text-[#8A8174]">Pay part in cash, the rest by QR Ph</span></span></button>
+        <button className={tile} onClick={() => onSelect('cash')}><PaymentMethodIcon icon={Banknote} /><span><span className="block text-base font-bold text-[#2A1E1B]">Cash</span><span className="text-[11px] text-[#8A8174]">Enter amount received, get change</span></span></button>
+        <button className={tile} onClick={() => onSelect('qr')}><PaymentMethodIcon icon={QrCode} /><span><span className="block text-base font-bold text-[#2A1E1B]">QR Ph</span><span className="text-[11px] text-[#8A8174]">Customer scans to pay</span></span></button>
+        <button className={tile} onClick={() => onSelect('split')}><PaymentMethodIcon icon={Split} /><span><span className="block text-base font-bold text-[#2A1E1B]">Split</span><span className="text-[11px] text-[#8A8174]">Pay part in cash, the rest by QR Ph</span></span></button>
       </div>
     </section>
   );

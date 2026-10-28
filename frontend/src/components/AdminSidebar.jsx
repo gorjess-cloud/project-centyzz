@@ -35,7 +35,7 @@ export default function AdminSidebar({
     ...extraItems,
   ];
 
-  const fullName = currentUser?.fullName || currentUser?.name || [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(" ") || "Millicent Campillos";
+  const fullName = currentUser?.fullName || currentUser?.name || [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(" ") || "Admin";
   const initials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 
   const sidebarSurface = "border-[#E7DFD4] bg-[#FFFDF8]";

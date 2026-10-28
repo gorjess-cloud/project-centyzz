@@ -1,3 +1,4 @@
+import StaffCashierCloseout from '../../pages/staff/StaffCashierCloseout';
 import { useState } from 'react';
 import StaffSidebar from './StaffSidebar';
 import { MotionStyles } from './ui';
@@ -11,7 +12,8 @@ import { WorkspaceNavigationContext } from '../workspace/WorkspaceContext';
 import { useUnsavedChanges } from '../UnsavedChangesProvider';
 
 const staffPages = [
-  { id: 'pos', label: 'POS' },
+  { id: 'pos', label: 'POS Checkout' },
+  { id: 'cashier-closeout', label: 'My Cashier Closeout' },
   { id: 'schedule', label: 'Appointments' },
   { id: 'calendar', label: 'Schedule' },
   { id: 'inventory', label: 'Inventory' },
@@ -34,6 +36,7 @@ export default function StaffLayout({ currentUser, onLogout, onUserUpdated }) {
       <main data-modal-scroll-container className="min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           {activePage === 'pos' && <StaffPOSView currentUser={currentUser} />}
+          {activePage === 'cashier-closeout' && <StaffCashierCloseout currentUser={currentUser} />}
           {activePage === 'schedule' && <StaffScheduleView currentUser={currentUser} />}
           {activePage === 'calendar' && <StaffCalendarView currentUser={currentUser} />}
           {activePage === 'inventory' && <StaffInventoryView />}

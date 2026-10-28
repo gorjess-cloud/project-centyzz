@@ -1,7 +1,9 @@
+import {insertOperationalEvent} from '../admin/operational-logs/operational-logs.service.js';
 import { BadRequestException, ForbiddenException, Injectable, OnModuleDestroy, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { createHmac, randomInt } from 'node:crypto';
 import pg from 'pg';
+import type { PoolClient } from 'pg';
 
 export const MANAGEMENT_ROLES = ['SUPERADMIN', 'ADMIN', 'STAFF'];
 export const isManagementRole = (role: string) => MANAGEMENT_ROLES.includes(String(role).toUpperCase().replace(/[\s_-]+/g, ''));
@@ -18,10 +20,10 @@ export const pinDigest = (pin: string) => {
   if (!pepper || pepper.length < 32) throw new Error('MANAGEMENT_PIN_PEPPER must be set to a random secret (32+ characters).');
   return createHmac('sha256', pepper).update(pin).digest('hex');
 };
-export const validPassword = (password: unknown) => typeof password === 'string' && password.length >= 12
+export const validPassword = (password: unknown) => typeof password === 'string' && password.length >= 12 && password.length <= 128
   && /[A-Z]/.test(password) && /[a-z]/.test(password) && /\d/.test(password) && /[^A-Za-z0-9]/.test(password);
 
-export type SecurityRow = { credential_version?: number; user_id: number; pin_hash: string; needs_setup: boolean; failed_attempts: number; locked_until: Date | null; phone_number: string | null };
+export type SecurityRow = { credential_version?: number; avatar_data_url?:string|null; user_id: number; pin_hash: string; needs_setup: boolean; failed_attempts: number; locked_until: Date | null; phone_number: string | null };
 
 // Separate table keeps the existing Prisma 8 generated contract unchanged.
 @Injectable()
@@ -43,10 +45,10 @@ export class ManagementSecurityService implements OnModuleDestroy {
     return security;
   }
 
-  async provision(userId: number, pin: string) {
+  async provision(userId: number, pin: string, transaction?: Pick<PoolClient, 'query'>) {
     if (!validPin(pin)) throw new BadRequestException('PIN must be six nontrivial digits');
     const hash = await bcrypt.hash(pinDigest(pin), 12);
-    await this.pool.query(
+    await (transaction ?? this.pool).query(
       'INSERT INTO public.management_security (user_id, pin_hash, needs_setup) VALUES ($1, $2, TRUE)',
       [userId, hash],
     );
@@ -157,11 +159,18 @@ export class ManagementSecurityService implements OnModuleDestroy {
       await this.verifyPin(userId, String(body.currentPin || ''));
       if (await bcrypt.compare(pinDigest(body.newPin), security.pin_hash)) throw new BadRequestException('New PIN must differ from current PIN');
     }
+    if(body.newPassword&&await bcrypt.compare(body.newPassword,user.rows[0].passwordHash))throw new BadRequestException('Choose a password different from your current password');
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      const current=(await client.query('SELECT u."passwordHash",s.credential_version FROM public."user" u JOIN public.management_security s ON s.user_id=u.id WHERE u.id=$1 FOR UPDATE OF u,s',[userId])).rows[0];
+      if(!current||current.passwordHash!==user.rows[0].passwordHash||(current.credential_version??0)!==(security.credential_version??0))throw new UnauthorizedException('Credentials changed. Sign in again before making another change.');
       if (body.newPassword) await client.query('UPDATE public."user" SET "passwordHash"=$2, "updatedAt"=now() WHERE id=$1', [userId, await bcrypt.hash(body.newPassword, 12)]);
       if (body.newPin) await client.query('UPDATE public.management_security SET pin_hash=$2, updated_at=now() WHERE user_id=$1', [userId, await bcrypt.hash(pinDigest(body.newPin), 12)]);
+      await client.query('UPDATE public.management_security SET credential_version=credential_version+1,updated_at=now() WHERE user_id=$1',[userId]);
+      await client.query('UPDATE public.admin_credential_recovery SET used_at=now() WHERE user_id=$1 AND used_at IS NULL',[userId]);
+      const actor=(await client.query('SELECT "firstName","lastName",role FROM public."user" WHERE id=$1',[userId])).rows[0];
+      for(const event of [body.newPassword?'Password Updated':null,body.newPin?'Management PIN Updated':null].filter(Boolean))await insertOperationalEvent({module:'Account Settings',event:event!,actorUserId:userId,userName:[actor.firstName,actor.lastName].filter(Boolean).join(' '),userRole:actor.role,details:'Account credentials updated'},client);
       await client.query('COMMIT');
     } catch (error) { await client.query('ROLLBACK'); throw error; }
     finally { client.release(); }

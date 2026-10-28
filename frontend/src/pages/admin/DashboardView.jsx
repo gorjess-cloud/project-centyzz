@@ -1,196 +1,290 @@
-import HeaderActions from '../../components/workspace/HeaderActions';
-import { 
-  TrendingUp, 
-  Calendar as CalendarIcon, 
-  Users, 
-  Clock, 
-  CheckCircle2,
-  Plus,
-  Scissors,
-  Sparkles,
-  Edit3,
-  Share2,
+import { useEffect, useState } from "react";
+import {
+  CalendarDays,
+  Users,
+  Wallet,
+  Package,
   ChevronLeft,
   ChevronRight,
-  MoreHorizontal,
-  Bell
-} from 'lucide-react';
+  ArrowUpRight,
+  Clock,
+  RefreshCw,
+  Scissors,
+  Sparkles,
+  AlertCircle,
+} from "lucide-react";
+import AdminPageHeader from "../../components/workspace/AdminPageHeader";
+import { adminWorkspaceRequest } from "../../api/admin-workspace";
 
-export default function DashboardView({ currentUser }) {
-  const name = currentUser?.firstName || "Jesse";
-
-  const categories = [
-    { title: 'Hair Styling', count: '12 Bookings', icon: Scissors, bg: 'bg-[#EBF7E6]', text: 'text-[#4A7C36]' },
-    { title: 'Nail & Spa', count: '8 Bookings', icon: Sparkles, bg: 'bg-[#FFF8E7]', text: 'text-[#B58D54]' },
-    { title: 'Lash & Brow', count: '5 Bookings', icon: Users, bg: 'bg-[#F0F4FF]', text: 'text-[#4B6BFB]' },
+const PH = "Asia/Manila";
+const salonGreeting = (date = new Date()) => {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: PH,
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).format(date),
+  );
+  return hour >= 5 && hour < 12
+    ? "Good morning"
+    : hour >= 12 && hour < 18
+      ? "Good afternoon"
+      : "Good evening";
+};
+const today = () =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: PH,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+const dateLabel = (day) =>
+  new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(day + "T00:00:00Z"));
+const peso = (value) =>
+  new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(
+    value || 0,
+  );
+const card = "rounded-2xl border border-[#E7DFD4] bg-white shadow-sm";
+export default function DashboardView({
+  currentUser,
+  onNavigate,
+  showHeaderActions = true,
+}) {
+  const [date, setDate] = useState(today),
+    [result, setResult] = useState(null),
+    [refresh, setRefresh] = useState(0),
+    [clock, setClock] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setClock(new Date()), 60000);
+    return () => clearInterval(id);
+  }, []);
+  useEffect(()=>{const refresh=()=>setRefresh(n=>n+1);const timer=setInterval(refresh,60000);window.addEventListener('focus',refresh);window.addEventListener('admin-sales-updated',refresh);const channel=typeof BroadcastChannel!=='undefined'?new BroadcastChannel('centyzz-pos-events'):null;if(channel)channel.onmessage=refresh;return()=>{clearInterval(timer);window.removeEventListener('focus',refresh);window.removeEventListener('admin-sales-updated',refresh);channel?.close();};},[]);
+  const token = currentUser?.accessToken;
+  const requestKey = token + ":" + date + ":" + refresh;
+  const ready = result?.key === requestKey;
+  const data = ready ? result.data : null,
+    error = ready ? result.error : "",
+    loading = !ready;
+  useEffect(() => {
+    let active = true;
+    adminWorkspaceRequest(token, "dashboard?date=" + date)
+      .then((data) => {
+        if (active) setResult({ key: requestKey, data, error: "" });
+      })
+      .catch((error) => {
+        if (active)
+          setResult({ key: requestKey, data: null, error: error.message });
+      });
+    return () => {
+      active = false;
+    };
+  }, [token, date, requestKey]);
+  const selected = new Date(date + "T00:00:00Z"),
+    year = selected.getUTCFullYear(),
+    month = selected.getUTCMonth();
+  const start = new Date(Date.UTC(year, month, 1)),
+    offset = (start.getUTCDay() + 6) % 7,
+    days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const monthTitle = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    month: "long",
+    year: "numeric",
+  }).format(selected);
+  const keyFor = (day) =>
+    `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const changeMonth = (step) =>
+    setDate(
+      new Date(Date.UTC(year, month + step, 1)).toISOString().slice(0, 10),
+    );
+  const go = (page) => onNavigate?.(page),
+    stats = data?.stats;
+  const metrics = [
+    {
+      title: "Daily net sales",
+      value: stats ? peso(stats.revenue) : "—",
+      hint: "Completed POS sales minus refunds",
+      icon: Wallet,
+      page: "reports",
+    },
+    {
+      title: "Bookings",
+      value: stats?.bookings ?? "—",
+      hint: stats
+        ? `${stats.pending} pending for this date`
+        : "For the selected date",
+      icon: CalendarDays,
+      page: "schedule",
+    },
+    {
+      title: "Current clients",
+      value: stats?.clients ?? "—",
+      hint: "Active client records",
+      icon: Users,
+      page: "clients",
+    },
+    {
+      title: "Active staff",
+      value: stats?.staff ?? "—",
+      hint: "Current active staff profiles",
+      icon: Users,
+      page: "schedule",
+    },
   ];
-
-  const appointments = [
-    { id: '1', time: '08:30 AM', client: 'Alicent Hightower', service: 'Haircut and Hair color', stylist: 'Peter Parker', status: 'Confirmed' },
-    { id: '2', time: '09:00 AM', client: 'Jessica Palma', service: 'Manicure and Pedicure', stylist: 'Margaret Qualley', status: 'Confirmed' },
-    { id: '3', time: '09:00 AM', client: 'Bernadette Lalata', service: 'Brazilian Blowout', stylist: 'Shaira Sollano', status: 'In Progress' },
-    { id: '4', time: '12:00 PM', client: 'Michael Litang', service: 'Full color', stylist: 'Shaira Sollano', status: 'Pending' },
-  ];
-
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-10">
-      {/* Top Banner & Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-4 mb-1">
-            <span className="text-xs font-semibold text-[#8A8174] bg-[#F8F5F0] px-3 py-1 rounded-full border border-[#E7DFD4]">
-              Salon Operational Workspace
-            </span>
-          </div>
-          <h1 className="text-3xl font-extrabold text-[#2A1E1B] tracking-tight">
-            Hi, {name}! 👋
-          </h1>
-          <h2 className="text-2xl font-bold text-[#2A1E1B] mt-0.5">
-            What do you want to manage today?
-          </h2>
-          <p className="text-xs text-[#8A8174] mt-1">
-            Monitor daily revenue, stylist assignments, and client appointments.
-          </p>
-        </div>
-
-        {/* Top Header Navigation & User Actions */}
-        <div className="flex items-center gap-3">
-          <HeaderActions />
-        </div>
+    <div className="mx-auto max-w-7xl space-y-6 pb-10 text-[#2A1E1B]">
+      <AdminPageHeader
+        showHeaderActions={showHeaderActions}
+        title={`${salonGreeting(clock)}, ${currentUser?.firstName || "Admin"}.`}
+        subtitle="Monitor salon performance, staff schedules and appointments."
+      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-semibold">{dateLabel(date)}</p>
+        <button
+          type="button"
+          onClick={() => setRefresh((n) => n + 1)}
+          disabled={loading}
+          className="inline-flex items-center gap-2 rounded-xl border border-[#E7DFD4] bg-white px-3.5 py-2 text-xs font-bold disabled:opacity-50"
+        >
+          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+          Refresh overview
+        </button>
       </div>
-
-      {/* Grid Row 1: Quick Action Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="border-2 border-dashed border-[#E7DFD4] bg-[#FDFBF7] rounded-3xl p-5 flex flex-col items-center justify-center cursor-pointer hover:border-[#C5A059] transition-all group">
-          <div className="p-3 bg-white rounded-2xl shadow-xs group-hover:bg-[#C5A059] group-hover:text-white transition-colors border border-[#E7DFD4]">
-            <Plus size={20} className="text-[#C5A059] group-hover:text-white" />
-          </div>
-          <span className="text-xs font-bold text-[#2A1E1B] mt-2">New Appointment</span>
-        </div>
-
-        {categories.map((cat, idx) => {
-          const Icon = cat.icon;
-          return (
-            <div key={idx} className="bg-white rounded-3xl p-5 border border-[#E7DFD4] shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
-              <div className="flex justify-between items-start">
-                <div className={`p-3 rounded-2xl ${cat.bg}`}>
-                  <Icon size={22} className={cat.text} />
-                </div>
-                <span className="text-[10px] font-bold bg-[#F8F5F0] text-[#8A8174] px-2.5 py-1 rounded-full">
-                  Today
-                </span>
-              </div>
-              <div className="mt-4">
-                <h3 className="text-base font-bold text-[#2A1E1B]">{cat.title}</h3>
-                <p className="text-xs text-[#8A8174] font-medium mt-0.5">{cat.count}</p>
-              </div>
+      {error && (
+        <p
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
+        >
+          {error}
+        </p>
+      )}
+      {loading && (
+        <p role="status" className="text-xs text-[#8A8174]">
+          Loading the latest salon data…
+        </p>
+      )}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {metrics.map((metric) => (
+          <button
+            key={metric.title}
+            type="button"
+            onClick={() => go(metric.page)}
+            className={`${card} p-5 text-left transition-colors hover:border-[#C5A059]`}
+          >
+            <div className="mb-5 flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#8A8174]">
+                {metric.title}
+              </span>
+              <metric.icon size={17} className="text-[#B58D54]" />
             </div>
+            <p className="text-2xl font-bold">{metric.value}</p>
+            <p className="mt-1 text-[11px] text-[#8A8174]">{metric.hint}</p>
+          </button>
+        ))}
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {(data?.categories ?? []).map((category, i) => {
+          const Icon = [Scissors, Sparkles, Users][i % 3];
+          return (
+            <button
+              key={category.id}
+              type="button"
+              onClick={() => go("services")}
+              className={`${card} flex items-center gap-3 p-5 text-left hover:border-[#C5A059]`}
+            >
+              <span className="rounded-xl bg-[#F8F5F0] p-3 text-[#8B5E3C]">
+                <Icon size={21} />
+              </span>
+              <span>
+                <strong className="block text-sm">{category.name}</strong>
+                <span className="text-xs text-[#8A8174]">
+                  {category.bookings} bookings for this date
+                </span>
+              </span>
+            </button>
           );
         })}
+        <button
+          type="button"
+          onClick={() => go("inventory")}
+          className={`${card} flex items-center gap-3 p-5 text-left hover:border-[#C5A059]`}
+        >
+          <span className="rounded-xl bg-[#F8F5F0] p-3 text-[#8B5E3C]">
+            <Package size={21} />
+          </span>
+          <span>
+            <strong className="block text-sm">Inventory overview</strong>
+            <span className="text-xs text-[#8A8174]">
+              {data?.attention.lowStock ?? "—"} low-stock items
+            </span>
+          </span>
+        </button>
       </div>
-
-      {/* Main Split Layout: Left Content Area & Right Sidebar Widgets */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
-        {/* Left 8-Column Section */}
-        <div className="lg:col-span-8 space-y-6">
-
-          {/* KPI Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-[#B58D54] text-white p-5 rounded-3xl shadow-sm border border-[#9E7B3B] flex flex-col justify-between">
-              <div className="flex justify-between items-start mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-white/90">Daily Revenue</span>
-                <span className="text-[10px] font-mono text-white/80">Aug 17, 2026</span>
-              </div>
+      <div className="grid items-start gap-6 lg:grid-cols-12">
+        <div className="space-y-6 lg:col-span-8">
+          <section className={`${card} p-5 sm:p-6`}>
+            <div className="mb-5 flex items-center justify-between gap-3">
               <div>
-                <div className="text-2xl font-bold">₱2,569</div>
-                <div className="flex items-center gap-1 text-[10px] text-emerald-100 mt-1 font-medium">
-                  <TrendingUp size={12} />
-                  <span>+12% vs yesterday</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-3xl border border-[#E7DFD4] shadow-xs flex flex-col justify-between">
-              <div className="flex justify-between items-start mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Total Bookings</span>
-                <div className="p-1.5 bg-[#F8F5F0] text-[#C5A059] rounded-lg border border-[#E7DFD4]">
-                  <CalendarIcon size={14} />
-                </div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-[#2A1E1B]">10</div>
-                <p className="text-[10px] text-amber-700 mt-1 font-medium flex items-center gap-1">
-                  <Clock size={10} /> 3 pending
+                <h2 className="text-base font-bold">
+                  {date === today() ? "Today's appointments" : "Appointments"}
+                </h2>
+                <p className="mt-1 text-xs text-[#8A8174]">
+                  Client bookings and assigned staff for {date}
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={() => go("schedule")}
+                className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-[#8B5E3C]"
+              >
+                View schedule
+                <ArrowUpRight size={14} />
+              </button>
             </div>
-
-            <div className="bg-white p-5 rounded-3xl border border-[#E7DFD4] shadow-xs flex flex-col justify-between">
-              <div className="flex justify-between items-start mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Client Count</span>
-                <div className="p-1.5 bg-[#F8F5F0] text-[#C5A059] rounded-lg border border-[#E7DFD4]">
-                  <Users size={14} />
-                </div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-[#2A1E1B]">201</div>
-                <p className="text-[10px] text-emerald-700 mt-1 font-medium">
-                  +6 new this week
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Schedule Table */}
-          <div className="bg-white rounded-3xl border border-[#E7DFD4] shadow-sm overflow-hidden p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-[#2A1E1B]">Today's Schedule</h2>
-                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                </div>
-                <p className="text-xs text-[#8A8174]">Real-time queue & stylist assignments</p>
-              </div>
-
-              <div className="flex items-center gap-3 text-xs text-[#8A8174]">
-                <button className="flex items-center gap-1 hover:text-[#2A1E1B] font-semibold">
-                  <Edit3 size={14} /> Edit
-                </button>
-                <button className="flex items-center gap-1 hover:text-[#2A1E1B] font-semibold">
-                  <Share2 size={14} /> Share
-                </button>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#F8F5F0] text-[10px] uppercase font-bold text-gray-500 tracking-wider border-b border-[#E7DFD4]">
-                    <th className="p-3.5 pl-4 rounded-l-xl">Time</th>
-                    <th className="p-3.5">Client Name</th>
-                    <th className="p-3.5">Service</th>
-                    <th className="p-3.5">Stylist</th>
-                    <th className="p-3.5 pr-4 text-right rounded-r-xl">Status</th>
+            <div className="overflow-x-auto rounded-xl border border-[#E7DFD4]">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-[#F8F5F0] text-[10px] uppercase text-[#8A8174]">
+                  <tr>
+                    {["Time", "Client name", "Service", "Staff", "Status"].map(
+                      (label) => (
+                        <th key={label} className="px-4 py-3 font-bold">
+                          {label}
+                        </th>
+                      ),
+                    )}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#E7DFD4]/50 text-xs">
-                  {appointments.map((apt) => (
-                    <tr key={apt.id} className="hover:bg-[#FDFBF7] transition-colors">
-                      <td className="p-3.5 pl-4 font-mono font-semibold text-gray-500">{apt.time}</td>
-                      <td className="p-3.5 font-bold text-[#2A1E1B]">{apt.client}</td>
-                      <td className="p-3.5 text-gray-600">{apt.service}</td>
-                      <td className="p-3.5 text-gray-500">Stylist : <span className="text-[#2A1E1B] font-semibold">{apt.stylist}</span></td>
-                      <td className="p-3.5 pr-4 text-right">
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
-                          apt.status === 'In Progress' 
-                            ? 'bg-amber-100 text-amber-800 border border-amber-200' 
-                            : apt.status === 'Confirmed'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : 'bg-gray-100 text-gray-700 border border-gray-200'
-                        }`}>
-                          {apt.status === 'Confirmed' && <CheckCircle2 size={10} />}
-                          {apt.status}
+                <tbody className="divide-y divide-[#EEE7DC]">
+                  {!data?.appointments.length && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="p-8 text-center text-[#8A8174]"
+                      >
+                        {loading
+                          ? "Loading appointments…"
+                          : "No appointments for this date."}
+                      </td>
+                    </tr>
+                  )}
+                  {data?.appointments.map((item) => (
+                    <tr key={item.id}>
+                      <td className="whitespace-nowrap px-4 py-4 font-semibold">
+                        {item.time.slice(0, 5)}
+                      </td>
+                      <td className="px-4 py-4 font-semibold">{item.client}</td>
+                      <td className="px-4 py-4">{item.service}</td>
+                      <td className="px-4 py-4 text-[#8A8174]">{item.staff}</td>
+                      <td className="px-4 py-4">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[9px] font-bold ${item.status === "CONFIRMED" ? "bg-emerald-50 text-emerald-700" : item.status === "PENDING" ? "bg-amber-50 text-amber-700" : "bg-[#F8F5F0] text-[#8A8174]"}`}
+                        >
+                          {item.status.replaceAll("_", " ")}
                         </span>
                       </td>
                     </tr>
@@ -198,67 +292,148 @@ export default function DashboardView({ currentUser }) {
                 </tbody>
               </table>
             </div>
-          </div>
+            <p className="mt-3 text-[10px] text-[#8A8174]">
+              Showing up to five appointments. The full list is in Schedule.
+            </p>
+          </section>
+          <section className={`${card} p-5 sm:p-6`}>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-bold">Staff shifts</h2>
+              <Clock size={17} className="text-[#B58D54]" />
+            </div>
+            {!data?.shifts.length && (
+              <p className="text-xs text-[#8A8174]">
+                No staff shifts saved for this date.
+              </p>
+            )}
+            <div className="space-y-2">
+              {data?.shifts.map((shift) => (
+                <div
+                  key={shift.id}
+                  className="flex justify-between gap-3 rounded-xl border border-[#E7DFD4] p-3 text-xs"
+                >
+                  <strong>{shift.name}</strong>
+                  <span className="text-[#8A8174]">
+                    {shift.start}–{shift.end}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
-
-        {/* Right 4-Column Sidebar */}
-        <div className="lg:col-span-4 space-y-6">
-          
-          {/* Mini Calendar Widget */}
-          <div className="bg-white rounded-3xl border border-[#E7DFD4] p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-[#2A1E1B]">August 2026</h3>
-              <div className="flex items-center gap-1 text-[#8A8174]">
-                <button className="p-1 hover:bg-[#F8F5F0] rounded-lg transition-colors"><ChevronLeft size={16} /></button>
-                <button className="p-1 hover:bg-[#F8F5F0] rounded-lg transition-colors"><ChevronRight size={16} /></button>
+        <aside className="space-y-6 lg:col-span-4">
+          <section className={`${card} p-5`}>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-bold">{monthTitle}</h2>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  aria-label="Previous month"
+                  onClick={() => changeMonth(-1)}
+                  className="rounded-lg p-1.5 hover:bg-[#F8F5F0]"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Next month"
+                  onClick={() => changeMonth(1)}
+                  className="rounded-lg p-1.5 hover:bg-[#F8F5F0]"
+                >
+                  <ChevronRight size={16} />
+                </button>
               </div>
             </div>
-
-            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-[#8A8174] mb-2">
-              <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+            <div className="grid grid-cols-7 gap-1 text-center text-[10px]">
+              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
+                <span key={day} className="py-2 font-bold text-[#8A8174]">
+                  {day}
+                </span>
+              ))}
+              {Array.from({ length: offset }, (_, i) => (
+                <span key={"empty" + i} />
+              ))}
+              {Array.from({ length: days }, (_, i) => {
+                const day = i + 1,
+                  key = keyFor(day),
+                  count = data?.calendar.find((row) => row.date === key)?.count;
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    aria-label={`${dateLabel(key)}${count ? `, ${count} appointments` : ""}`}
+                    aria-pressed={date === key}
+                    onClick={() => setDate(key)}
+                    className={`relative rounded-xl py-2.5 font-semibold ${date === key ? "bg-[#C5A059] text-white" : key === today() ? "bg-[#F1E7DA] text-[#785235]" : "hover:bg-[#F8F5F0]"}`}
+                  >
+                    {day}
+                    {Boolean(count) && (
+                      <span className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-current" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
-
-            <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-[#2A1E1B]">
-              <span className="py-1.5 text-gray-300">14</span>
-              <span className="py-1.5 text-gray-300">15</span>
-              <span className="py-1.5 text-gray-300">16</span>
-              <span className="py-1.5 bg-[#C5A059] text-white rounded-xl shadow-xs">17</span>
-              <span className="py-1.5 hover:bg-[#F8F5F0] rounded-xl">18</span>
-              <span className="py-1.5 hover:bg-[#F8F5F0] rounded-xl">19</span>
-              <span className="py-1.5 hover:bg-[#F8F5F0] rounded-xl">20</span>
+            <button
+              type="button"
+              onClick={() => setDate(today())}
+              className="mt-4 w-full rounded-xl border border-[#E7DFD4] py-2 text-xs font-bold text-[#8B5E3C] hover:bg-[#F8F5F0]"
+            >
+              Today
+            </button>
+          </section>
+          <section className={`${card} p-5`}>
+            <div className="mb-4 flex items-center gap-2">
+              <AlertCircle size={16} className="text-[#B58D54]" />
+              <h2 className="text-sm font-bold">Needs attention</h2>
             </div>
-
-            <div className="mt-5 pt-4 border-t border-[#E7DFD4] space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-[#2A1E1B]">10:30 AM – 12:00 PM</span>
-                <MoreHorizontal size={14} className="text-gray-400" />
-              </div>
-              <div className="bg-[#F8F5F0] p-3 rounded-2xl border border-[#E7DFD4]">
-                <p className="text-xs font-bold text-[#2A1E1B]">Team Shift Sync</p>
-                <p className="text-[10px] text-[#8A8174] mt-0.5">10:30 AM – 11:30 AM • Stylist Briefing</p>
-              </div>
+            <div className="space-y-3">
+              {[
+                {
+                  label: "Pending appointments",
+                  value: data?.attention.pending,
+                  page: "schedule",
+                },
+                {
+                  label: "Unassigned appointments",
+                  value: data?.attention.unassigned,
+                  page: "schedule",
+                },
+                ...(data?.inventoryAlertsEnabled === false
+                  ? []
+                  : [
+                      {
+                        label: "Low-stock items",
+                        value: data?.attention.lowStock,
+                        page: "inventory",
+                      },
+                    ]),
+              ].map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => go(item.page)}
+                  className="flex w-full items-center justify-between rounded-xl border border-[#E7DFD4] p-3 text-left text-xs hover:bg-[#F8F5F0]"
+                >
+                  <span>{item.label}</span>
+                  <strong className="text-[#8B5E3C]">
+                    {item.value ?? "—"}
+                  </strong>
+                </button>
+              ))}
             </div>
-          </div>
-
-          {/* Notifications Panel */}
-          <div className="bg-white rounded-3xl border border-[#E7DFD4] p-5 shadow-sm space-y-3">
-            <div className="flex items-center justify-between border-b border-[#E7DFD4] pb-3">
-              <div className="flex items-center gap-2">
-                <Bell size={16} className="text-[#C5A059]" />
-                <h3 className="text-sm font-bold text-[#2A1E1B]">Notifications</h3>
-              </div>
-              <button className="text-[10px] font-bold text-[#8A8174] hover:text-[#2A1E1B]">Clear</button>
-            </div>
-
-            <div className="bg-[#FDFBF7] p-3 rounded-2xl border border-[#E7DFD4] text-xs space-y-1">
-              <p className="font-bold text-[#2A1E1B]">Upcoming Appointment</p>
-              <p className="text-[11px] text-[#8A8174]">Michael Litang • Full Color</p>
-              <p className="text-[10px] font-mono text-[#C5A059] font-bold">Today, 12:00 PM</p>
-            </div>
-          </div>
-
-        </div>
-
+            <p className="mt-4 text-[10px] text-[#8A8174]">
+              {data
+                ? "Updated " +
+                  new Intl.DateTimeFormat("en-PH", {
+                    timeZone: PH,
+                    hour: "numeric",
+                    minute: "2-digit",
+                  }).format(new Date(data.updatedAt))
+                : "Waiting for data"}
+            </p>
+          </section>
+        </aside>
       </div>
     </div>
   );

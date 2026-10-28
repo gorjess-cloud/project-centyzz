@@ -1,4 +1,5 @@
-import HeaderActions from '../../components/workspace/HeaderActions';
+import {usePageFind} from '../../components/workspace/AdminWorkspaceContext';
+import AdminPageHeader from '../../components/workspace/AdminPageHeader';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import { useState, useEffect } from 'react';
 import { 
@@ -50,7 +51,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
   const [loadError, setLoadError] = useState('');
 
   const [activeTab, setActiveTab] = useState('ACTIVE'); // 'ACTIVE' or 'ARCHIVED'
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery,isHighlightSearch] = usePageFind();
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [selectedServiceIds, setSelectedServiceIds] = useState([]);
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -186,8 +187,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
   const tabFilteredServices = services;
 
   const filteredServices = tabFilteredServices.filter((s) => {
-    const matchesSearch = 
-      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch = isHighlightSearch || s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.category.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesCategory = categoryFilter === 'ALL' || String(s.categoryId) === categoryFilter;
@@ -371,15 +371,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
       )}
 
       {/* Header Bar */}
-      <header className="mb-6 flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-[#2A1E1B]">Service Management</h1>
-          <p className="text-xs text-[#8A8174]">Manage salon treatment catalog, pricing, durations, and active promo discounts</p>
-        </div>
-
-        {/* Group 2: System Quick Actions */}
-        {showHeaderActions && (<HeaderActions />)}
-      </header>
+      <AdminPageHeader title="Service Management" subtitle="Manage salon treatment catalog, pricing, durations, and active promo discounts" showHeaderActions={showHeaderActions}/>
 
       {/* Main Workspace Card */}
       <div className="bg-white rounded-2xl border border-[#E9E4D8] shadow-sm p-6 sm:p-8 space-y-6">
@@ -425,9 +417,9 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8A8174]" />
               <input
                 type="text"
-                placeholder="Search Here..."
+                placeholder={isHighlightSearch?"Highlight text on this page…":"Search records…"}
                 value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                onChange={(e) => { setSearchQuery(e.target.value); if(!isHighlightSearch)setCurrentPage(1); }}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs text-[#2A1E1B] placeholder-[#8A8174] outline-none focus:border-[#C5A059] transition-all"
               />
             </div>
