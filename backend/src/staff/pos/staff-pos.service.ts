@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
   OnModuleDestroy,
 } from '@nestjs/common';
 import { Pool } from 'pg';
@@ -103,6 +104,12 @@ export function checkoutInput(body: any) {
     fingerprint,
   };
 }
+export type StaffTransactionDetails={
+ id:string;txnId:string;date:string;time:string;cashier:string;status:string;total:number;legacy:boolean;
+ subtotal?:number;discount?:number;tax?:number;currency?:string;summary?:string;paymentMethod?:string;note?:string;
+ items:{id:string;name:string;quantity:number;unitPrice:number;discount:number;tax:number;total:number}[];
+ payments:{id:string;method:string;status:string;amount:number;cashReceived:number|null;change:number|null}[];
+};
 @Injectable()
 export class StaffPosService implements OnModuleDestroy {
   readonly pool = new Pool({
@@ -113,6 +120,114 @@ export class StaffPosService implements OnModuleDestroy {
   });
   onModuleDestroy() {
     return this.pool.end();
+  }
+  async transactionDetails(actorId:number,key:string):Promise<StaffTransactionDetails> {
+    const match = /^(transaction|legacy):([1-9]\d{0,18})$/.exec(key);
+    if (!match || BigInt(match[2]) > 9223372036854775807n)
+      throw new BadRequestException('Invalid transaction reference.');
+    if (match[1] === 'legacy') {
+      if (BigInt(match[2]) > 2147483647n)
+        throw new BadRequestException('Invalid transaction reference.');
+      const row = (
+        await this.pool.query(
+          `SELECT p.id,p.txn_id,p.transaction_id,p.service,p.method,p.status,p.amount::text,
+        public.admin_report_day(p.report_date)::text AS date,p.txn_time AS time,
+        concat_ws(' ',u."firstName",u."lastName") AS cashier
+        FROM public.pos_transactions p JOIN public.staff s ON s.id=p.cashier_staff_id
+        JOIN public."user" u ON u.id=s.user_id WHERE p.id=$1 AND s.user_id=$2`,
+          [match[2], actorId],
+        )
+      ).rows[0];
+      if (!row) throw new NotFoundException('Transaction not found.');
+      if (row.transaction_id)
+        return this.transactionDetails(
+          actorId,
+          'transaction:' + row.transaction_id,
+        );
+      return {
+        id: key,
+        txnId: row.txn_id,
+        date: row.date,
+        time: row.time,
+        cashier: row.cashier,
+        status: row.status,
+        total: Number(row.amount),
+        summary: row.service,
+        paymentMethod: row.method,
+        legacy: true,
+        items: [],
+        payments: [],
+        note: 'Historical record: individual item quantities, cash tendered and payment breakdown were not stored.',
+      };
+    }
+    const c = await this.pool.connect();
+    try {
+      await c.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const row = (
+        await c.query(
+          `SELECT t.id::text,t.status,t.subtotal::text,t.discount_total::text,t.tax_total::text,t.grand_total::text,
+        to_char(coalesce(t.completed_at,t.created_at) AT TIME ZONE 'Asia/Manila','YYYY-MM-DD') AS date,
+        to_char(coalesce(t.completed_at,t.created_at) AT TIME ZONE 'Asia/Manila','HH24:MI:SS') AS time,
+        concat_ws(' ',u."firstName",u."lastName") AS cashier,t.currency
+        FROM public.transactions t JOIN public.staff s ON s.id=t.cashier_staff_id
+        JOIN public."user" u ON u.id=s.user_id WHERE t.id=$1::bigint AND s.user_id=$2 AND t.cashier_id=$2`,
+          [match[2], actorId],
+        )
+      ).rows[0];
+      if (!row) throw new NotFoundException('Transaction not found.');
+      const lines = (
+        await c.query(
+          `SELECT id::text,item_name,quantity,unit_price::text,discount_amount::text,tax_amount::text,line_total::text
+        FROM public.transaction_items WHERE transaction_id=$1::bigint AND removed_at IS NULL ORDER BY id`,
+          [row.id],
+        )
+      ).rows;
+      const payments = (
+        await c.query(
+          `SELECT id::text,method,status,amount::text,cash_received::text,change_amount::text
+        FROM public.payments WHERE transaction_id=$1::bigint ORDER BY id`,
+          [row.id],
+        )
+      ).rows;
+      await c.query('COMMIT');
+      return {
+        id: 'transaction:' + row.id,
+        txnId: 'TXN-' + row.id,
+        date: row.date,
+        time: row.time,
+        cashier: row.cashier,
+        status: row.status,
+        currency: row.currency,
+        subtotal: Number(row.subtotal),
+        discount: Number(row.discount_total),
+        tax: Number(row.tax_total),
+        total: Number(row.grand_total),
+        legacy: false,
+        items: lines.map((i) => ({
+          id: i.id,
+          name: i.item_name,
+          quantity: i.quantity,
+          unitPrice: Number(i.unit_price),
+          discount: Number(i.discount_amount),
+          tax: Number(i.tax_amount),
+          total: Number(i.line_total),
+        })),
+        payments: payments.map((p) => ({
+          id: p.id,
+          method: p.method,
+          status: p.status,
+          amount: Number(p.amount),
+          cashReceived:
+            p.cash_received === null ? null : Number(p.cash_received),
+          change: p.change_amount === null ? null : Number(p.change_amount),
+        })),
+      };
+    } catch (error) {
+      await c.query('ROLLBACK');
+      throw error;
+    } finally {
+      c.release();
+    }
   }
   async checkout(actorId: number, body: any) {
     const input = checkoutInput(body),

@@ -243,9 +243,10 @@ export class GuestBookingService {
   async listForStaff(id: number, role: string, archived=false) {
     const isAdmin = ['ADMIN', 'SUPERADMIN'].includes(String(role).toUpperCase());
     if (!isAdmin && String(role).toUpperCase() !== 'STAFF') throw new ForbiddenException('Staff access required');
-    const result = await pool.query(`SELECT a.*, s.name AS service_name, s.price AS service_price, s.duration_minutes,
+    const result = await pool.query(`SELECT a.*, coalesce(bundle.names,s.name) AS service_name, coalesce(bundle.price,s.price) AS service_price, coalesce(bundle.duration_minutes,s.duration_minutes) AS duration_minutes,bundle.services AS booked_services,
       u."firstName" AS stylist_first, u."lastName" AS stylist_last
       FROM public.appointments a JOIN public.services s ON s.id=a.service_id
+      LEFT JOIN public.appointment_service_summary bundle ON bundle.appointment_id=a.id
       LEFT JOIN public.staff st ON st.id = a.staff_id
       LEFT JOIN public."user" u ON u.id = st.user_id
       WHERE ($1::boolean = TRUE OR EXISTS (
@@ -263,6 +264,7 @@ export class GuestBookingService {
       isArchived:a.archived_at!=null||a.status==='CANCELLED',archivedAt:a.archived_at,archiveReason:a.archive_reason||'',
       paymentStatus: a.payment_status, depositAmount: a.deposit_amount ? Number(a.deposit_amount) : null,
       totalAmount: a.total_amount ? Number(a.total_amount) : null,
+      services:a.booked_services??[],
       service: { id: a.service_id, name: a.service_name, price: Number(a.service_price), durationMinutes: a.duration_minutes },
     })) };
   }

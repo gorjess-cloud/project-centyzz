@@ -93,9 +93,10 @@ export class ScheduleService implements OnModuleDestroy {
   async appointments(archived=false) {
     const result=await this.pool.query(`SELECT a.id,a.reference_code,a.customer_name,a.customer_email,a.guest_phone,
       a.appointment_date,a.start_time::text,a.end_time::text,a.status,a.notes,a.total_amount,
-      a.payment_status,a.archived_at,a.archive_reason,s.name AS service_name,s.price,s.duration_minutes,
+      a.payment_status,a.archived_at,a.archive_reason,coalesce(bundle.names,s.name) AS service_name,coalesce(bundle.price,s.price) AS price,coalesce(bundle.duration_minutes,s.duration_minutes) AS duration_minutes,
       concat_ws(' ',u."firstName",u."lastName") AS stylist,count(*) OVER()::int AS total_count
       FROM public.appointments a LEFT JOIN public.services s ON s.id=a.service_id
+      LEFT JOIN public.appointment_service_summary bundle ON bundle.appointment_id=a.id
       LEFT JOIN public.staff st ON st.id=a.staff_id LEFT JOIN public."user" u ON u.id=st.user_id
       WHERE (a.archived_at IS NOT NULL OR a.status='CANCELLED')=$1 ORDER BY a.appointment_date DESC,a.start_time DESC,a.id DESC LIMIT 1000`,[archived]);
     return {total:result.rows[0]?.total_count??0,items:result.rows.map(r=>{
@@ -149,6 +150,8 @@ export class ScheduleService implements OnModuleDestroy {
         await c.query('SELECT pg_advisory_xact_lock(hashtext($1))',['centyzz-guest-booking:'+row.appointment_date]);
         const service=(await c.query('SELECT id FROM public.services WHERE id=$1 AND is_active=true AND archived_at IS NULL',[row.service_id])).rows[0];
         if(!service)throw new ConflictException('The service is no longer available. Keep this booking archived.');
+        const unavailable=await c.query('SELECT 1 FROM public.appointment_services lines JOIN public.services s ON s.id=lines.service_id WHERE lines.appointment_id=$1 AND (NOT s.is_active OR s.archived_at IS NOT NULL) LIMIT 1',[id]);
+        if(unavailable.rowCount)throw new ConflictException('A selected service is no longer available. Keep this booking archived.');
         if(row.staff_id) {
           const staff=(await c.query(`SELECT st.id FROM public.staff st JOIN public."user" u ON u.id=st.user_id
             WHERE st.id=$1 AND st.is_active=true AND st.archived_at IS NULL AND st.roster_hidden_at IS NULL AND NOT st.on_leave

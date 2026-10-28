@@ -1,3 +1,4 @@
+import { MemberBookingService } from './member-booking.service.js';
 import { Optional } from '@nestjs/common';
 import { SalonConfigService,defaultBookingDay } from '../salon/salon-config.service.js';
 import {
@@ -26,7 +27,7 @@ interface CreateAppointmentInput {
 
 @Injectable()
 export class AppointmentsService {
-  constructor(@Optional() private readonly salon?:SalonConfigService) {}
+  constructor(@Optional() private readonly salon?:SalonConfigService, @Optional() private readonly memberBookings?:MemberBookingService) {}
   private operatingDay(date:string){return this.salon?this.salon.bookingDay(date):Promise.resolve(defaultBookingDay());}
   private readonly logger = new Logger(AppointmentsService.name);
 
@@ -48,7 +49,7 @@ export class AppointmentsService {
         };
       }));
       data.sort((a, b) => `${a.appointmentDate} ${a.startTime}`.localeCompare(`${b.appointmentDate} ${b.startTime}`));
-      return { success: true, data };
+      return { success: true, data: await this.enrichAppointments(data) };
     } catch (error) {
       this.logger.error('Failed to fetch staff appointments', error instanceof Error ? error.stack : String(error));
       throw new InternalServerErrorException('Unable to retrieve appointments');
@@ -78,6 +79,7 @@ export class AppointmentsService {
     userId: number,
     email: string,
   ) {
+    if(this.memberBookings)return this.memberBookings.create(input,userId,email);
     const user = await db.orm.public.User.where({
       id: userId,
       email: email as Varchar<255>,
@@ -135,7 +137,7 @@ export class AppointmentsService {
         }),
       );
 
-      return { success: true, data };
+      return { success: true, data: await this.enrichAppointments(data) };
     } catch (error) {
       this.logger.error(
         'Failed to fetch member appointments',
@@ -233,13 +235,14 @@ export class AppointmentsService {
     }
   }
 
-  async getAvailableSlots(date: string, serviceId: number) {
+  async getAvailableSlots(date: string, serviceId: number | number[]) {
+    if(this.memberBookings)return this.memberBookings.availability(date,Array.isArray(serviceId)?serviceId:[serviceId]);
     this.validateDate(date);
-    this.validateServiceId(serviceId);
+    this.validateServiceId(serviceId as number);
 
     try {
       const service = await db.orm.public.Service
-        .where({ id: serviceId, isActive: true })
+        .where({ id: serviceId as number, isActive: true })
         .all();
 
       if (service.length === 0) {
@@ -545,6 +548,18 @@ export class AppointmentsService {
     }
   }
   
+  private async enrichAppointments<T extends {id:number}>(rows:T[]) {
+    const summaries=await this.memberBookings?.summaries(rows.map(r=>r.id));
+    return rows.map(row=>({...row,...summaries?.get(row.id)}));
+  }
+
+  async getCalendarForUser(id:number,userId:number) {
+    const row=await db.orm.public.Appointment.where({id,userId}).first();
+    if(!row)throw new NotFoundException('Appointment not found.');
+    if(!['PENDING','CONFIRMED'].includes(String(row.status))||(row as any).archivedAt)throw new BadRequestException('Only an active scheduled appointment can be added to calendar.');
+    return this.getCalendarLink(id);
+  }
+
   async getCalendarLink(id: number) {
     const appointment = await this.getAppointmentForCalendar(id);
 
@@ -657,7 +672,7 @@ export class AppointmentsService {
 
     return {
       ...appointment,
-      serviceName: String(services[0].name),
+      serviceName: (await this.memberBookings?.summaries([id]))?.get(id)?.service.name ?? String(services[0].name),
     };
   }
 

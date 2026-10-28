@@ -35,12 +35,29 @@ function toDateKey(year, month, day) {
 }
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const phonePattern = /^[0-9+\-\s()]{7,15}$/;
+const phonePattern = /^[0-9+\-\s()]+$/;
 
 const getEmailError = (value) =>
   emailPattern.test(value.trim()) ? '' : 'Please enter a valid email address.';
-const getPhoneError = (value) =>
-  phonePattern.test(value.trim()) ? '' : 'Please enter a valid contact number.';
+const getPhoneError = (value) => {
+  const trimmedValue = value.trim();
+  const digitCount = trimmedValue.replace(/\D/g, '').length;
+  return phonePattern.test(trimmedValue) && digitCount >= 7 && digitCount <= 12
+    ? ''
+    : 'Please enter a valid contact number.';
+};
+const limitPhoneDigits = (value) => {
+  let digitCount = 0;
+  return value
+    .replace(/[^0-9+\-\s()]/g, '')
+    .split('')
+    .filter((character) => {
+      if (!/\d/.test(character)) return true;
+      digitCount += 1;
+      return digitCount <= 12;
+    })
+    .join('');
+};
 
 function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const [step, setStep] = useState('form');
@@ -537,7 +554,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                         type="tel" 
                         value={phone}
                         onChange={(e) => {
-                          const value = e.target.value;
+                          const value = limitPhoneDigits(e.target.value);
                           setPhone(value);
                           setPhoneError(getPhoneError(value));
                         }}
@@ -549,7 +566,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                         aria-invalid={Boolean(phoneError)}
                         aria-describedby={phoneError ? 'booking-phone-error' : undefined}
                         required 
-                        placeholder="Phone No."
+                        placeholder="+63 9XXXXXXXX"
                         className={`w-full px-3 py-2 rounded-xl border ${fieldStyle} ${phoneError ? '!border-red-500' : ''} text-xs focus:outline-none focus:border-[#C5A059]`}
                       />
                       <input 

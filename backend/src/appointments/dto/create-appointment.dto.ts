@@ -1,5 +1,12 @@
 import {
   IsEmail,
+  IsOptional,
+  IsArray,
+  ArrayMinSize,
+  ArrayMaxSize,
+  ArrayUnique,
+  ValidateIf,
+  IsUUID,
   IsInt,
   IsNotEmpty,
   IsString,
@@ -9,9 +16,23 @@ import {
 } from 'class-validator';
 
 export class CreateAppointmentDto {
+  @ValidateIf((o) => o.serviceIds === undefined)
   @IsInt()
   @Min(1)
-  serviceId: number;
+  serviceId?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(20)
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  serviceIds?: number[];
+
+  @IsOptional()
+  @IsUUID()
+  idempotencyKey?: string;
 
   @IsString()
   @IsNotEmpty()

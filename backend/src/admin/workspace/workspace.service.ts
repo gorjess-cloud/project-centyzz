@@ -61,15 +61,15 @@ export class WorkspaceService implements OnModuleDestroy {
         [date],
       ),
       this.pool.query(
-        `SELECT a.id,a.customer_name AS client,s.name AS service,a.start_time::text AS time,a.status,
+        `SELECT a.id,a.customer_name AS client,coalesce(bundle.names,s.name) AS service,a.start_time::text AS time,a.status,
         coalesce(nullif(concat_ws(' ',u."firstName",u."lastName"),''),'Unassigned') AS staff
-        FROM public.appointments a LEFT JOIN public.services s ON s.id=a.service_id LEFT JOIN public.staff st ON st.id=a.staff_id LEFT JOIN public."user" u ON u.id=st.user_id
+        FROM public.appointments a LEFT JOIN public.services s ON s.id=a.service_id LEFT JOIN public.appointment_service_summary bundle ON bundle.appointment_id=a.id LEFT JOIN public.staff st ON st.id=a.staff_id LEFT JOIN public."user" u ON u.id=st.user_id
         WHERE a.appointment_date=$1 AND a.archived_at IS NULL AND a.status IN ('PENDING','CONFIRMED','COMPLETED','NO_SHOW') ORDER BY a.start_time,a.id LIMIT 5`,
         [date],
       ),
       this.pool.query(
-        `SELECT c.id,c.name,count(a.id) FILTER(WHERE a.appointment_date=$1 AND a.archived_at IS NULL AND a.status IN ('PENDING','CONFIRMED','COMPLETED'))::int AS bookings
-        FROM public.service_categories c LEFT JOIN public.services s ON s.category_id=c.id LEFT JOIN public.appointments a ON a.service_id=s.id
+        `SELECT c.id,c.name,count(DISTINCT a.id) FILTER(WHERE a.appointment_date=$1 AND a.archived_at IS NULL AND a.status IN ('PENDING','CONFIRMED','COMPLETED'))::int AS bookings
+        FROM public.service_categories c LEFT JOIN public.services s ON s.category_id=c.id LEFT JOIN public.appointments a ON (EXISTS(SELECT 1 FROM public.appointment_services lines WHERE lines.appointment_id=a.id AND lines.service_id=s.id) OR (a.service_id=s.id AND NOT EXISTS(SELECT 1 FROM public.appointment_services lines WHERE lines.appointment_id=a.id)))
         WHERE c.archived_at IS NULL AND c.is_active GROUP BY c.id,c.name ORDER BY c.id LIMIT 3`,
         [date],
       ),

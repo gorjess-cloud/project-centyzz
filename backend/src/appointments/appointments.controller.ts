@@ -89,11 +89,12 @@ export class AppointmentsController {
   @Get('available-slots')
   getAvailableSlots(
     @Query('date') date: string,
-    @Query('service_id', ParseIntPipe) serviceId: number,
+    @Query('service_id') serviceId?: string,
+    @Query('service_ids') serviceIds?: string,
   ) {
     return this.appointmentsService.getAvailableSlots(
       date,
-      serviceId,
+      serviceIds !== undefined ? serviceIds.split(',').map(Number) : Number(serviceId),
     );
   }
 
@@ -115,6 +116,12 @@ export class AppointmentsController {
     // Public guest bookings must use the deposit-aware, stylist-aware flow.
     // Members continue to use POST /api/appointments/mine.
     throw new GoneException('For guest bookings use POST /api/appointments/guest-checkout');
+  }
+
+  @Get('mine/:id/calendar')
+  @UseGuards(JwtAuthGuard)
+  getMyCalendar(@Param('id',ParseIntPipe) id:number,@Req() request:AuthenticatedRequest) {
+    return this.appointmentsService.getCalendarForUser(id,request.user.sub);
   }
 
   @Get(':id/calendar')

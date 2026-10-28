@@ -1,8 +1,9 @@
+import StaffTransactionDialog from '../../components/staff/StaffTransactionDialog';
 import {staffPosRequest,announcePosUpdate} from '../../api/staff-pos';
 import {useUnsavedChanges} from '../../components/UnsavedChangesProvider';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Bell, Plus, Minus, ChevronDown, ChevronRight, Scissors, Flower2, Hand, ShoppingBag, Trash2, X, Moon, Sun } from 'lucide-react';
-import { Toast, useToast, Badge, EmptyState, ConfirmModal, peso, card, input } from '../../components/staff/ui';
+import { Toast, useToast, Badge, EmptyState, ConfirmModal, StaffOverlay, peso, card, input } from '../../components/staff/ui';
 import { PaymentMethods, SplitPayment, CashModal, QrModal, ReceiptSummary, DemoReceiptModal } from '../../components/staff/payment';
 import { useWorkspaceTheme } from '../../components/workspace/WorkspaceContext';
 import { api } from '../../api/client';
@@ -101,6 +102,7 @@ export default function StaffPOSView({ onSale,currentUser }) {
   const [modal, setModal] = useState(null); // { type: 'cash'|'qr', amount, split }
   const [splitPayments, setSplitPayments] = useState([]);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmedTransaction,setConfirmedTransaction]=useState(null);
   const [demoReceipt, setDemoReceipt] = useState(null);
   const [demoMode,setDemoMode]=useState(false);
 
@@ -155,6 +157,7 @@ export default function StaffPOSView({ onSale,currentUser }) {
     pending.current=request;setPendingCheckout(request);setModal(null);
     try{const saved=await staffPosRequest(currentUser?.accessToken,'checkout',{method:'POST',body:request});
       onSale?.({...saved,items:cart,paidAt:new Date().toISOString()});
+      setConfirmedTransaction('transaction:'+saved.id);
       say('Transaction TXN-'+saved.id+' saved for '+cashierName+'.');
       pending.current=null;checkoutKey.current=null;setPendingCheckout(null);setCart([]);setSplitPayments([]);setView('pos');markSaved(cartScope);announcePosUpdate();
     }catch(error){setCanReviewCheckout(error.status>=400&&error.status<500);setSaveError(error.message+' Your cart has been retained. Retry saving before collecting any payment again.');}
@@ -184,7 +187,7 @@ export default function StaffPOSView({ onSale,currentUser }) {
 
   return (
     <div aria-busy={saving} className="fade-in flex flex-col gap-4 md:h-[calc(100vh-2.5rem)] md:flex-row">
-      {saving&&<div role="status" className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-6"><div className="rounded-2xl bg-white p-6 text-sm font-bold text-[#443523]">Saving checkout… Please keep this page open.</div></div>}
+      {saving&&<StaffOverlay layer={220}><div role="status" aria-live="polite" className="rounded-2xl bg-white p-6 text-sm font-bold text-[#443523]">Saving checkout… Please keep this page open.</div></StaffOverlay>}
       {saveError&&<div role="alert" className="fixed bottom-5 left-1/2 z-[110] w-[min(90vw,600px)] -translate-x-1/2 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800"><p>{saveError}</p>{pendingCheckout&&<button className="mt-3 rounded-lg bg-[#4A3928] px-4 py-2 text-xs font-bold text-white" disabled={saving} onClick={()=>finalize([])}>Retry saving the same checkout</button>}{canReviewCheckout&&<button className="ml-2 mt-3 rounded-lg border px-4 py-2 text-xs font-bold" onClick={()=>setConfirmReview(true)}>Review retained cart</button>}</div>}
       {view === 'methods' && <PaymentMethods demo={demoMode} total={subtotal} onBack={() => setView('pos')} onSelect={selectMethod} />}
       {view === 'split' && <SplitPayment total={subtotal} payments={splitPayments} onBack={() => setView('methods')} onCharge={(m, amt) => {if(!pending.current)setModal({ type: m, amount: amt, split: true });}} />}
@@ -231,7 +234,7 @@ export default function StaffPOSView({ onSale,currentUser }) {
             <button aria-label="Scroll categories" onClick={() => chipsRef.current?.scrollBy({ left: 200, behavior: 'smooth' })} className="shrink-0 rounded-full p-2 text-[#2A1E1B] hover:bg-[#F6F0E6] active:scale-90"><ChevronRight size={22} /></button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 pb-2 lg:gap-4 xl:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 pb-2 lg:gap-4 xl:grid-cols-4">
             {servicesLoading && <div className="col-span-full rounded-xl border border-[#E7DFD4] bg-white p-5 text-center text-xs text-[#8A8174]">Loading services…</div>}
             {servicesError && <div role="alert" className="col-span-full rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-700">Unable to load services: {servicesError}</div>}
             {!servicesLoading && !servicesError && !services.length && <div className="col-span-full rounded-xl border border-[#E7DFD4] bg-white p-5 text-center text-xs text-[#8A8174]">No active services are available.</div>}
@@ -240,11 +243,20 @@ export default function StaffPOSView({ onSale,currentUser }) {
               const Icon = s.icon; const n = qtyOf(s.id);
               return (
                 <button key={s.id} onClick={() => change(s, 1)} aria-label={`Add ${s.name}, ${peso(s.price)}`}
-                  className={`${card} group relative flex h-44 touch-manipulation flex-col p-4 text-left transition hover:-translate-y-0.5 hover:border-[#C5A059] hover:shadow-md active:scale-95 lg:h-52 ${n > 0 ? 'border-[#C5A059] ring-2 ring-[#C5A059]/30' : ''}`}>
-                  <span className="pr-7 text-sm font-bold text-[#4A3928]">{s.name}</span>
-                  {n > 0 && <span className="pop-in absolute right-3 top-3 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#4A3928] px-1.5 text-[11px] font-bold text-white">{n}</span>}
-                  <span className="m-auto flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-[#F6F0E6] text-[#4A3928] transition group-hover:bg-[#EBDBC8] lg:h-20 lg:w-20">{s.image ? <img src={s.image} alt="" loading="lazy" className="h-full w-full object-cover" /> : <Icon size={36} strokeWidth={1.5} />}</span>
-                  <span className="self-end rounded-full bg-[#F6F0E6] px-3 py-1 text-sm font-bold text-[#8B5E3C]">₱ {s.price.toLocaleString()}</span>
+                  className={`group relative flex touch-manipulation flex-col self-start overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition hover:-translate-y-1 hover:border-[#C5A059] hover:shadow-md active:scale-[0.99] ${n > 0 ? 'border-[#C5A059] ring-2 ring-[#C5A059]/30' : 'border-gray-200'}`}>
+                  <span className="relative block h-40 w-full shrink-0 overflow-hidden bg-[#F6F0E6] text-[#4A3928]">
+                    {s.image ? <img src={s.image} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" /> : <span className="flex h-full w-full items-center justify-center"><Icon size={36} strokeWidth={1.5} /></span>}
+                    <span className="absolute right-2 top-2 inline-flex min-h-9 items-center gap-1 rounded-full bg-[#C5A059] px-3 text-[11px] font-semibold text-white shadow-sm">
+                      <Plus size={14} strokeWidth={2.5} /> Add
+                    </span>
+                    {n > 0 && <span className="pop-in absolute left-2 top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#4A3928] px-1.5 text-[11px] font-bold text-white">{n}</span>}
+                  </span>
+                  <span className="flex min-w-0 flex-col p-4">
+                    <span className="line-clamp-2 text-sm font-bold leading-snug text-[#2A1E1B]">{s.name}</span>
+                    <span className="mt-4 flex items-center justify-between gap-2 border-t border-[#E7DFD4] pt-3">
+                      <span className="truncate text-base font-extrabold text-[#B48B43]">₱ {s.price.toLocaleString()}</span>
+                    </span>
+                  </span>
                 </button>
               );
             })}
@@ -265,6 +277,7 @@ export default function StaffPOSView({ onSale,currentUser }) {
       {confirmReview&&<ConfirmModal message="This save was rejected. Verify any cash or wallet payment already received before reviewing the cart. Returning to the cart does not refund a payment." onCancel={()=>setConfirmReview(false)} onConfirm={()=>{pending.current=null;checkoutKey.current=null;setPendingCheckout(null);setSplitPayments([]);setSaveError('');setCanReviewCheckout(false);setConfirmReview(false);setView('pos');}}/>}
       {confirmClear && <ConfirmModal message="Clear all services from the current cart?" danger onCancel={() => setConfirmClear(false)} onConfirm={() => { setCart([]); setConfirmClear(false);markSaved(cartScope); }} />}
       {demoReceipt && <DemoReceiptModal sale={demoReceipt} onClose={() => setDemoReceipt(null)} />}
+      {confirmedTransaction&&<StaffTransactionDialog token={currentUser?.accessToken} transactionId={confirmedTransaction} confirmed onClose={()=>setConfirmedTransaction(null)}/>}
       <Toast msg={toast} />
     </div>
   );

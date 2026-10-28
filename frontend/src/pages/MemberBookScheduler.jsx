@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   CalendarDays,
@@ -39,8 +39,12 @@ export default function MemberBookScheduler({
   const [selectedServiceIds, setSelectedServiceIds] = useState([]);
   const [appointmentDate, setAppointmentDate] = useState(getSalonDate);
   const [availability, setAvailability] = useState({});
-  const [selectedTimes, setSelectedTimes] = useState({});
-  const [createdServiceIds, setCreatedServiceIds] = useState([]);
+  const [selectedTime, setSelectedTime] = useState('');
+  const [createdBooking,setCreatedBooking]=useState(null);
+  const [calendarError,setCalendarError]=useState('');
+  const [openingCalendar,setOpeningCalendar]=useState(false);
+  const bookingAttempt=useRef(null);
+  const submitting=useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -52,7 +56,12 @@ export default function MemberBookScheduler({
   const initials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
   const profilePhoto = (() => { try { return localStorage.getItem(`centyzz-member-avatar:${user?.id ?? user?.email ?? 'member'}`) || ''; } catch { return ''; } })();
   const selectedServices = selectedServiceIds.map((id) => services.find((item) => String(item.id) === String(id))).filter(Boolean);
-  const isLoadingSlots = selectedServiceIds.some((id) => !availability[`${appointmentDate}:${id}`]);
+  const selectionKey=selectedServiceIds.join(',');
+  const slotKey=appointmentDate+':'+selectionKey;
+  const slotData=availability[slotKey];
+  const isLoadingSlots=selectedServiceIds.length>0&&!slotData;
+  const totalPrice=selectedServices.reduce((n,item)=>n+Number(item.price),0);
+  const totalDuration=selectedServices.reduce((n,item)=>n+Number(item.durationMinutes),0);
 
   const surface = isDarkMode ? 'bg-[#171512] text-[#F5F1EA]' : 'bg-[#F6F4EF] text-[#443523]';
   const cardSurface = isDarkMode ? 'border-[#39342B] bg-[#211F1B]' : 'border-[#E9E4D8] bg-white';
@@ -90,61 +99,35 @@ export default function MemberBookScheduler({
   }, [selectedService]);
 
   useEffect(() => {
-    if (!selectedServiceIds.length || !appointmentDate) return undefined;
-    let isCurrent = true;
-    Promise.all(selectedServiceIds.map(async (id) => {
-      try {
-        const result = await api.getAvailableSlots(appointmentDate, id);
-        return [id, { slots: result.slots || [] }];
-      } catch (error) {
-        return [id, { slots: [], error: error.message }];
-      }
-    })).then((results) => {
-      if (isCurrent) setAvailability((current) => ({
-        ...current,
-        ...Object.fromEntries(results.map(([id, value]) => [`${appointmentDate}:${id}`, value])),
-      }));
-    });
-    return () => {
-      isCurrent = false;
-    };
-  }, [appointmentDate, selectedServiceIds]);
+    if (!selectionKey || !appointmentDate) return;
+    let current=true;
+    api.getAvailableSlots(appointmentDate,selectionKey.split(',').map(Number))
+      .then(result=>{if(current)setAvailability({[slotKey]:{slots:result.slots||[]}});})
+      .catch(error=>{if(current)setAvailability({[slotKey]:{slots:[],error:error.message}});});
+    return ()=>{current=false;};
+  },[appointmentDate,selectionKey,slotKey]);
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setFormError('');
-    if (!user?.accessToken) {
-      setFormError('Please sign in with a registered account to book an appointment.');
-      return;
-    }
-    if (!selectedServices.length || selectedServices.some((item) => !selectedTimes[item.id])) {
-      setFormError('Choose an available time for every selected service.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    let createdCount = 0;
-    try {
-      for (const selected of selectedServices) {
-        if (createdServiceIds.includes(selected.id)) continue;
-        await api.createMyAppointment(user.accessToken, {
-          serviceId: Number(selected.id),
-          customerName: fullName,
-          customerEmail: user.email,
-          appointmentDate,
-          startTime: selectedTimes[selected.id],
-        });
-        createdCount += 1;
-        setCreatedServiceIds((ids) => [...ids, selected.id]);
-      }
-      onAppointmentCreated?.();
-      setActivePage('member-bookings');
-    } catch (error) {
-      const completed = createdServiceIds.length + createdCount;
-      setFormError(completed ? `${completed} appointment(s) were saved. The remaining service could not be booked: ${error.message}` : error.message);
-    } finally {
-      setIsSubmitting(false);
-    }
+  const changeSelection=(id)=>{
+    setSelectedServiceIds(ids=>ids.includes(String(id))?ids.filter(value=>value!==String(id)):[...ids,String(id)]);
+    setSelectedTime('');setAvailability({});setFormError('');bookingAttempt.current=null;
+  };
+  const handleSubmit=async event=>{
+    event.preventDefault();if(submitting.current)return;
+    if(!user?.accessToken){setFormError('Please sign in to book an appointment.');return;}
+    if(!selectedServices.length||!selectedTime){setFormError('Select your services and one available appointment time.');return;}
+    const payload={serviceIds:selectedServiceIds.map(Number),customerName:fullName,customerEmail:user.email,appointmentDate,startTime:selectedTime};
+    const signature=JSON.stringify(payload);
+    if(!bookingAttempt.current||bookingAttempt.current.signature!==signature)bookingAttempt.current={signature,key:crypto.randomUUID()};
+    submitting.current=true;setIsSubmitting(true);setFormError('');
+    try{const result=await api.createMyAppointment(user.accessToken,{...payload,idempotencyKey:bookingAttempt.current.key});setCreatedBooking(result.data);onAppointmentCreated?.();}
+    catch(error){setFormError(error.message+' No partial service booking was saved. If the connection was interrupted, retry this same booking safely.');}
+    finally{submitting.current=false;setIsSubmitting(false);}
+  };
+  const openCalendar=async()=>{
+    const popup=window.open('about:blank','_blank');if(popup)popup.opener=null;
+    setOpeningCalendar(true);setCalendarError('');
+    try{const calendar=await api.getAppointmentCalendar(createdBooking.id,user.accessToken);const url=new URL(calendar.googleCalendarUrl);if(url.origin!=='https://calendar.google.com')throw Error('Invalid calendar destination.');if(popup)popup.location.href=url.href;else throw Error('Allow popups for this site to open Google Calendar.');}
+    catch(error){popup?.close();setCalendarError(error.message);}finally{setOpeningCalendar(false);}
   };
 
   return (
@@ -196,7 +179,7 @@ export default function MemberBookScheduler({
             </button>
           </header>
 
-          <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+          {createdBooking ? <section className={`rounded-xl border p-6 ${cardSurface}`} role="status"><h2 className="text-lg font-bold">Appointment saved</h2><p className="mt-2 text-sm">Your selected services are booked together in one appointment.</p><p className="mt-2 text-sm">{selectedServices.map(item=>item.name).join(', ')}</p><p className="mt-2 text-sm">{formatDate(appointmentDate)} · {selectedTime} · {totalDuration} minutes</p><p className="mt-2 text-sm">Save the prefilled event in Google Calendar to add it to your calendar.</p><div className="mt-5 flex flex-wrap gap-3"><button type="button" disabled={openingCalendar} onClick={openCalendar} className="rounded-lg bg-[#4A3928] px-4 py-3 text-sm text-white">{openingCalendar?'Opening calendar…':'Add to Google Calendar'}</button><button type="button" className="rounded-lg border px-4 py-3 text-sm" onClick={()=>setActivePage('member-bookings')}>View my bookings</button></div>{calendarError&&<p role="alert" className="mt-3 text-sm text-red-600">{calendarError}</p>}</section> : <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
             <section className={`space-y-6 rounded-xl border p-5 sm:p-6 ${cardSurface}`}>
               <div>
                 <label htmlFor="member-book-service" className="mb-2 block text-xs font-semibold">Selected services</label>
@@ -210,7 +193,7 @@ export default function MemberBookScheduler({
                       <fieldset key={group.id} className="space-y-1.5">
                         <legend className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[#C5A059]">{group.category}</legend>
                         {(group.services || []).map((item) => (
-                          <option key={item.id} value={item.id}>{item.name} · ₱{Number(item.price).toFixed(2)}</option>
+                          <label key={item.id} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg p-2 hover:bg-[#C5A059]/10"><input type="checkbox" checked={selectedServiceIds.includes(String(item.id))} disabled={isSubmitting||(!selectedServiceIds.includes(String(item.id))&&selectedServiceIds.length>=20)} onChange={()=>changeSelection(item.id)}/><span className="text-sm">{item.name} · ₱{Number(item.price).toFixed(2)} · {item.durationMinutes} mins</span></label>
                         ))}
                       </fieldset>
                     ))}
@@ -220,7 +203,7 @@ export default function MemberBookScheduler({
 
               <div>
                 <label htmlFor="member-book-date" className="mb-2 block text-xs font-semibold">Appointment date</label>
-                <input id="member-book-date" type="date" min={getSalonDate()} value={appointmentDate} onChange={(event) => { setAppointmentDate(event.target.value); setSelectedTimes({}); setAvailability({}); }} required className={`w-full rounded-lg border px-3 py-2.5 text-sm ${inputSurface}`} />
+                <input id="member-book-date" type="date" min={getSalonDate()} value={appointmentDate} onChange={(event) => { setAppointmentDate(event.target.value); setSelectedTime(''); setAvailability({}); bookingAttempt.current=null; }} required className={`w-full rounded-lg border px-3 py-2.5 text-sm ${inputSurface}`} />
               </div>
 
               <div>
@@ -233,28 +216,10 @@ export default function MemberBookScheduler({
                 ) : isLoadingSlots ? (
                   <p role="status" className={`text-sm ${mutedText}`}>Checking availability...</p>
                 ) : (
-                  <div className="space-y-4">{selectedServices.map((item) => {
-                    const slotData = availability[`${appointmentDate}:${item.id}`];
-                    const duration = Number(item.durationMinutes) || 0;
-                    const toMinutes = (time) => { const [hour, minute] = time.split(':').map(Number); return hour * 60 + minute; };
-                    return <section key={item.id} className={`rounded-lg border p-3 ${inputSurface}`}>
-                      <h3 className="mb-2 text-xs font-semibold">{item.name}</h3>
-                      {slotData?.error ? <p role="alert" className="text-xs text-red-600">{slotData.error}</p>
-                        : !slotData?.slots?.length ? <p className={`text-xs ${mutedText}`}>No times are available for this date.</p>
-                          : <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{slotData.slots.map((slot) => {
-                            const start = toMinutes(slot.startTime);
-                            const overlapsChosen = selectedServices.some((other) => {
-                              if (String(other.id) === String(item.id) || !selectedTimes[other.id]) return false;
-                              const otherStart = toMinutes(selectedTimes[other.id]);
-                              const otherEnd = otherStart + (Number(other.durationMinutes) || 0);
-                              return start < otherEnd && start + duration > otherStart;
-                            });
-                            return <button key={slot.startTime} type="button" disabled={!slot.available || overlapsChosen} onClick={() => setSelectedTimes((times) => ({ ...times, [item.id]: slot.startTime }))} className={`min-h-11 rounded-lg border px-3 py-2.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${selectedTimes[item.id] === slot.startTime ? 'border-[#4A3928] bg-[#4A3928] text-white' : `${inputSurface} hover:border-[#C5A059]`}`}>
-                              {slot.startTime}
-                            </button>;
-                          })}</div>}
-                    </section>;
-                  })}</div>
+                  <section className={`rounded-lg border p-3 ${inputSurface}`}>
+                    <p className="mb-3 text-xs">One appointment · {totalDuration} minutes for all selected services</p>
+                    {slotData?.error?<p role="alert" className="text-xs text-red-600">{slotData.error}</p>:!slotData?.slots?.some(slot=>slot.available)?<p className={`text-xs ${mutedText}`}>No available time can fit all these services. Choose another date.</p>:<div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{slotData.slots.map(slot=><button key={slot.startTime} type="button" disabled={!slot.available||isSubmitting} onClick={()=>{setSelectedTime(slot.startTime);bookingAttempt.current=null;}} className={`min-h-11 rounded-lg border px-3 py-2.5 text-xs disabled:opacity-40 ${selectedTime===slot.startTime?'border-[#4A3928] bg-[#4A3928] text-white':inputSurface}`}>{slot.startTime} – {slot.endTime}</button>)}</div>}
+                  </section>
                 )}
               </div>
 
@@ -267,17 +232,17 @@ export default function MemberBookScheduler({
                 <dl className={`mt-4 space-y-3 text-xs ${mutedText}`}>
                   <div className="flex justify-between gap-3"><dt>Member</dt><dd className="text-right font-medium">{fullName}</dd></div>
                   <div className="flex justify-between gap-3"><dt>Email</dt><dd className="break-all text-right font-medium">{user?.email || 'Not provided'}</dd></div>
-                  <div className="flex justify-between gap-3"><dt>Service</dt><dd className="text-right font-medium">{service?.name || 'Not selected'}</dd></div>
+                  <div className="flex justify-between gap-3"><dt>Service</dt><dd className="text-right font-medium">{selectedServices.map(item=>item.name).join(', ') || 'Not selected'}</dd></div>
                   <div className="flex justify-between gap-3"><dt>Date</dt><dd className="text-right font-medium">{formatDate(appointmentDate)}</dd></div>
                   <div className="flex justify-between gap-3"><dt>Time</dt><dd className="text-right font-medium">{selectedTime || 'Not selected'}</dd></div>
                 </dl>
-                {service && <p className="mt-4 border-t border-inherit pt-3 text-sm font-bold">₱{Number(service.price).toFixed(2)}</p>}
+                {selectedServices.length>0 && <p className="mt-4 border-t border-inherit pt-3 text-sm font-bold">₱{totalPrice.toFixed(2)} · {totalDuration} minutes</p>}
               </section>
-              <button type="submit" disabled={isSubmitting || isLoadingServices || !service || !selectedTime} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#4A3928] px-4 py-3 text-xs font-semibold text-white transition-colors hover:bg-[#725334] disabled:cursor-not-allowed disabled:opacity-50">
+              <button type="submit" disabled={isSubmitting || isLoadingServices || isLoadingSlots || !selectedServices.length || !selectedTime} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#4A3928] px-4 py-3 text-xs font-semibold text-white transition-colors hover:bg-[#725334] disabled:cursor-not-allowed disabled:opacity-50">
                 {isSubmitting ? 'Saving appointment...' : <><Check className="h-4 w-4" /> Confirm appointment</>}
               </button>
             </aside>
-          </form>
+          </form>}
         </div>
       </main>
 
