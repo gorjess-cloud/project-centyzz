@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect,useState } from 'react';
+import {staffPosRequest} from '../../api/staff-pos';
 import { ArrowLeft, Banknote, QrCode, Split, Printer } from 'lucide-react';
 import { peso, input, btn, btnGhost, card, Modal } from './ui';
 
@@ -50,15 +51,33 @@ const half = 'flex flex-col gap-3 sm:w-1/2';
 
 /* ---------- Cash modal ---------- */
 // amount: what this cash payment must cover. allowDiscount: only for full (non-split) payments.
-export function CashModal({ items, subtotal, amount, allowDiscount = true, onConfirm, onCancel,busy=false }) {
+export function CashModal({ items, subtotal, amount, allowDiscount = true, onConfirm, onCancel,busy=false,token }) {
   const [pay, setPay] = useState('');
-  const [disc, setDisc] = useState('');
-  const discount = allowDiscount ? Math.min(Math.max(toNum(disc), 0), amount) : 0;
-  const due = amount - discount;
-  const tendered = toNum(pay);
-  const enough = cents(tendered) >= cents(due) && due > 0;
-  const change = enough ? tendered - due : 0;
-  const submit = (e) => { e.preventDefault(); if (enough) onConfirm({ discount, amount: due, tendered, change }); };
+  const [discountType,setDiscountType]=useState('NONE'),[promoCode,setPromoCode]=useState(''),[quoteResult,setQuoteResult]=useState(null);
+  const cartKey=JSON.stringify(items.map(item=>({serviceId:item.id,quantity:item.qty})));
+  const code=discountType==='PROMO'?promoCode.trim().toUpperCase():'';
+  const selectionKey=JSON.stringify([cartKey,discountType,code,token]);
+  const current=quoteResult?.key===selectionKey?quoteResult:null;
+  const quoted=current?.data;
+  const discount=allowDiscount&&discountType!=='NONE'?(quoted?.discount??0):0;
+  const priceMatches=!quoted||cents(quoted.subtotal)===cents(subtotal);
+  const verified=!allowDiscount||discountType==='NONE'||(Boolean(quoted)&&priceMatches);
+  const due=amount-discount,tendered=toNum(pay),enough=verified&&cents(tendered)>=cents(due)&&due>0,change=enough?tendered-due:0;
+  useEffect(()=>{
+    if(!allowDiscount||!['PWD','SENIOR'].includes(discountType))return;
+    let active=true;
+    staffPosRequest(token,'quote',{method:'POST',body:{items:JSON.parse(cartKey),discountType}})
+      .then(data=>{if(active)setQuoteResult({key:selectionKey,data});})
+      .catch(error=>{if(active)setQuoteResult({key:selectionKey,error:error.message});});
+    return()=>{active=false;};
+  },[allowDiscount,cartKey,discountType,selectionKey,token]);
+  const verifyPromo=async()=>{
+    setQuoteResult({key:selectionKey,loading:true});
+    try{const data=await staffPosRequest(token,'quote',{method:'POST',body:{items:JSON.parse(cartKey),discountType:'PROMO',promoCode:code}});setQuoteResult({key:selectionKey,data});}
+    catch(error){setQuoteResult({key:selectionKey,error:error.message});}
+  };
+  const submit=e=>{e.preventDefault();if(enough&&!busy)onConfirm({discount,discountType:allowDiscount?discountType:'NONE',promoCode:allowDiscount?code:'',amount:due,tendered,change});};
+
 
   return (
     <Modal title="Check Out · Cash" onClose={onCancel}>
@@ -73,12 +92,15 @@ export function CashModal({ items, subtotal, amount, allowDiscount = true, onCon
             <input autoFocus inputMode="decimal" className={input} placeholder="₱ 0.00" value={pay}
               onChange={(e) => setPay(e.target.value.replace(/[^\d.]/g, ''))} />
           </Field>
-          {allowDiscount && (
-            <Field label="Discount">
-              <input inputMode="decimal" className={input} placeholder="₱ 0.00" value={disc}
-                onChange={(e) => setDisc(e.target.value.replace(/[^\d.]/g, ''))} />
-            </Field>
-          )}
+          {allowDiscount&&<div className="space-y-3">
+            <Field label="Discount"><select className={input} value={discountType} disabled={busy} onChange={e=>{setDiscountType(e.target.value);setPromoCode('');setQuoteResult(null);}}><option value="NONE">No discount</option><option value="PWD">PWD · 20%</option><option value="SENIOR">Senior Citizen · 20%</option><option value="PROMO">Promo code</option></select></Field>
+            {discountType==='PROMO'&&<Field label="Promo code"><div className="flex gap-2"><input className={input} aria-label="Promo code" maxLength={50} placeholder="Enter code from Services" value={promoCode} onChange={e=>{setPromoCode(e.target.value.toUpperCase());setQuoteResult(null);}}/><button type="button" className={btnGhost} disabled={!code||busy||current?.loading} onClick={verifyPromo}>{current?.loading?'Checking…':'Verify'}</button></div></Field>}
+            {current?.error&&<p role="alert" className="text-xs text-red-700">{current.error}</p>}
+            {!priceMatches&&<p role="alert" className="text-xs text-red-700">Service prices changed. Cancel and refresh your cart before collecting payment.</p>}
+            {quoted&&priceMatches&&<p role="status" className="rounded-lg bg-emerald-50 p-2 text-xs text-emerald-800">{quoted.label} applied: {peso(quoted.discount)}</p>}
+            {['PWD','SENIOR'].includes(discountType)&&!current&&<p role="status" className="text-xs text-[#8A8174]">Calculating discount…</p>}
+            <p className="text-[10px] text-[#8A8174]">One discount per sale. PWD, Senior Citizen and promo codes cannot be combined.</p>
+          </div>}
           <Field label="Change"><input readOnly className={input} value={peso(change)} /></Field>
           {pay !== '' && !enough && <p className="text-[11px] font-bold text-rose-600">Short by {peso(Math.max(0, due - tendered))}</p>}
           <div className="mt-auto flex flex-col gap-2 pt-2">

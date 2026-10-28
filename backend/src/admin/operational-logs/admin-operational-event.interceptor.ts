@@ -23,7 +23,7 @@ const actions: Record<string, Record<string, [string, string]>> = {
     toggleStatus: ['Staff & Service', 'Service Status Updated'],
     toggleArchive: ['Staff & Service', 'Service Archive Updated'],
   },
-  PromosController: { savePromo: ['POS & Financial', 'Promo Saved'] },
+  PromosController: { savePromo: ['POS & Financial', 'Promo Saved'],updatePromo:['POS & Financial','Promo Updated'] },
 };
 
 @Injectable()

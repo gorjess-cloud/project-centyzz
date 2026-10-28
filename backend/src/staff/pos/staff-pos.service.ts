@@ -1,4 +1,8 @@
 import {
+  discountSelection,
+  calculatePosDiscount,
+} from './pos-discount-rules.js';
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -92,10 +96,15 @@ export function checkoutInput(body: any) {
     throw new BadRequestException(
       'Each external payment needs a distinct receipt reference.',
     );
+  const selection = discountSelection(body);
   const fingerprint = createHash('sha256')
-    .update(JSON.stringify({ items, discount, expected, payments }))
+    .update(JSON.stringify({ items, discount, expected, payments, selection }))
     .digest('hex');
   return {
+    legacyFingerprint: createHash('sha256')
+      .update(JSON.stringify({ items, discount, expected, payments }))
+      .digest('hex'),
+    selection,
     key: body.idempotencyKey,
     items,
     discount,
@@ -104,11 +113,40 @@ export function checkoutInput(body: any) {
     fingerprint,
   };
 }
-export type StaffTransactionDetails={
- id:string;txnId:string;date:string;time:string;cashier:string;status:string;total:number;legacy:boolean;
- subtotal?:number;discount?:number;tax?:number;currency?:string;summary?:string;paymentMethod?:string;note?:string;
- items:{id:string;name:string;quantity:number;unitPrice:number;discount:number;tax:number;total:number}[];
- payments:{id:string;method:string;status:string;amount:number;cashReceived:number|null;change:number|null}[];
+export type StaffTransactionDetails = {
+  id: string;
+  txnId: string;
+  date: string;
+  time: string;
+  cashier: string;
+  status: string;
+  total: number;
+  legacy: boolean;
+  discounts?: { type: string; label: string; amount: number }[];
+  subtotal?: number;
+  discount?: number;
+  tax?: number;
+  currency?: string;
+  summary?: string;
+  paymentMethod?: string;
+  note?: string;
+  items: {
+    id: string;
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    discount: number;
+    tax: number;
+    total: number;
+  }[];
+  payments: {
+    id: string;
+    method: string;
+    status: string;
+    amount: number;
+    cashReceived: number | null;
+    change: number | null;
+  }[];
 };
 @Injectable()
 export class StaffPosService implements OnModuleDestroy {
@@ -121,7 +159,10 @@ export class StaffPosService implements OnModuleDestroy {
   onModuleDestroy() {
     return this.pool.end();
   }
-  async transactionDetails(actorId:number,key:string):Promise<StaffTransactionDetails> {
+  async transactionDetails(
+    actorId: number,
+    key: string,
+  ): Promise<StaffTransactionDetails> {
     const match = /^(transaction|legacy):([1-9]\d{0,18})$/.exec(key);
     if (!match || BigInt(match[2]) > 9223372036854775807n)
       throw new BadRequestException('Invalid transaction reference.');
@@ -189,9 +230,20 @@ export class StaffPosService implements OnModuleDestroy {
           [row.id],
         )
       ).rows;
+      const discounts = (
+        await c.query(
+          'SELECT source,description,amount::text FROM public.transaction_discounts WHERE transaction_id=$1::bigint AND removed_at IS NULL ORDER BY id',
+          [row.id],
+        )
+      ).rows;
       await c.query('COMMIT');
       return {
         id: 'transaction:' + row.id,
+        discounts: discounts.map((d) => ({
+          type: d.source,
+          label: d.description,
+          amount: Number(d.amount),
+        })),
         txnId: 'TXN-' + row.id,
         date: row.date,
         time: row.time,
@@ -229,6 +281,72 @@ export class StaffPosService implements OnModuleDestroy {
       c.release();
     }
   }
+  async discountFor(
+    c: Pick<Pool, 'query'>,
+    selection: ReturnType<typeof discountSelection>,
+    lines: any[],
+    lock = false,
+  ) {
+    let promo: any;
+    if (selection.type === 'PROMO') {
+      const rows = (
+        await c.query(
+          `SELECT * FROM public.promos WHERE upper(btrim(code))=$1 AND archived_at IS NULL ORDER BY id ${lock ? 'FOR UPDATE' : ''}`,
+          [selection.code],
+        )
+      ).rows;
+      if (rows.length > 1)
+        throw new BadRequestException(
+          'This promo code is ambiguous. Ask Admin to review it.',
+        );
+      promo = rows[0];
+    }
+    return calculatePosDiscount(selection, lines, promo);
+  }
+  async quote(actorId: number, body: any) {
+    // Reuse the same cart/quantity validation without trusting a client price or discount.
+    const input = checkoutInput({
+      ...body,
+      idempotencyKey: randomUUID(),
+      discount: '0.00',
+      expectedTotal: '0.01',
+      payments: [{ method: 'CASH', amount: '0.01', tendered: '0.01' }],
+    });
+    const actor = await this.pool.query(
+      `SELECT s.id FROM public.staff s JOIN public."user" u ON u.id=s.user_id WHERE s.user_id=$1 AND u.role='STAFF' AND u."isActive" AND u.archived_at IS NULL AND s.is_active AND s.archived_at IS NULL`,
+      [actorId],
+    );
+    if (!actor.rowCount)
+      throw new ForbiddenException(
+        'An active linked Staff account is required.',
+      );
+    const services = (
+      await this.pool.query(
+        `SELECT s.id,s.name,s.price::text,c.name AS category_name FROM public.services s LEFT JOIN public.service_categories c ON c.id=s.category_id WHERE s.id=ANY($1::int[]) AND s.is_active AND s.archived_at IS NULL`,
+        [input.items.map((i) => i.serviceId)],
+      )
+    ).rows;
+    if (services.length !== input.items.length)
+      throw new BadRequestException('A selected service is unavailable.');
+    const lines = input.items.map((item) => {
+      const service = services.find((s) => s.id === item.serviceId);
+      return {
+        ...item,
+        name: service.name,
+        categoryName: service.category_name,
+        unit: cents(service.price),
+      };
+    });
+    const result = await this.discountFor(this.pool, input.selection, lines);
+    return {
+      subtotal: amount(result.subtotal),
+      discount: amount(result.discount),
+      total: amount(result.total),
+      label: result.label,
+      discountType: result.type,
+      promoCode: input.selection.code,
+    };
+  }
   async checkout(actorId: number, body: any) {
     const input = checkoutInput(body),
       c = await this.pool.connect();
@@ -246,7 +364,11 @@ export class StaffPosService implements OnModuleDestroy {
       if (existing) {
         if (
           existing.cashier_id !== actorId ||
-          existing.checkout_request_hash !== input.fingerprint
+          (existing.checkout_request_hash !== input.fingerprint &&
+            !(
+              input.selection.type === 'NONE' &&
+              existing.checkout_request_hash === input.legacyFingerprint
+            ))
         )
           throw new ConflictException(
             'This checkout reference is already in use.',
@@ -286,7 +408,7 @@ export class StaffPosService implements OnModuleDestroy {
         );
       const services = (
         await c.query(
-          'SELECT id,name,price::text FROM public.services WHERE id=ANY($1::int[]) AND is_active AND archived_at IS NULL ORDER BY id FOR SHARE',
+          'SELECT s.id,s.name,s.price::text,c.name AS category_name FROM public.services s LEFT JOIN public.service_categories c ON c.id=s.category_id WHERE s.id=ANY($1::int[]) AND s.is_active AND s.archived_at IS NULL ORDER BY s.id FOR SHARE OF s',
           [input.items.map((i) => i.serviceId)],
         )
       ).rows;
@@ -294,9 +416,24 @@ export class StaffPosService implements OnModuleDestroy {
         throw new BadRequestException('A selected service is unavailable.');
       const lines = input.items.map((item) => {
         const service = services.find((s) => s.id === item.serviceId);
-        return { ...item, name: service.name, unit: cents(service.price) };
+        return {
+          ...item,
+          name: service.name,
+          categoryName: service.category_name,
+          unit: cents(service.price),
+        };
       });
       const subtotal = lines.reduce((sum, l) => sum + l.unit * l.quantity, 0);
+      const discountRule = await this.discountFor(
+        c,
+        input.selection,
+        lines,
+        true,
+      );
+      if (input.discount !== discountRule.discount)
+        throw new ConflictException(
+          'The selected discount changed. Verify it again before checkout.',
+        );
       if (
         input.discount >= subtotal ||
         subtotal - input.discount !== input.expected
@@ -328,6 +465,24 @@ export class StaffPosService implements OnModuleDestroy {
             amount(line.unit),
           ],
         );
+      if (discountRule.discount > 0) {
+        await c.query(
+          'INSERT INTO public.transaction_discounts(transaction_id,source,promo_id,description,amount,approved_by) VALUES($1,$2,$3,$4,$5,$6)',
+          [
+            transaction.id,
+            discountRule.type,
+            discountRule.promoId,
+            discountRule.label,
+            amount(discountRule.discount),
+            actorId,
+          ],
+        );
+        if (discountRule.promoId)
+          await c.query(
+            'UPDATE public.promos SET usage_count=usage_count+1,updated_at=now() WHERE id=$1',
+            [discountRule.promoId],
+          );
+      }
       for (const payment of input.payments)
         await c.query(
           `INSERT INTO public.payments(transaction_id,idempotency_key,method,status,amount,cash_received,provider,provider_reference,received_by,paid_at) VALUES($1,$2,$3,'SUCCEEDED',$4,$5,$6,$7,$8,now())`,

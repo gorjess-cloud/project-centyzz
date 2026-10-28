@@ -149,11 +149,11 @@ export default function StaffPOSView({ onSale,currentUser }) {
   const subtotal = useMemo(() => cart.reduce((s, i) => s + i.price * i.qty, 0), [cart]);
 
   // Clear the cart only after an authenticated, idempotent database save succeeds.
-  const finalize = async (payments,discount=0) => {
+  const finalize = async (payments,discount=0,selection={discountType:'NONE',promoCode:''}) => {
     if(demoMode){const sale={id:`DEMO-${Date.now()}`,customer:customerId,items:cart.map(({id,name,price,qty})=>({id,name,price,qty})),subtotal,discount,total:subtotal-discount,payments,paidAt:new Date().toISOString(),isDemo:true};setDemoReceipt(sale);setCart([]);setSplitPayments([]);setModal(null);setView('pos');markSaved(cartScope);return;}
     if(running.current)return;running.current=true;setSaving(true);setSaveError('');setCanReviewCheckout(false);
     if(!checkoutKey.current)checkoutKey.current=crypto.randomUUID();
-    const request=pending.current||{idempotencyKey:checkoutKey.current,items:cart.map(i=>({serviceId:i.id,quantity:i.qty})),discount:Number(discount).toFixed(2),expectedTotal:(subtotal-discount).toFixed(2),payments:payments.map(p=>({...p,amount:Number(p.amount).toFixed(2),...(p.tendered!==undefined?{tendered:Number(p.tendered).toFixed(2)}:{})}))};
+    const request=pending.current||{idempotencyKey:checkoutKey.current,...selection,items:cart.map(i=>({serviceId:i.id,quantity:i.qty})),discount:Number(discount).toFixed(2),expectedTotal:(subtotal-discount).toFixed(2),payments:payments.map(p=>({...p,amount:Number(p.amount).toFixed(2),...(p.tendered!==undefined?{tendered:Number(p.tendered).toFixed(2)}:{})}))};
     pending.current=request;setPendingCheckout(request);setModal(null);
     try{const saved=await staffPosRequest(currentUser?.accessToken,'checkout',{method:'POST',body:request});
       onSale?.({...saved,items:cart,paidAt:new Date().toISOString()});
@@ -176,8 +176,8 @@ export default function StaffPOSView({ onSale,currentUser }) {
     if (paid >= Math.round(subtotal * 100)){setSplitPayments(all);finalize(all);}
     else setSplitPayments(all);
   };
-  const onCash = ({ discount, amount, tendered, change }) => {
-    if (!modal.split) return finalize([{ method: 'Cash', amount, tendered, change }], discount);
+  const onCash = ({ discount,discountType,promoCode, amount, tendered, change }) => {
+    if (!modal.split) return finalize([{ method: 'Cash', amount, tendered, change }], discount,{discountType,promoCode});
     collect({ method: 'Cash', amount, tendered, change });
   };
   const onQr = ({ amount,reference,verified }) => {
@@ -272,7 +272,7 @@ export default function StaffPOSView({ onSale,currentUser }) {
           )} />
       )}
 
-      {modal?.type === 'cash' && <CashModal items={cart} subtotal={subtotal} amount={modal.amount} allowDiscount={!modal.split} busy={saving} onConfirm={onCash} onCancel={() => setModal(null)} />}
+      {modal?.type === 'cash' && <CashModal token={currentUser?.accessToken} items={cart} subtotal={subtotal} amount={modal.amount} allowDiscount={!modal.split} busy={saving} onConfirm={onCash} onCancel={() => setModal(null)} />}
       {modal?.type === 'qr' && <QrModal items={cart} subtotal={subtotal} amount={modal.amount} busy={saving} demo={demoMode} onConfirm={onQr} onCancel={() => setModal(null)} />}
       {confirmReview&&<ConfirmModal message="This save was rejected. Verify any cash or wallet payment already received before reviewing the cart. Returning to the cart does not refund a payment." onCancel={()=>setConfirmReview(false)} onConfirm={()=>{pending.current=null;checkoutKey.current=null;setPendingCheckout(null);setSplitPayments([]);setSaveError('');setCanReviewCheckout(false);setConfirmReview(false);setView('pos');}}/>}
       {confirmClear && <ConfirmModal message="Clear all services from the current cart?" danger onCancel={() => setConfirmClear(false)} onConfirm={() => { setCart([]); setConfirmClear(false);markSaved(cartScope); }} />}

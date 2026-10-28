@@ -28,6 +28,7 @@ export class StaffPosController {
     private readonly pos: StaffPosService,
     private readonly reports: ReportsService,
   ) {}
+  @Post('quote') quote(@Req() r:AuthenticatedRequest,@Body() body:any){return this.pos.quote(r.user.sub,body);}
   @Post('checkout') checkout(
     @Req() r: AuthenticatedRequest,
     @Body() body: any,

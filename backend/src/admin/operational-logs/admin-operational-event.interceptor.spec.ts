@@ -22,7 +22,7 @@ describe('Admin operational event recording', () => {
     ['ClientsController', 'toggleArchive'], ['ClientsController', 'addClientBooking'],
     ['ServicesController', 'createService'], ['ServicesController', 'updateService'],
     ['ServicesController', 'toggleStatus'], ['ServicesController', 'toggleArchive'],
-    ['PromosController', 'savePromo'],
+    ['PromosController', 'savePromo'], ['PromosController', 'updatePromo'],
   ])('records one successful %s.%s event', async (controller, handler) => {
     const response = { id: 42, temporaryPassword: 'secret', temporaryPin: '123456' };
     expect(await execute(controller, handler, of(response))).toEqual([response]);
