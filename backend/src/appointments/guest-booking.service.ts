@@ -1,15 +1,13 @@
 import 'dotenv/config';
 import {
-  BadGatewayException,
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
-  ServiceUnavailableException,
 } from '@nestjs/common';
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import pg from 'pg';
 import type { PoolClient } from 'pg';
 
@@ -128,7 +126,10 @@ export class GuestBookingService {
     // Match the same lock for every guest checkout on this date.
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`centyzz-guest-booking:${date}`]);
   }
-  async createCheckout(input: BookingInput, publicOrigin: string) {
+  async createCheckout(input: BookingInput) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ForbiddenException('Demo checkout is disabled in production');
+    }
     const { serviceId, stylistId, appointmentDate, startTime } = input;
     const start = this.checkStart(appointmentDate, startTime);
     const name = String(input.customerName ?? '').trim();
@@ -160,7 +161,7 @@ export class GuestBookingService {
       const insert = await client.query(`INSERT INTO public.appointments
         (reference_code, service_id, customer_name, customer_email, appointment_date, start_time, end_time, status,
          staff_id, guest_phone, total_amount, deposit_amount, payment_status, payment_provider, reservation_expires_at, booking_token_hash)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,'AWAITING_DEPOSIT',$8,$9,$10,$11,'UNPAID','PAYMONGO_TEST',NOW() + INTERVAL '15 minutes',$12)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,'AWAITING_DEPOSIT',$8,$9,$10,$11,'UNPAID','DEMO',NOW() + INTERVAL '15 minutes',$12)
         RETURNING id`, [referenceCode, serviceId, name, email, appointmentDate, startTime, hhmm(end), stylistId, phone,
           (cents / 100).toFixed(2), (depositCents / 100).toFixed(2), hash(token)]);
       booking = { id: insert.rows[0].id, referenceCode, depositAmount: depositCents / 100,
@@ -172,41 +173,11 @@ export class GuestBookingService {
     } finally { client.release(); }
 
     if (!booking) throw new InternalServerErrorException('Booking could not be created');
-    const testKey = process.env.PAYMONGO_TEST_SECRET_KEY;
-    if (testKey?.startsWith('sk_test_')) {
-      try {
-        const result = await fetch('https://api.paymongo.com/v2/checkout_sessions', {
-          method: 'POST',
-          headers: { Authorization: `Basic ${Buffer.from(`${testKey}:`).toString('base64')}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: { attributes: {
-            billing: { name, email, phone },
-            line_items: [{ name: booking.serviceName, quantity: 1, amount: Math.round(booking.depositAmount * 100), currency: 'PHP' }],
-            payment_method_types: ['card', 'gcash', 'qrph'],
-            description: `Centyzz booking ${booking.referenceCode} (50% deposit)`,
-            reference_number: booking.referenceCode,
-            success_url: `${publicOrigin}/?centyzz_booking=success`,
-            cancel_url: `${publicOrigin}/?centyzz_booking=cancel`,
-            metadata: { booking_reference: booking.referenceCode },
-          } } }),
-        });
-        const body = await result.json() as { data?: { id?: string; attributes?: { checkout_url?: string } }; errors?: unknown };
-        const checkoutUrl = body.data?.attributes?.checkout_url;
-        if (!result.ok || !checkoutUrl || !body.data?.id) throw new BadGatewayException('Unable to initialize PayMongo test checkout');
-        await pool.query(`UPDATE public.appointments SET payment_reference = $2 WHERE id = $1 AND status='AWAITING_DEPOSIT'`, [booking.id, body.data.id]);
-        return { ...booking, token, mode: 'PAYMONGO_TEST', checkoutUrl, holdMinutes: HOLD_MINUTES };
-      } catch (error) {
-        await pool.query(`UPDATE public.appointments SET status='CANCELLED', payment_status='FAILED' WHERE id=$1 AND status='AWAITING_DEPOSIT'`, [booking.id]);
-        throw error instanceof BadGatewayException ? error : new BadGatewayException('PayMongo test checkout could not be created');
-      }
-    }
-    if (process.env.PAYMONGO_DEMO_ENABLED === 'true' && process.env.NODE_ENV !== 'production') {
-      return { ...booking, token, mode: 'DEMO', holdMinutes: HOLD_MINUTES };
-    }
-    await pool.query(`UPDATE public.appointments SET status='CANCELLED', payment_status='FAILED' WHERE id=$1 AND status='AWAITING_DEPOSIT'`, [booking.id]);
-    throw new ServiceUnavailableException('Configure PayMongo TEST credentials or explicitly enable local demo checkout');
+    // Development-only prototype: no payment gateway and no real money movement.
+    return { ...booking, token, mode: 'DEMO', holdMinutes: HOLD_MINUTES };
   }
   async completeDemo(id: number, token: string) {
-    if (process.env.NODE_ENV === 'production' || process.env.PAYMONGO_DEMO_ENABLED !== 'true') {
+    if (process.env.NODE_ENV === 'production') {
       throw new ForbiddenException('Demo checkout is unavailable');
     }
     if (!Number.isSafeInteger(id) || id < 1 || !/^[0-9a-f]{48}$/.test(token)) {
@@ -250,73 +221,16 @@ export class GuestBookingService {
     return { referenceCode: b.reference_code, status: b.status, paymentStatus: b.payment_status,
       depositAmount: Number(b.deposit_amount), holdExpired: b.status === 'AWAITING_DEPOSIT' && new Date(b.reservation_expires_at) <= new Date() };
   }
-  async paymongoWebhook(signature: string | undefined, raw: Buffer, event: unknown) {
-    const secret = process.env.PAYMONGO_TEST_WEBHOOK_SECRET;
-    if (!secret || !signature || !raw) throw new ForbiddenException('Webhook verification unavailable');
-    const sections = Object.fromEntries(signature.split(',').map((x) => x.trim().split('=')));
-    const t = sections.t ?? '';
-    const expected = createHmac('sha256', secret).update(`${t}.${raw.toString('utf8')}`).digest('hex');
-    const received = sections.te ?? '';
-    if (!/^\d+$/.test(t) || Math.abs(Date.now() / 1000 - Number(t)) > 300 || !/^[0-9a-f]{64}$/i.test(received)
-      || !timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(received, 'hex'))) {
-      throw new ForbiddenException('Invalid PayMongo webhook signature');
-    }
-    // PayMongo supports a legacy `data.attributes` event and the v2
-    // `event_type: send.webhook` envelope. Both must be TEST events.
-    const outer = event as { event_type?: string; data?: Record<string, unknown> };
-    const root = outer?.data;
-    const payload = (outer?.event_type === 'send.webhook'
-      ? root
-      : (root?.attributes as Record<string, unknown> | undefined)) as Record<string, unknown> | undefined;
-    if (payload?.type !== 'checkout_session.payment.paid' || payload.livemode !== false) {
-      return { received: true };
-    }
-    const checkout = payload.data as {id?: string; attributes?: {reference_number?: string; payments?: Array<{attributes?: {status?: string; amount?: number; currency?: string}}>} } | undefined;
-    const checkoutId = checkout?.id;
-    const reference = checkout?.attributes?.reference_number;
-    if (!checkoutId || !reference) throw new BadRequestException('Invalid PayMongo event');
-    // A signed payment is not necessarily an available booking: an expired
-    // hold might have been rebooked. Recheck inside the date lock before
-    // updating the appointment so a late payment cannot double-book a stylist.
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const selected = await client.query(`SELECT id, reference_code, appointment_date, start_time::text,
-        end_time::text, staff_id, status, payment_status, deposit_amount, reservation_expires_at
-        FROM public.appointments WHERE reference_code=$1 AND payment_reference=$2 FOR UPDATE`, [reference, checkoutId]);
-      if (!selected.rowCount) {
-        await client.query('COMMIT');
-        return { received: true };
-      }
-      const appointment = selected.rows[0] as DbAppointment;
-      if (appointment.payment_status !== 'UNPAID' || appointment.status !== 'AWAITING_DEPOSIT') {
-        await client.query('COMMIT');
-        return { received: true };
-      }
-      const paymentAttempts = checkout?.attributes?.payments;
-      if (!Array.isArray(paymentAttempts) || !paymentAttempts.some((entry) =>
-        entry.attributes?.status === 'paid' &&
-        entry.attributes?.currency === 'PHP' &&
-        Number(entry.attributes.amount) === Math.round(Number(appointment.deposit_amount) * 100)
-      )) {
-        throw new BadRequestException('PayMongo paid amount or currency did not match the test deposit');
-      }
-      await this.lockDate(client, appointment.appointment_date);
-      const existing = await client.query(`SELECT a.start_time::text, a.end_time::text, a.staff_id
-        FROM public.appointments a WHERE a.id <> $1 AND a.appointment_date=$2 AND (${HOLD_SQL})`,
-      [appointment.id, appointment.appointment_date]);
-      const taken = this.overlapping(existing.rows, String(appointment.staff_id),
-        minutes(appointment.start_time), minutes(appointment.end_time));
-      await client.query(`UPDATE public.appointments SET payment_status='TEST_PAID',
-        status=$2, reservation_expires_at=NULL WHERE id=$1`,
-      [appointment.id, taken ? 'PAYMENT_REVIEW' : 'PENDING']);
-      await client.query('COMMIT');
-      return { received: true };
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally { client.release(); }
+  async getGuestCalendarAppointmentId(reference: string, token: string): Promise<number> {
+    if (!reference || !/^[0-9a-f]{48}$/.test(token || '')) throw new BadRequestException('Booking reference and token required');
+    const found = await pool.query(`SELECT id FROM public.appointments
+      WHERE reference_code=$1 AND booking_token_hash=$2
+        AND status IN ('PENDING','CONFIRMED') AND payment_status IN ('PAID','TEST_PAID','DEMO_PAID')`,
+      [reference, hash(token)]);
+    if (!found.rowCount) throw new NotFoundException('A paid, scheduled booking is required to add to calendar');
+    return Number(found.rows[0].id);
   }
+
   async listForStaff(id: number, role: string) {
     const isAdmin = ['ADMIN', 'SUPERADMIN'].includes(String(role).toUpperCase());
     if (!isAdmin && String(role).toUpperCase() !== 'STAFF') throw new ForbiddenException('Staff access required');

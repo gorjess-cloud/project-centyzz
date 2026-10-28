@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { ArrowLeft, Banknote, QrCode, Split } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, Banknote, QrCode, Split, Printer } from 'lucide-react';
 import { peso, input, btn, btnGhost, card, Modal } from './ui';
 
 const cents = (n) => Math.round((Number(n) || 0) * 100);
@@ -92,31 +92,15 @@ export function CashModal({ items, subtotal, amount, allowDiscount = true, onCon
 }
 
 /* ---------- QR Ph modal ---------- */
-// Placeholder QR. Replace <QrPlaceholder/> with a real QR Ph payload (e.g. from your payment gateway).
-function QrPlaceholder({ seed }) {
-  const N = 25;
-  const cellsOn = useMemo(() => {
-    let s = Math.round(seed * 100) + 7;
-    const rnd = () => ((s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296);
-    return Array.from({ length: N * N }, () => rnd() > 0.5);
-  }, [seed]);
-  const finder = (x, y) => {
-    const inF = (ox, oy) => x >= ox && x < ox + 7 && y >= oy && y < oy + 7;
-    const ring = (ox, oy) => { const dx = x - ox, dy = y - oy; return dx === 0 || dx === 6 || dy === 0 || dy === 6 || (dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4); };
-    if (inF(0, 0)) return ring(0, 0);
-    if (inF(N - 7, 0)) return ring(N - 7, 0);
-    if (inF(0, N - 7)) return ring(0, N - 7);
-    return null;
-  };
+// Deliberately NOT a scannable payment code: this is only a POS walkthrough.
+function QrPlaceholder() {
   return (
-    <svg viewBox={`0 0 ${N} ${N}`} className="h-full w-full" shapeRendering="crispEdges" role="img" aria-label="QR Ph code">
-      <rect width={N} height={N} fill="#fff" />
-      {cellsOn.map((on, i) => {
-        const x = i % N, y = Math.floor(i / N);
-        const f = finder(x, y);
-        return (f === null ? on : f) ? <rect key={i} x={x} y={y} width="1" height="1" fill="#2A1E1B" /> : null;
-      })}
-    </svg>
+    <div role="img" aria-label="Demo QR Ph only, not a payable QR code"
+      className="flex h-full w-full flex-col items-center justify-center gap-2 rounded-xl bg-[#F6F0E6] text-[#8B5E3C]">
+      <QrCode size={52} strokeWidth={1.2} />
+      <strong className="text-base tracking-widest">DEMO ONLY</strong>
+      <span className="text-center text-[10px]">Do not scan or send money</span>
+    </div>
   );
 }
 
@@ -129,11 +113,11 @@ export function QrModal({ items, subtotal, amount, onConfirm, onCancel }) {
           <ReceiptSummary subtotal={subtotal} discount={0} />
         </div>
         <div className={`${half} items-center`}>
-          <div className="aspect-square w-full max-w-48 rounded-xl border border-[#E7DFD4] bg-white p-2"><QrPlaceholder seed={amount} /></div>
-          <p className="text-xs text-[#8A8174]">Amount to pay</p>
+          <div className="aspect-square w-full max-w-48 rounded-xl border border-[#E7DFD4] bg-white p-2"><QrPlaceholder /></div>
+          <p className="text-xs text-[#8A8174]">Simulated amount (no payment)</p>
           <p className="-mt-2 text-2xl font-bold text-[#2A1E1B]">{peso(amount)}</p>
           <div className="mt-auto flex w-full flex-col gap-2 pt-2">
-            <button className={btn} onClick={() => onConfirm({ amount })}>Proceed</button>
+            <button className={btn} onClick={() => onConfirm({ amount })}>Simulate payment</button>
             <button className={btnGhost} onClick={onCancel}>Cancel</button>
           </div>
         </div>
@@ -152,13 +136,13 @@ export function PaymentMethods({ total, onBack, onSelect }) {
       <div className="mb-5 flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-[#2A1E1B]">Payment Methods</h1>
-          <p className="text-xs text-[#8A8174]">Choose payment method</p>
+          <p className="text-xs text-[#8A8174]">Demo checkout — no money collected</p>
         </div>
         <p className="rounded-full bg-[#EBDBC8] px-4 py-1.5 text-xs font-bold text-[#8C6D3B]">Total due {peso(total)}</p>
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <button className={tile} onClick={() => onSelect('cash')}><Icon i={Banknote} /><span><span className="block text-base font-bold text-[#2A1E1B]">Cash</span><span className="text-[11px] text-[#8A8174]">Enter amount received, get change</span></span></button>
-        <button className={tile} onClick={() => onSelect('qr')}><Icon i={QrCode} /><span><span className="block text-base font-bold text-[#2A1E1B]">QR Ph</span><span className="text-[11px] text-[#8A8174]">Customer scans to pay</span></span></button>
+        <button className={tile} onClick={() => onSelect('qr')}><Icon i={QrCode} /><span><span className="block text-base font-bold text-[#2A1E1B]">QR Ph</span><span className="text-[11px] text-[#8A8174]">Simulated QR; no real code</span></span></button>
         <button className={tile} onClick={() => onSelect('split')}><Icon i={Split} /><span><span className="block text-base font-bold text-[#2A1E1B]">Split</span><span className="text-[11px] text-[#8A8174]">Pay part in cash, the rest by QR Ph</span></span></button>
       </div>
     </section>
@@ -206,5 +190,59 @@ export function SplitPayment({ total, payments, onBack, onCharge }) {
         {row(<QrCode size={18} />, 'QR Ph', qrAmt, !!paidQr, 'qr', false)}
       </div>
     </section>
+  );
+}
+
+/* ---------- Post-checkout demonstration receipt ---------- */
+export function DemoReceiptModal({ sale, onClose }) {
+  return (
+    <Modal title="Demo Checkout Receipt" onClose={onClose} size="max-w-lg">
+      <style>{`@media print {
+        body * { visibility: hidden !important; }
+        .centyzz-demo-print, .centyzz-demo-print * { visibility: visible !important; }
+        .centyzz-demo-print { position: absolute !important; inset: 0 auto auto 0 !important; width: 100% !important; padding: 24px !important; color: black !important; background: white !important; }
+      }`}</style>
+      <section className="centyzz-demo-print rounded-xl border border-dashed border-[#D8C8B0] bg-[#FFFCF5] p-5 text-[#2A1E1B]">
+        <div className="mb-4 text-center">
+          <h3 className="text-lg font-extrabold tracking-wide">CENTY'ZZ</h3>
+          <p className="text-[11px]">Hair & Beauty · Demo Receipt</p>
+          <p className="mt-2 text-sm font-extrabold text-[#9A5D21]">DEMO — NOT A PROOF OF PAYMENT</p>
+          <p className="text-[11px]">No payment was received. Not a fiscal receipt.</p>
+        </div>
+        <div className="mb-3 space-y-1 border-y border-[#D8C8B0] py-3 text-xs">
+          <div className="flex justify-between gap-3"><span>Reference</span><strong>{sale.id}</strong></div>
+          <div className="flex justify-between gap-3"><span>Date / Time</span><span>{new Date(sale.paidAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}</span></div>
+          <div className="flex justify-between gap-3"><span>Customer</span><span>{sale.customer}</span></div>
+        </div>
+        <p className="mb-2 text-xs font-bold">Items</p>
+        <div className="space-y-2 text-xs">
+          {sale.items.map((item) => (
+            <div key={item.id} className="flex justify-between gap-3">
+              <span>{item.name} ×{item.qty}</span>
+              <strong>{peso(item.price * item.qty)}</strong>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 space-y-1 border-t border-[#D8C8B0] pt-3 text-xs">
+          <div className="flex justify-between"><span>Subtotal</span><span>{peso(sale.subtotal)}</span></div>
+          <div className="flex justify-between"><span>Demo discount</span><span>{peso(sale.discount)}</span></div>
+          <div className="flex justify-between text-base font-extrabold"><span>DEMO TOTAL</span><span>{peso(sale.total)}</span></div>
+        </div>
+        <div className="mt-4 border-t border-[#D8C8B0] pt-3 text-xs">
+          <p className="mb-2 font-bold">Simulated payment breakdown</p>
+          {sale.payments.map((payment, index) => (
+            <div key={index} className="flex justify-between"><span>{payment.method} (demo)</span><span>{peso(payment.amount)}</span></div>
+          ))}
+          {sale.payments.filter((payment) => payment.method === 'Cash').map((payment, index) => (
+            <div key={`cash-${index}`} className="mt-1 text-[11px] text-[#8A8174]">Tendered: {peso(payment.tendered)} · Change: {peso(payment.change)}</div>
+          ))}
+        </div>
+        <p className="mt-5 text-center text-[10px] font-semibold uppercase tracking-widest">Simulation only · No database sale recorded</p>
+      </section>
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <button type="button" className={`${btn} flex flex-1 items-center justify-center gap-2`} onClick={() => window.print()}><Printer size={15} /> Print demo receipt</button>
+        <button type="button" className={`${btnGhost} flex-1`} onClick={onClose}>Close receipt</button>
+      </div>
+    </Modal>
   );
 }
