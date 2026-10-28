@@ -1,3 +1,4 @@
+import { MemberBookingService } from './member-booking.service.js';
 import { SalonConfigModule } from '../salon/salon-config.module.js';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
@@ -8,6 +9,6 @@ import { GuestBookingService } from './guest-booking.service.js';
 @Module({
   imports: [AuthModule,SalonConfigModule],
   controllers: [AppointmentsController],
-  providers: [AppointmentsService, GuestBookingService],
+  providers: [AppointmentsService, GuestBookingService, MemberBookingService],
 })
 export class AppointmentsModule {}

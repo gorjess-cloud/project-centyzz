@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { X, CheckCircle2, Inbox } from 'lucide-react';
 import useModalScrollLock from '../../hooks/useModalScrollLock';
 
+// Staff UI intentionally co-locates its existing formatting helpers.
+// eslint-disable-next-line react-refresh/only-export-components
 export const peso = (n) => '₱' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 });
 
 const focus = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A059]/50';
@@ -25,6 +27,7 @@ export function MotionStyles() {
 }
 
 /* Auto-dismissing toast state: const [toast, say] = useToast(); say('Saved'); <Toast msg={toast} /> */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useToast() {
   const [msg, setMsg] = useState('');
   const timer = useRef();
@@ -96,28 +99,31 @@ export function EmptyState({ icon: Icon = Inbox, title, hint, children }) {
   );
 }
 
-/* Accessible modal: Esc and backdrop click close it; slides up as a sheet on phones. */
-export function Modal({ title, onClose, children, size = 'max-w-xl' }) {
+// Portals keep viewport overlays outside animated/scrolling Staff content.
+export function StaffOverlay({children,onDismiss,layer=200}) {
   useModalScrollLock(true);
+  return createPortal(<div data-staff-overlay className="fixed inset-0 flex min-h-dvh w-screen items-center justify-center overflow-y-auto bg-[#2A1E1B]/50 p-4 backdrop-blur-sm" style={{zIndex:layer}} onMouseDown={e=>{if(e.target===e.currentTarget)onDismiss?.();}}>{children}</div>,document.body);
+}
+
+export function Modal({ title, onClose, children, size = 'max-w-xl' }) {
+  const panel=useRef(null);
+  useEffect(()=>{const previous=document.activeElement;panel.current?.focus();return()=>{if(previous?.isConnected)previous.focus();};},[]);
   useEffect(() => {
-    const h = (e) => e.key === 'Escape' && onClose?.();
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [onClose]);
-  return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#2A1E1B]/45 p-4 backdrop-blur-[2px]"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
-      <div role="dialog" aria-modal="true" aria-label={title}
-        className={`pop-in max-h-[92vh] w-full overflow-y-auto rounded-2xl border border-[#E7DFD4] bg-[#FFFDF8] p-5 shadow-2xl ${size}`}>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-bold text-[#2A1E1B]">{title}</h2>
-          <button type="button" aria-label="Close" onClick={onClose} className={`rounded-full p-1.5 text-[#8A8174] transition hover:bg-[#F6F0E6] ${focus}`}><X size={16} /></button>
-        </div>
-        {children}
-      </div>
-    </div>,
-    document.body,
-  );
+    const h=e=>{
+      if(e.key==='Escape'){e.stopPropagation();onClose?.();}
+      if(e.key==='Tab'){
+        const controls=Array.from(panel.current?.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]')||[]).filter(el=>el.getClientRects().length);
+        const first=controls[0],last=controls.at(-1);
+        if(!first){e.preventDefault();panel.current?.focus();}
+        else if(e.shiftKey&&(document.activeElement===first||document.activeElement===panel.current)){e.preventDefault();last.focus();}
+        else if(!e.shiftKey&&(document.activeElement===last||document.activeElement===panel.current)){e.preventDefault();first.focus();}
+      }
+    };
+    window.addEventListener('keydown',h);return()=>window.removeEventListener('keydown',h);
+  },[onClose]);
+  return <StaffOverlay onDismiss={onClose}><div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title} className={`pop-in max-h-[92dvh] w-full overflow-y-auto rounded-2xl border border-[#E7DFD4] bg-[#FFFDF8] p-5 text-[#2A1E1B] shadow-2xl outline-none ${size}`}>
+    <div className="mb-4 flex items-center justify-between"><h2 className="text-base font-bold">{title}</h2><button type="button" aria-label="Close" onClick={onClose} className={`rounded-full p-1.5 text-[#8A8174] hover:bg-[#F6F0E6] ${focus}`}><X size={16}/></button></div>{children}
+  </div></StaffOverlay>;
 }
 
 export function ConfirmModal({ message, onCancel, onConfirm, confirmLabel = 'Yes', danger = false }) {

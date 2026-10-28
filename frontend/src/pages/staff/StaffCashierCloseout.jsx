@@ -1,3 +1,4 @@
+import StaffTransactionDialog from '../../components/staff/StaffTransactionDialog';
 import {useUnsavedChanges} from '../../components/UnsavedChangesProvider';
 import { useEffect, useState } from "react";
 import { RefreshCw, Wallet } from "lucide-react";
@@ -13,6 +14,7 @@ export default function StaffCashierCloseout({
   currentUser,
   onSaved,
 }) {
+  const [selectedTransaction,setSelectedTransaction]=useState(null);
   const [result, setResult] = useState(null),
     [refresh, setRefresh] = useState(0),
     [opening, setOpening] = useState("0.00"),
@@ -233,8 +235,8 @@ export default function StaffCashierCloseout({
                   </thead>
                   <tbody>
                     {data.transactions.map((row) => (
-                      <tr key={row.id} className="border-t border-[#E7DFD4]">
-                        <td className="p-3">{row.txnId}</td>
+                      <tr key={row.id} className="cursor-pointer border-t border-[#E7DFD4] hover:bg-[#F8F5F0]" onClick={()=>setSelectedTransaction(row.id)}>
+                        <td className="p-3"><button type="button" aria-label={`View transaction ${row.txnId}`} className="rounded font-bold text-[#8B5E3C] underline decoration-dotted underline-offset-4 focus-visible:outline-2 focus-visible:outline-[#8B5E3C]" onClick={e=>{e.stopPropagation();setSelectedTransaction(row.id);}}>{row.txnId}</button></td>
                         <td className="p-3">{row.service}</td>
                         <td className="p-3">{money(row.amount)}</td>
                         <td className="p-3">{row.status}</td>
@@ -257,6 +259,7 @@ export default function StaffCashierCloseout({
           )
         )}
       </section>
+      {selectedTransaction&&<StaffTransactionDialog token={token} transactionId={selectedTransaction} onClose={()=>setSelectedTransaction(null)}/>}
       {confirm && (
         <AdminAuthorizationDialog
           title="Cashier Authorization"

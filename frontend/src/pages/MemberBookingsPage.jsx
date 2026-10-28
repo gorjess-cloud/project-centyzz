@@ -1,3 +1,4 @@
+import {api} from '../api/client.js';
 import { useState } from "react";
 import useMemberSidebarState from "../hooks/useMemberSidebarState";
 import {
@@ -34,6 +35,14 @@ export default function MemberBookingsPage({
   const [activeTab, setActiveTab] = useState("upcoming");
   const [pastFilter, setPastFilter] = useState("completed");
   const [selectedBooking, setSelectedBooking] = useState(null);
+  const [calendarError,setCalendarError]=useState('');
+  const [openingCalendar,setOpeningCalendar]=useState(false);
+  const openCalendar=async()=>{
+    const popup=window.open('about:blank','_blank');if(popup)popup.opener=null;
+    setOpeningCalendar(true);setCalendarError('');
+    try{const result=await api.getAppointmentCalendar(selectedBooking.id,user?.accessToken);const url=new URL(result.googleCalendarUrl);if(url.origin!=='https://calendar.google.com')throw Error('Invalid calendar destination.');if(!popup)throw Error('Allow popups for this site to open Google Calendar.');popup.location.href=url.href;}
+    catch(error){popup?.close();setCalendarError(error.message);}finally{setOpeningCalendar(false);}
+  };
 
   const fullName = user?.fullName || user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Member";
   const initials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
@@ -132,7 +141,7 @@ export default function MemberBookingsPage({
   );
 
   const handleOpenModal = (booking) => {
-    setSelectedBooking(booking);
+    setCalendarError('');setSelectedBooking(booking);
   };
 
   const handleCloseModal = () => {
@@ -418,7 +427,7 @@ export default function MemberBookingsPage({
                         <div className="flex-1 space-y-3">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8174]">
-                              Hair Service
+                              Booked services
                             </p>
                             <p className="text-sm font-bold">
                               {booking.serviceName}
@@ -648,6 +657,8 @@ export default function MemberBookingsPage({
 
                 {/* Actions */}
                 <div className="mt-auto flex gap-3">
+                  {['pending','confirmed'].includes(selectedBooking.status)&&<button type="button" disabled={openingCalendar} onClick={openCalendar} className="mb-3 flex w-full items-center justify-center gap-2 rounded-lg border border-[#D8C8B0] px-4 py-3 text-xs font-semibold"><CalendarPlus className="h-4 w-4"/>{openingCalendar?'Opening calendar…':'Add to Google Calendar'}</button>}
+                  {calendarError&&<p role="alert" className="mb-3 text-xs text-red-600">{calendarError}</p>}
                   {selectedBooking.status === "confirmed" ||
                   selectedBooking.status === "pending" ? (
                     <>
