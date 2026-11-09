@@ -243,20 +243,11 @@ export default function StaffPOSView({ onSale,currentUser }) {
               const Icon = s.icon; const n = qtyOf(s.id);
               return (
                 <button key={s.id} onClick={() => change(s, 1)} aria-label={`Add ${s.name}, ${peso(s.price)}`}
-                  className={`group relative flex touch-manipulation flex-col self-start overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition hover:-translate-y-1 hover:border-[#C5A059] hover:shadow-md active:scale-[0.99] ${n > 0 ? 'border-[#C5A059] ring-2 ring-[#C5A059]/30' : 'border-gray-200'}`}>
-                  <span className="relative block h-40 w-full shrink-0 overflow-hidden bg-[#F6F0E6] text-[#4A3928]">
-                    {s.image ? <img src={s.image} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" /> : <span className="flex h-full w-full items-center justify-center"><Icon size={36} strokeWidth={1.5} /></span>}
-                    <span className="absolute right-2 top-2 inline-flex min-h-9 items-center gap-1 rounded-full bg-[#C5A059] px-3 text-[11px] font-semibold text-white shadow-sm">
-                      <Plus size={14} strokeWidth={2.5} /> Add
-                    </span>
-                    {n > 0 && <span className="pop-in absolute left-2 top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#4A3928] px-1.5 text-[11px] font-bold text-white">{n}</span>}
-                  </span>
-                  <span className="flex min-w-0 flex-col p-4">
-                    <span className="line-clamp-2 text-sm font-bold leading-snug text-[#2A1E1B]">{s.name}</span>
-                    <span className="mt-4 flex items-center justify-between gap-2 border-t border-[#E7DFD4] pt-3">
-                      <span className="truncate text-base font-extrabold text-[#B48B43]">₱ {s.price.toLocaleString()}</span>
-                    </span>
-                  </span>
+                  className={`${card} group relative flex h-64 touch-manipulation flex-col overflow-hidden p-0 text-left transition hover:-translate-y-0.5 hover:border-[#C5A059] hover:shadow-md active:scale-95 lg:h-72 ${n > 0 ? 'border-[#C5A059] ring-2 ring-[#C5A059]/30' : ''}`}>
+                  <span className="line-clamp-2 px-3.5 pt-3 text-sm font-bold leading-snug text-[#4A3928]">{s.name}</span>
+                  {n > 0 && <span className="pop-in absolute right-3 top-3 z-10 flex h-7 min-w-7 items-center justify-center rounded-full bg-[#4A3928] px-2 text-[11px] font-bold text-white shadow">{n}</span>}
+                  <span className="flex h-36 w-full shrink-0 items-center justify-center overflow-hidden bg-[#F6F0E6] text-[#4A3928] transition group-hover:bg-[#EBDBC8] lg:h-44">{s.image ? <img src={s.image} alt={s.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" /> : <Icon size={42} strokeWidth={1.5} />}</span>
+                  <span className="self-end rounded-full bg-[#F6F0E6] px-3 py-1 text-sm font-bold text-[#8B5E3C]">₱ {s.price.toLocaleString()}</span>
                 </button>
               );
             })}

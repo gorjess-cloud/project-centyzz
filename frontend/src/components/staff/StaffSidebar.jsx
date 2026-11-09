@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { LayoutDashboard, Receipt, CalendarClock, ClipboardCheck, Settings, LogOut, ChevronLeft } from 'lucide-react';
 import { Receipt, CalendarClock, CalendarDays, ClipboardCheck, Settings, LogOut, ChevronLeft, ChevronDown } from 'lucide-react';
 
 const ITEMS = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'pos', label: 'POS', icon: Receipt },
   { id: 'schedule', label: 'Appointments', icon: CalendarClock },
   { id: 'calendar', label: 'Schedule', icon: CalendarDays },
