@@ -29,7 +29,7 @@ export default function AboutPage({ isDarkMode }) {
         {/* basta Header to */}
         <div className="mx-auto max-w-3xl space-y-3 text-center sm:space-y-4">
           <span className="text-xs font-bold uppercase tracking-widest text-[#C5A059]">Our Story & Craft</span>
-          <h1 className={`text-3xl leading-tight sm:text-5xl font-serif font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>
+          <h1 className={`text-3xl leading-tight sm:text-5xl font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>
             Redefining Salon Care with <span className="italic font-normal text-[#C5A059]">Passion & Elegance.</span>
           </h1>
           <p className={`text-sm sm:text-base leading-relaxed ${isDarkMode ? 'text-[#D6D0C8]' : 'text-[#3A2E2B]/80'}`}>
@@ -40,13 +40,13 @@ export default function AboutPage({ isDarkMode }) {
         {/* Mission & Vision: Sample lang yan */}
         <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:gap-8">
           <div className={`space-y-3 rounded-2xl border p-5 sm:rounded-3xl sm:p-8 ${isDarkMode ? 'bg-[#1A1A1A] border-[#2A2A2A]' : 'bg-white border-[#E8DFD1]'}`}>
-            <h3 className={`text-xl font-serif font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>Our Mission</h3>
+            <h3 className={`text-xl font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>Our Mission</h3>
             <p className={`text-xs sm:text-sm leading-relaxed ${isDarkMode ? 'text-[#D6D0C8]' : 'text-gray-600'}`}>
               To deliver world-class hair and nail artistry tailored to each client's unique style, while maintaining strict health standards and using eco-conscious luxury products.
             </p>
           </div>
           <div className={`space-y-3 rounded-2xl border p-5 sm:rounded-3xl sm:p-8 ${isDarkMode ? 'bg-[#1A1A1A] border-[#2A2A2A]' : 'bg-white border-[#E8DFD1]'}`}>
-            <h3 className={`text-xl font-serif font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>Our Vision</h3>
+            <h3 className={`text-xl font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>Our Vision</h3>
             <p className={`text-xs sm:text-sm leading-relaxed ${isDarkMode ? 'text-[#D6D0C8]' : 'text-gray-600'}`}>
               To remain the leading sanctuary for clients seeking high-end transformations, unmatched hospitality, and innovative aesthetic techniques.
             </p>

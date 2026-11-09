@@ -34,7 +34,30 @@ function toDateKey(year, month, day) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-const guestSessionKey = 'centyzz-guest-checkout';
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const phonePattern = /^[0-9+\-\s()]+$/;
+
+const getEmailError = (value) =>
+  emailPattern.test(value.trim()) ? '' : 'Please enter a valid email address.';
+const getPhoneError = (value) => {
+  const trimmedValue = value.trim();
+  const digitCount = trimmedValue.replace(/\D/g, '').length;
+  return phonePattern.test(trimmedValue) && digitCount >= 7 && digitCount <= 12
+    ? ''
+    : 'Please enter a valid contact number.';
+};
+const limitPhoneDigits = (value) => {
+  let digitCount = 0;
+  return value
+    .replace(/[^0-9+\-\s()]/g, '')
+    .split('')
+    .filter((character) => {
+      if (!/\d/.test(character)) return true;
+      digitCount += 1;
+      return digitCount <= 12;
+    })
+    .join('');
+};
 
 function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const [step, setStep] = useState('form');
@@ -53,6 +76,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const [loadingStylists, setLoadingStylists] = useState(false);
   const [checkout, setCheckout] = useState(null);
   const [checkoutStatus, setCheckoutStatus] = useState(null);
+  const [openingCalendar, setOpeningCalendar] = useState(false);
   const [submittingCheckout, setSubmittingCheckout] = useState(false);
 
   const initialSalonDate = getSalonToday();
@@ -64,6 +88,8 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+  const [emailError, setEmailError] = useState('');
   const chosenStylist = stylists.find((s) => String(s.id) === stylistId);
   const stylist = chosenStylist?.name || 'Choose a specialist';
 
@@ -85,23 +111,10 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   useEffect(() => {
     if (!isOpen) return undefined;
     let active = true;
-    // PayMongo return redirects recreate the modal and restore a local checkout reference.
-    const returningFromCheckout = new URLSearchParams(window.location.search).has('centyzz_booking');
-    const stored = (() => { try { return JSON.parse(sessionStorage.getItem(guestSessionKey) || 'null'); } catch { return null; } })();
-    if (returningFromCheckout && stored?.referenceCode && stored?.token) {
-      setCheckout(stored);
-      setStep('result');
-      api.getGuestCheckoutStatus(stored.referenceCode, stored.token)
-        .then((status) => { if (active) setCheckoutStatus(status); })
-        .catch((err) => { if (active) setFormError(err.message); });
-      const url = new URL(window.location.href);
-      url.searchParams.delete('centyzz_booking');
-      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
-    } else {
-      setStep('form');
-      setCheckout(null);
-      setCheckoutStatus(null);
-    }
+    // A demo checkout stays inside this modal; no PayMongo redirect is required.
+    setStep('form');
+    setCheckout(null);
+    setCheckoutStatus(null);
     setFormError('');
     setStylistId('');
     setStylists([]);
@@ -222,6 +235,11 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const handleFormSubmit = async (event) => {
     event.preventDefault();
     setFormError('');
+    const nextPhoneError = getPhoneError(phone);
+    const nextEmailError = getEmailError(email);
+    setPhoneError(nextPhoneError);
+    setEmailError(nextEmailError);
+    if (nextPhoneError || nextEmailError) return;
     if (!currentServiceObj || loadingServices || loadingStylists || loadingSlots || slotsError) {
       setFormError('Please choose a service and wait for availability to load.');
       return;
@@ -269,14 +287,8 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
         customerPhone: phone.trim(),
       });
       setCheckout(created);
-      if (created.mode === 'PAYMONGO_TEST' && created.checkoutUrl) {
-        sessionStorage.setItem(guestSessionKey, JSON.stringify({referenceCode: created.referenceCode, token: created.token}));
-        window.location.assign(created.checkoutUrl);
-      } else if (created.mode === 'DEMO') {
-        setStep('demo');
-      } else {
-        throw new Error('Unsupported payment mode returned by server');
-      }
+      if (created.mode !== 'DEMO') throw new Error('Demo booking is not available.');
+      setStep('demo');
     } catch (err) {
       setFormError(err.message || 'Unable to start checkout.');
       if (/time|slot|reserved|unavailable|expired/i.test(String(err.message))) {
@@ -288,16 +300,36 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
     } finally { setSubmittingCheckout(false); }
   };
 
-  const finishDemo = async () => {
+  const completeDemo = async () => {
     if (!checkout?.id || !checkout?.token) return;
-    setSubmittingCheckout(true); setFormError('');
+    setSubmittingCheckout(true);
+    setFormError('');
     try {
-      await api.finishGuestDemo(checkout.id, checkout.token);
-      const status = await api.getGuestCheckoutStatus(checkout.referenceCode, checkout.token);
-      setCheckoutStatus(status);
+      const completed = await api.finishGuestDemo(checkout.id, checkout.token);
+      // The response is returned only after the demo reservation commits.
+      setCheckoutStatus(completed);
       setStep('result');
-    } catch (err) { setFormError(err.message || 'Demo checkout failed.'); }
-    finally { setSubmittingCheckout(false); }
+    } catch (err) {
+      setFormError(err.message || 'Unable to complete demo booking.');
+    } finally {
+      setSubmittingCheckout(false);
+    }
+  };
+
+  const openGoogleCalendar = async () => {
+    if (!checkout?.referenceCode || !checkout?.token) return;
+    const tab = window.open('about:blank', '_blank'); // Open during the click to avoid popup blocking.
+    setOpeningCalendar(true);
+    try {
+      const result = await api.getGuestCalendar(checkout.referenceCode, checkout.token);
+      const url = new URL(result.googleCalendarUrl);
+      if (url.origin !== 'https://calendar.google.com') throw new Error('Invalid calendar destination');
+      if (tab) { tab.opener = null; tab.location.replace(url.toString()); }
+      else window.location.assign(url.toString());
+    } catch (error) {
+      tab?.close();
+      setFormError(error.message || 'Unable to open Google Calendar');
+    } finally { setOpeningCalendar(false); }
   };
 
   const refreshStatus = async () => {
@@ -336,13 +368,13 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
               <span className="text-[11px] font-bold uppercase tracking-widest text-[#C5A059] flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" /> Book Appointment
               </span>
-              <h2 className={`text-2xl sm:text-3xl font-serif font-bold ${primaryText} mt-1`}>Schedule Your Session</h2>
+              <h2 className={`text-2xl sm:text-3xl font-bold ${primaryText} mt-1`}>Schedule Your Session</h2>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <form onSubmit={handleFormSubmit} className="grid grid-cols-1 gap-8 lg:grid-cols-12">
               
               {/* Calendar Column */}
-              <div className={`lg:col-span-5 ${insetSurface} p-5 rounded-2xl border flex flex-col justify-between shadow-inner`}>
+              <div className={`lg:col-span-5 ${insetSurface} flex flex-col self-start rounded-2xl border p-4 shadow-inner`}>
                 <div>
                   <div className="flex items-center justify-between mb-4 px-1">
                     <button 
@@ -354,7 +386,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                       <ChevronLeft className="w-5 h-5" />
                     </button>
 
-                    <span className={`font-serif font-bold ${primaryText} text-base`}>
+                    <span className={`font-bold ${primaryText} text-base`}>
                       {monthName} {currentYear}
                     </span>
 
@@ -403,22 +435,22 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                   </div>
                 </div>
 
-                <div className={`mt-5 pt-3 border-t ${isDarkMode ? 'border-[#3A342B] text-[#D6D0C8]' : 'border-[#E8DFD1] text-[#2A1E1B]/80'} flex items-center justify-between text-xs`}>
+                <div className={`mt-4 border-t pt-3 ${isDarkMode ? 'border-[#3A342B] text-[#D6D0C8]' : 'border-[#E8DFD1] text-[#2A1E1B]/80'} flex items-center justify-between text-xs`}>
                   <div className="flex items-center gap-2">
                     <CalendarIcon className="w-4 h-4 text-[#C5A059]" />
                     <span>Selected Date:</span>
                   </div>
-                  <strong className={`font-serif ${primaryText}`}>
+                  <strong className={`${primaryText}`}>
                     {monthName} {selectedDay}, {currentYear}
                   </strong>
                 </div>
               </div>
 
               {/* Time Slots Column */}
-              <div className="lg:col-span-3 space-y-3 flex flex-col justify-between">
+              <div className="flex flex-col justify-between space-y-3 lg:col-span-3 lg:pt-10">
                 <div>
                   <div className={`border-b ${isDarkMode ? 'border-[#3A342B]' : 'border-[#E8DFD1]'} pb-2 mb-3`}>
-                    <h3 className={`text-sm font-serif font-bold ${primaryText} flex items-center gap-1.5`}>
+                    <h3 className={`text-sm font-bold ${primaryText} flex items-center gap-1.5`}>
                       <Clock className="w-4 h-4 text-[#C5A059]" /> Appointment Time
                     </h3>
                   </div>
@@ -455,12 +487,12 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
               </div>
 
               {/* Client Details Column */}
-              <div className="lg:col-span-4 space-y-3">
+              <div className="space-y-5 lg:col-span-4">
                 <div className={`border-b ${isDarkMode ? 'border-[#3A342B]' : 'border-[#E8DFD1]'} pb-2`}>
-                  <h3 className={`text-sm font-serif font-bold ${primaryText}`}>Your Details</h3>
+                  <h3 className={`text-sm font-bold ${primaryText}`}>Your Details</h3>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div>
                     <label className={`block text-[10px] font-bold ${isDarkMode ? 'text-[#A9A39B]' : 'text-gray-500'} uppercase tracking-wider mb-1`}>
                       Category
@@ -517,23 +549,53 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                     <label className={`block text-[10px] font-bold ${isDarkMode ? 'text-[#A9A39B]' : 'text-gray-500'} uppercase tracking-wider mb-1`}>
                       Contact Info
                     </label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-4">
                       <input 
                         type="tel" 
                         value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
+                        onChange={(e) => {
+                          const value = limitPhoneDigits(e.target.value);
+                          setPhone(value);
+                          setPhoneError(getPhoneError(value));
+                        }}
+                        onBlur={() => setPhoneError(getPhoneError(phone))}
+                        onInvalid={(event) => {
+                          event.preventDefault();
+                          setPhoneError(getPhoneError(phone));
+                        }}
+                        aria-invalid={Boolean(phoneError)}
+                        aria-describedby={phoneError ? 'booking-phone-error' : undefined}
                         required 
-                        placeholder="Phone No."
-                        className={`w-full px-3 py-2 rounded-xl border ${fieldStyle} text-xs focus:outline-none focus:border-[#C5A059]`}
+                        placeholder="+63 9XXXXXXXX"
+                        className={`w-full px-3 py-2 rounded-xl border ${fieldStyle} ${phoneError ? '!border-red-500' : ''} text-xs focus:outline-none focus:border-[#C5A059]`}
                       />
                       <input 
                         type="email" 
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setEmail(value);
+                          setEmailError(getEmailError(value));
+                        }}
+                        onBlur={() => setEmailError(getEmailError(email))}
+                        onInvalid={(event) => {
+                          event.preventDefault();
+                          setEmailError(getEmailError(email));
+                        }}
+                        aria-invalid={Boolean(emailError)}
+                        aria-describedby={emailError ? 'booking-email-error' : undefined}
                         required 
                         placeholder="Email Address"
-                        className={`w-full px-3 py-2 rounded-xl border ${fieldStyle} text-xs focus:outline-none focus:border-[#C5A059]`}
+                        className={`w-full px-3 py-2 rounded-xl border ${fieldStyle} ${emailError ? '!border-red-500' : ''} text-xs focus:outline-none focus:border-[#C5A059]`}
                       />
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-4">
+                      <p id="booking-phone-error" aria-live="polite" className={`text-[11px] text-red-500 ${phoneError ? '' : 'invisible'}`}>
+                        {phoneError || ' '}
+                      </p>
+                      <p id="booking-email-error" aria-live="polite" className={`text-[11px] text-red-500 ${emailError ? '' : 'invisible'}`}>
+                        {emailError || ' '}
+                      </p>
                     </div>
                   </div>
 
@@ -560,7 +622,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
                   <button 
                     type="submit"
                     disabled={loadingServices || loadingStylists || loadingSlots || checkingSlot || !currentServiceObj || !chosenStylist || !selectedSlot}
-                    className={`w-full mt-2 py-3.5 rounded-2xl ${primaryButton} disabled:opacity-50 disabled:cursor-not-allowed font-serif font-bold text-xs tracking-widest uppercase transition-all shadow-md flex items-center justify-center gap-2 group`}
+                    className={`w-full !mt-6 py-3.5 rounded-2xl ${primaryButton} disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-[11px] transition-all shadow-md flex items-center justify-center gap-2 group`}
                   >
                     <span>{checkingSlot ? 'Verifying selected time…' : 'Review Appointment & 50% Deposit'}</span>
                     <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
@@ -581,11 +643,11 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
 
             <div className="space-y-1">
               <span className="text-[10px] font-bold uppercase tracking-widest text-[#C5A059]">Deposit Payment</span>
-              <h3 className={`text-xl font-serif font-bold ${primaryText}`}>
+              <h3 className={`text-xl font-bold ${primaryText}`}>
                 50% Partial Payment
               </h3>
               <p className={`text-xs ${mutedText} max-w-xs mx-auto`}>
-                Confirm your details to hold this appointment briefly and start a TEST payment. No real payment is collected in demo mode.
+                Confirm your details to reserve this appointment using a simulated 50% deposit. No money is charged.
               </p>
             </div>
 
@@ -618,17 +680,17 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
 
             <div className="flex flex-col gap-2 pt-2 max-w-xs mx-auto">
               <p className={`text-xs ${mutedText}`}>
-                The backend will recheck this specialist and time, then hold your slot for 15 minutes during TEST checkout.
+                Your selected time is held for 15 minutes while you finish the demo checkout. No real payment is collected.
               </p>
               {formError && <p role="alert" className="text-xs text-red-500">{formError}</p>}
               <button
                 type="button"
                 onClick={beginCheckout}
                 disabled={submittingCheckout}
-                className={`w-full py-3.5 rounded-2xl ${primaryButton} disabled:opacity-50 disabled:cursor-not-allowed font-serif font-bold text-xs tracking-widest uppercase transition-all shadow-md flex items-center justify-center gap-2`}
+                className={`w-full py-3.5 rounded-2xl ${primaryButton} disabled:opacity-50 disabled:cursor-not-allowed font-bold text-xs tracking-widest uppercase transition-all shadow-md flex items-center justify-center gap-2`}
               >
                 {submittingCheckout && <Loader2 className="w-4 h-4 animate-spin" />}
-                <span>{submittingCheckout ? 'Preparing secure test checkout…' : 'Continue to 50% test deposit'}</span>
+                <span>{submittingCheckout ? 'Preparing demo booking…' : 'Continue to demo deposit'}</span>
               </button>
               
               <button 
@@ -641,42 +703,49 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
           </div>
         )}
 
-        {/* STEP 3: Explicit no-money demo, only if enabled on the backend. */}
+        {/* STEP 3: Clearly labeled no-money prototype checkout. */}
         {step === 'demo' && (
           <div className="p-8 text-center space-y-5">
-            <CreditCard className="w-12 h-12 mx-auto text-[#C5A059]" />
-            <h3 className={`text-xl font-serif font-bold ${primaryText}`}>Temporary PayMongo Demo</h3>
-            <p className={`text-xs ${mutedText}`}>Prototype only. The next action simulates a deposit; it does not contact PayMongo or charge any money.</p>
-            <div className={`${insetSurface} p-4 rounded-2xl border text-sm space-y-2`}>
-              <p>Booking: <strong>{checkout?.referenceCode}</strong></p>
-              <p>Specialist: <strong>{checkout?.stylistName}</strong></p>
-              <p>Simulated 50% deposit: <strong>₱{Number(checkout?.depositAmount || 0).toFixed(2)}</strong></p>
-            </div>
+            <CheckCircle2 className="w-12 h-12 mx-auto text-[#C5A059]" />
+            <h3 className={`text-xl font-bold ${primaryText}`}>Demo Deposit Checkout</h3>
+            <p className={`text-xs ${mutedText}`}>
+              Simulate the 50% deposit of ₱{depositAmount.toFixed(2)}. No PayMongo connection and no real money transfer.
+            </p>
+            <p className={`text-xs ${mutedText}`}>Reservation: <strong>{checkout?.referenceCode}</strong></p>
             {formError && <p role="alert" className="text-xs text-red-500">{formError}</p>}
-            <button type="button" disabled={submittingCheckout} onClick={finishDemo} className={`w-full py-3.5 rounded-2xl ${primaryButton} font-bold text-xs disabled:opacity-50`}>
-              {submittingCheckout ? 'Processing demo…' : 'Simulate successful TEST deposit'}
+            <button type="button" disabled={submittingCheckout} onClick={completeDemo}
+              className={`w-full py-3 rounded-xl ${primaryButton} font-bold text-xs disabled:opacity-50`}>
+              {submittingCheckout ? 'Confirming demo…' : 'Simulate deposit and confirm booking'}
             </button>
-            <button type="button" onClick={handleResetAndClose} className={`w-full py-2 rounded-xl border ${fieldStyle}`}>Close</button>
+            <button type="button" onClick={handleResetAndClose} className={`w-full py-2 rounded-xl border ${fieldStyle}`}>Cancel</button>
           </div>
         )}
 
-        {/* STEP 4: A browser redirect never verifies a payment: server status does. */}
+        {/* STEP 4: Result is read from Neon, not assumed from a browser redirect. */} 
         {step === 'result' && (
           <div className="p-8 text-center space-y-5">
-            {['DEMO_PAID', 'TEST_PAID'].includes(checkoutStatus?.paymentStatus)
+            {['PAID', 'TEST_PAID', 'DEMO_PAID'].includes(checkoutStatus?.paymentStatus)
               ? <CheckCircle2 className="w-12 h-12 mx-auto text-[#C5A059]" />
               : <AlertCircle className="w-12 h-12 mx-auto text-[#C5A059]" />}
-            <h3 className={`text-xl font-serif font-bold ${primaryText}`}>Booking Payment Status</h3>
+            <h3 className={`text-xl font-bold ${primaryText}`}>Booking Payment Status</h3>
             <p className={`text-xs ${mutedText}`}>Reference: <strong>{checkoutStatus?.referenceCode || checkout?.referenceCode || 'Unavailable'}</strong></p>
             <p className={`text-xs ${mutedText}`}>
-              {checkoutStatus?.paymentStatus === 'DEMO_PAID' ? 'DEMO deposit recorded; no money was charged. Appointment is pending stylist confirmation.'
-              : checkoutStatus?.paymentStatus === 'TEST_PAID' ? 'PayMongo TEST deposit was verified by the backend. Appointment is pending stylist confirmation.'
-              : checkoutStatus?.status === 'PAYMENT_REVIEW' ? 'A test payment was received but the slot requires manual review; contact the salon.'
+              {checkoutStatus?.paymentStatus === 'DEMO_PAID' ? 'Demo deposit recorded (simulation only). Your appointment is awaiting stylist confirmation.'
+              : checkoutStatus?.paymentStatus === 'PAID' ? 'Payment verified by the provider. Your appointment is awaiting stylist confirmation.'
+              : checkoutStatus?.paymentStatus === 'TEST_PAID' ? 'PayMongo sandbox payment verified (no real money charged). Appointment is awaiting confirmation.'
+              : checkoutStatus?.status === 'PAYMENT_REVIEW' ? 'Payment was received but the slot requires manual review; contact the salon.'
               : checkoutStatus?.holdExpired ? 'The temporary reservation expired. Start a new booking.'
               : 'Payment is not yet verified. A redirect back to the salon is not proof of payment.'}
             </p>
             {formError && <p role="alert" className="text-xs text-red-500">{formError}</p>}
-            {checkoutStatus?.paymentStatus !== 'DEMO_PAID' && checkoutStatus?.paymentStatus !== 'TEST_PAID' &&
+            {['PAID', 'TEST_PAID', 'DEMO_PAID'].includes(checkoutStatus?.paymentStatus) && ['PENDING', 'CONFIRMED'].includes(checkoutStatus?.status) && (
+              <button type="button" disabled={openingCalendar} onClick={openGoogleCalendar}
+                className={`w-full py-3 rounded-xl ${primaryButton} font-bold text-xs disabled:opacity-50`}>
+                <CalendarIcon className="inline-block mr-2 h-4 w-4" />
+                {openingCalendar ? 'Opening calendar…' : 'Add to Google Calendar'}
+              </button>
+            )}
+            {!['PAID', 'TEST_PAID', 'DEMO_PAID'].includes(checkoutStatus?.paymentStatus) &&
               <button type="button" onClick={refreshStatus} disabled={submittingCheckout} className={`w-full py-3 rounded-xl ${primaryButton} font-bold text-xs`}>
                 {submittingCheckout ? 'Checking…' : 'Refresh payment status'}
               </button>}

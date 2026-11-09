@@ -1,3 +1,5 @@
+import {insertOperationalEvent} from '../admin/operational-logs/operational-logs.service.js';
+import { validateAccountAvatar } from './account-avatar.js';
 import { createHmac, randomInt, randomBytes } from 'node:crypto';
 import {
   ConflictException,
@@ -47,6 +49,8 @@ async getMyProfile(userId: number) {
     data: {
       id: user.id,
       phoneNumber: management?.phone_number || '',
+      avatarUrl:management?.avatar_data_url||'',
+      fullName:[user.firstName,user.lastName].filter(Boolean).join(' '),
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
@@ -67,10 +71,22 @@ async updateMyProfile(userId: number, profile: UpdateProfileDto) {
   if (!user || !user.isActive) {
     throw new UnauthorizedException('Account unavailable');
   }
-  await db.orm.public.User.where({ id: userId }).update({ firstName, lastName });
-  if (isManagementRole(user.role) && profile.phoneNumber !== undefined) {
-    await this.managementSecurity.updatePhone(userId, profile.phoneNumber.trim());
-  }
+  const avatar=validateAccountAvatar(profile.avatarUrl);
+  if(profile.phoneNumber!==undefined&&profile.phoneNumber.trim()!==''&&!/^\+?[\d\s()-]{7,20}$/.test(profile.phoneNumber.trim()))throw new BadRequestException('Enter a valid phone number');
+  const client=await this.managementSecurity.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const previous=(await client.query('SELECT u."firstName",u."lastName",s.phone_number,s.avatar_data_url FROM public."user" u LEFT JOIN public.management_security s ON s.user_id=u.id WHERE u.id=$1 FOR UPDATE OF u',[userId])).rows[0];
+    const changed=previous.firstName!==firstName||previous.lastName!==lastName||(isManagementRole(user.role)&&((profile.phoneNumber!==undefined&&(previous.phone_number||'')!==profile.phoneNumber.trim())||(avatar!==undefined&&(previous.avatar_data_url||'')!==avatar)));
+    if(!changed){await client.query('COMMIT');return this.getMyProfile(userId);}
+    await client.query('UPDATE public."user" SET "firstName"=$2,"lastName"=$3,"updatedAt"=now() WHERE id=$1',[userId,firstName,lastName]);
+    if(isManagementRole(user.role)) {
+      const updated=await client.query(`UPDATE public.management_security SET phone_number=coalesce($2,phone_number),avatar_data_url=coalesce($3,avatar_data_url),updated_at=now() WHERE user_id=$1 RETURNING user_id`,[userId,profile.phoneNumber?.trim()??null,avatar??null]);
+      if(!updated.rowCount)throw new ForbiddenException('Management profile is unavailable');
+      await insertOperationalEvent({module:'Account Settings',event:'Profile Updated',actorUserId:userId,userName:[firstName,lastName].join(' '),userRole:user.role,details:'Personal profile updated'},client);
+    }
+    await client.query('COMMIT');
+  }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   return this.getMyProfile(userId);
 }
 
@@ -295,9 +311,9 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
     }
 
     if (isManagementRole(role)) {
-      await this.managementSecurity.requireConfigured(user.id);
+      const security = await this.managementSecurity.requireConfigured(user.id);
       const pinChallengeToken = await this.jwtService.signAsync(
-        { sub: user.id, email: user.email, role, purpose: 'pin' },
+        { sub: user.id, email: user.email, role, purpose: 'pin', credentialVersion: ['ADMIN','STAFF'].includes(role) ? security.credential_version ?? 0 : undefined },
         { expiresIn: '5m' },
       );
       return {
@@ -467,7 +483,7 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
   private async verifyPurposeToken(token: string, purpose: 'pin' | 'setup') {
     try {
       const payload = await this.jwtService.verifyAsync<{
-        sub: number; email: string; role: string; purpose: string;
+        sub: number; email: string; role: string; purpose: string; credentialVersion?: number;
       }>(token);
       if (!Number.isInteger(payload.sub) || payload.purpose !== purpose || !isManagementRole(payload.role)) {
         throw new UnauthorizedException('Invalid verification token');
@@ -477,7 +493,11 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
           this.normalizeAccountRole(user.role) !== payload.role) {
         throw new UnauthorizedException('Account unavailable');
       }
-      return user;
+      if (['ADMIN','STAFF'].includes(payload.role)) {
+        const security = await this.managementSecurity.requireConfigured(user.id);
+        if ((payload.credentialVersion ?? 0) !== (security.credential_version ?? 0)) throw new UnauthorizedException('Credentials changed');
+      }
+      return { ...user, recoveryCredentialVersion: payload.credentialVersion ?? 0 };
     } catch {
       throw new UnauthorizedException('Verification session expired or invalid. Please sign in again.');
     }
@@ -487,16 +507,17 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
     const user = await this.verifyPurposeToken(challengeToken, 'pin');
     const security = await this.managementSecurity.verifyPin(user.id, pin);
     const role = this.normalizeAccountRole(user.role);
+    if (['ADMIN','STAFF'].includes(role) && user.recoveryCredentialVersion !== (security.credential_version ?? 0)) throw new UnauthorizedException('Credentials changed. Sign in again.');
     const purpose = security.needs_setup ? 'setup' : 'access';
     const accessToken = await this.jwtService.signAsync(
-      { sub: user.id, email: user.email, role, purpose },
+      { sub: user.id, email: user.email, role, purpose, credentialVersion: ['ADMIN','STAFF'].includes(role) ? security.credential_version ?? 0 : undefined },
       { expiresIn: purpose === 'setup' ? '15m' : '1h' },
     );
     return {
       success: true,
       data: {
         accessToken,
-        user: { ...this.safeUser(user), mustCompleteSetup: security.needs_setup, phoneNumber: security.phone_number },
+        user: { ...this.safeUser(user), mustCompleteSetup: security.needs_setup, phoneNumber: security.phone_number, avatarUrl:security.avatar_data_url||'' },
       },
     };
   }
@@ -508,7 +529,7 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
     const details = await this.managementSecurity.finishSetup(user.id, body);
     const role = this.normalizeAccountRole(user.role);
     const accessToken = await this.jwtService.signAsync(
-      { sub: user.id, email: user.email, role, purpose: 'access' }, { expiresIn: '1h' },
+      { sub: user.id, email: user.email, role, purpose: 'access', credentialVersion: ['ADMIN','STAFF'].includes(role) ? user.recoveryCredentialVersion : undefined }, { expiresIn: '1h' },
     );
     return { success: true, data: { accessToken, user: { ...this.safeUser(user), ...details, mustCompleteSetup: false } } };
   }
@@ -522,7 +543,10 @@ async verifyEmail(verifyEmailDto: VerifyEmailDto) {
   async updateManagementCredentials(userId: number, body: {
     currentPassword?: string; newPassword?: string; currentPin?: string; newPin?: string;
   }) {
-    return this.managementSecurity.changeCredentials(userId, body);
+    const result=await this.managementSecurity.changeCredentials(userId,body);
+    const profile=await this.getMyProfile(userId);const security=await this.managementSecurity.requireConfigured(userId);
+    const accessToken=await this.jwtService.signAsync({sub:userId,email:profile.data.email,role:profile.data.role,purpose:'access',credentialVersion:security.credential_version??0});
+    return {...result,data:{...profile.data,accessToken}};
   }
 
 }

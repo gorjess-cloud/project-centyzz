@@ -1,372 +1,546 @@
-import HeaderActions from '../../components/workspace/HeaderActions';
-import { useState } from 'react';
-import { 
-  CheckCircle2, 
-  Building2, 
-  Clock, 
-  Users, 
-  Receipt, 
+import { useEffect, useState } from "react";
+import {
+  Building2,
+  Clock,
+  Users,
+  Package,
+  Database,
+  Download,
+  RefreshCw,
   Save,
-  Plus
-} from 'lucide-react';
+} from "lucide-react";
+import AdminPageHeader from "../../components/workspace/AdminPageHeader";
+import AdminAuthorizationDialog from "../../components/AdminAuthorizationDialog";
+import { adminWorkspaceRequest } from "../../api/admin-workspace";
+import { useUnsavedChanges } from "../../components/UnsavedChangesProvider";
 
-export default function SettingsView({ showHeaderActions = true }) {
-  const [toastMessage, setToastMessage] = useState('');
-  const [activeTab, setActiveTab] = useState('profile');
-
-  // Salon Profile Form State
-  const [profileForm, setProfileForm] = useState({
-    salonName: "Centy'zz Hair & Beauty Studio",
-    address: 'Unit A, Block 15 Lot 2, Bagumbong, Caloocan City',
-    phone: '0917 187 2638',
-    email: 'support@centyzzsalon.com',
-    tin: '123-456-789-000'
-  });
-
-  // Operating Hours State
-  const [hoursForm, setHoursForm] = useState({
-    tueSun: '09:00 AM - 07:00 PM',
-    mondayClosed: true,
-    slotInterval: '30 mins',
-    bufferTime: '10 mins'
-  });
-
-  // POS & Inventory Settings State
-  const [posForm, setPosForm] = useState({
-    currency: 'PHP (₱)',
-    taxRate: '12%',
-    lowStockThreshold: '5',
-    autoReorderAlert: true
-  });
-
-  // Staff Users Mock State
-  const [staffUsers] = useState([
-    { id: '1', name: 'Millicent Campillos', email: 'MillicentCampillos@example.com', role: 'SUPERADMIN' },
-    { id: '2', name: 'Aljean Mark Angeles', email: 'aljean@example.com', role: 'ADMIN' },
-    { id: '3', name: 'Staff 2', email: 'staff2@example.com', role: 'STAFF' }
-  ]);
-
-  const showToast = (msg) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(''), 4000);
+const card = "rounded-2xl border border-[#E7DFD4] bg-white p-6 shadow-sm";
+const input =
+  "mt-2 w-full rounded-xl border border-[#E7DFD4] bg-[#FFFDFA] px-4 py-3 text-sm outline-none focus:border-[#9A7049] disabled:opacity-60";
+const button =
+  "inline-flex items-center justify-center gap-2 rounded-xl bg-[#8B5E3C] px-5 py-3 text-sm font-bold text-white disabled:opacity-50";
+const days = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+];
+const tabs = [
+  ["profile", "Salon Profile", Building2],
+  ["hours", "Operating Hours", Clock],
+  ["staff", "Staff & Roles", Users],
+  ["inventory", "POS & Inventory", Package],
+  ["database", "Database", Database],
+];
+export default function SettingsView({
+  currentUser,
+  onNavigate,
+  showHeaderActions = true,
+}) {
+  const [tab, setTab] = useState("profile"),
+    [config, setConfig] = useState(null),
+    [draft, setDraft] = useState(null),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState(""),
+    [pending, setPending] = useState(false),
+    [extra, setExtra] = useState(null),
+    [loading, setLoading] = useState(true),
+    [refresh, setRefresh] = useState(0);
+  const { markDirty, markSaved, guardNavigation } = useUnsavedChanges();
+  const [dirty, setDirty] = useState(false);
+  const scope = "admin-salon-settings";
+  const token = currentUser?.accessToken;
+  useEffect(() => {
+    let active = true;
+    adminWorkspaceRequest(token, "settings")
+      .then((result) => {
+        if (active) {
+          setConfig(result);
+          setDraft(structuredClone(result));
+          setDirty(false);
+          markSaved(scope);
+        }
+      })
+      .catch((e) => {
+        if (active) setError(e.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [token, refresh, markSaved]);
+  useEffect(() => {
+    if (!["staff", "database"].includes(tab)) return;
+    let active = true;
+    adminWorkspaceRequest(token, tab)
+      .then((result) => {
+        if (active) setExtra(result);
+      })
+      .catch((e) => {
+        if (active) setError(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [tab, token, refresh]);
+  const reload = () => {
+    setLoading(true);
+    setError("");
+    setExtra(null);
+    setRefresh((n) => n + 1);
   };
-
-  const handleSaveSettings = (e) => {
-    e.preventDefault();
-    showToast('Settings successfully updated and saved!');
+  const selectTab = (next) => {
+    if (next === tab) return;
+    const navigate = () => {
+      if (dirty) {
+        setDraft(structuredClone(config));
+        setDirty(false);
+        markSaved(scope);
+      }
+      setNotice("");
+      setError("");
+      setExtra(null);
+      setTab(next);
+    };
+    dirty ? guardNavigation(navigate) : navigate();
   };
-
-  const renderRoleBadge = (role) => {
-    if (role === 'SUPERADMIN') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#FFE8D6] text-[#D97706] text-[9px] font-bold uppercase tracking-wider">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#D97706]" /> SUPERADMIN
-        </span>
-      );
-    }
-    if (role === 'ADMIN') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E6F4EA] text-[#137333] text-[9px] font-bold uppercase tracking-wider">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#137333]" /> ADMIN
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#F1F3F4] text-[#5F6368] text-[9px] font-bold uppercase tracking-wider">
-        <span className="w-1.5 h-1.5 rounded-full bg-[#9AA0A6]" /> STAFF
-      </span>
+  const change = (section, key, value) => {
+    setDirty(true);
+    markDirty(scope);
+    setDraft((old) => ({
+      ...old,
+      [section]: { ...old[section], [key]: value },
+    }));
+    setNotice("");
+  };
+  const save = async (pin) => {
+    const result = await adminWorkspaceRequest(token, "settings/" + tab, {
+      method: "PATCH",
+      pin,
+      body: { revision: config.revision, values: draft[tab] },
+    });
+    setConfig(result);
+    setDraft(structuredClone(result));
+    setDirty(false);
+    markSaved(scope);
+    setPending(false);
+    setNotice("Changes saved.");
+    window.dispatchEvent(new Event("salon-profile-updated"));
+  };
+  const backup = () => {
+    const blob = new Blob(
+      [
+        JSON.stringify(
+          {
+            exportedAt: new Date().toISOString(),
+            profile: config.profile,
+            hours: config.hours,
+            inventory: config.inventory,
+            currency: config.currency,
+            timezone: config.timezone,
+          },
+          null,
+          2,
+        ),
+      ],
+      { type: "application/json" },
     );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download =
+      "centyzz-salon-settings-" +
+      new Date().toISOString().slice(0, 10) +
+      ".json";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-
+  const field = (section, key, label, type = "text", required = false) => (
+    <label
+      key={key}
+      className={
+        "block text-xs font-bold text-[#82786B] " +
+        (["address", "description", "receiptHeader", "receiptFooter"].includes(
+          key,
+        )
+          ? "sm:col-span-2"
+          : "")
+      }
+    >
+      {label}
+      <input
+        className={input}
+        type={type}
+        required={required}
+        maxLength={
+          key === "description"
+            ? 600
+            : key === "address"
+              ? 500
+              : key === "salonName"
+                ? 150
+                : key === "phone"
+                  ? 40
+                  : key === "tin"
+                    ? 50
+                    : 300
+        }
+        value={draft[section][key] || ""}
+        onChange={(e) => change(section, key, e.target.value)}
+      />
+    </label>
+  );
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-8 text-[#2A1E1B] font-sans">
-      
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-2 bg-[#3A342B] text-[#F5F1EA] px-4 py-3 rounded-xl shadow-xl border border-[#C5A059]/40 text-xs font-semibold animate-fadeIn">
-          <CheckCircle2 className="h-4 w-4 text-[#C5A059]" />
-          <span>{toastMessage}</span>
+    <div className="mx-auto max-w-7xl space-y-6 pb-10 text-[#2A1E1B]">
+      <AdminPageHeader
+        title="Settings & Configuration"
+        subtitle="Manage salon details, booking hours, and inventory preferences"
+        showHeaderActions={showHeaderActions}
+      />
+      {error && (
+        <div
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+        >
+          {error}
+          <button className="ml-3 underline" onClick={() => reload()}>
+            Reload
+          </button>
         </div>
       )}
-
-      {/* Header Bar */}
-      <header className="mb-6 flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-[#2A1E1B] truncate">Settings & Configuration</h1>
-          <p className="mt-0.5 text-xs text-[#8A8174] truncate">
-            Manage salon profile, operating hours, security roles, and system preferences
-          </p>
-        </div>
-
-        {showHeaderActions && (<HeaderActions />)}
-      </header>
-
-      {/* Main Container Card */}
-      <div className="bg-white rounded-2xl border border-[#E7DFD4] shadow-sm p-6 sm:p-8 space-y-6">
-        
-        {/* Horizontal Pill Tabs Navigation */}
-        <div className="flex flex-wrap items-center gap-2 bg-[#F8F5F0] p-1.5 rounded-xl border border-[#E7DFD4]">
-          <button
-            onClick={() => setActiveTab('profile')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'profile' ? 'bg-[#2A1E1B] text-white shadow-xs' : 'text-[#8A8174] hover:text-[#2A1E1B]'
-            }`}
-          >
-            <Building2 size={14} /> Salon Profile
-          </button>
-          <button
-            onClick={() => setActiveTab('hours')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'hours' ? 'bg-[#2A1E1B] text-white shadow-xs' : 'text-[#8A8174] hover:text-[#2A1E1B]'
-            }`}
-          >
-            <Clock size={14} /> Operating Hours
-          </button>
-          <button
-            onClick={() => setActiveTab('staff')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'staff' ? 'bg-[#2A1E1B] text-white shadow-xs' : 'text-[#8A8174] hover:text-[#2A1E1B]'
-            }`}
-          >
-            <Users size={14} /> Staff & Roles
-          </button>
-          <button
-            onClick={() => setActiveTab('pos')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'pos' ? 'bg-[#2A1E1B] text-white shadow-xs' : 'text-[#8A8174] hover:text-[#2A1E1B]'
-            }`}
-          >
-            <Receipt size={14} /> POS & Inventory
-          </button>
-        </div>
-
-        {/* TAB 1: SALON PROFILE */}
-        {activeTab === 'profile' && (
-          <form onSubmit={handleSaveSettings} className="space-y-5 animate-fadeIn">
-            <div className="border-b border-[#E7DFD4] pb-3">
-              <h3 className="text-base font-bold text-[#2A1E1B]">Salon Profile & Branding</h3>
-              <p className="text-xs text-[#8A8174]">Core business details used for receipts, invoices, and purchase orders</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Salon Name</label>
-                <input
-                  type="text"
-                  value={profileForm.salonName}
-                  onChange={(e) => setProfileForm({ ...profileForm, salonName: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7DFD4] bg-[#F8F5F0] text-xs font-medium text-[#2A1E1B] outline-none focus:border-[#C5A059]"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Contact Number</label>
-                <input
-                  type="text"
-                  value={profileForm.phone}
-                  onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7DFD4] bg-[#F8F5F0] text-xs font-medium text-[#2A1E1B] outline-none focus:border-[#C5A059]"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Physical Address</label>
-              <input
-                type="text"
-                value={profileForm.address}
-                onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7DFD4] bg-[#F8F5F0] text-xs font-medium text-[#2A1E1B] outline-none focus:border-[#C5A059]"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Business Email</label>
-                <input
-                  type="email"
-                  value={profileForm.email}
-                  onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7DFD4] bg-[#F8F5F0] text-xs font-medium text-[#2A1E1B] outline-none focus:border-[#C5A059]"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">TIN Number</label>
-                <input
-                  type="text"
-                  value={profileForm.tin}
-                  onChange={(e) => setProfileForm({ ...profileForm, tin: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7DFD4] bg-[#F8F5F0] text-xs font-medium text-[#2A1E1B] outline-none focus:border-[#C5A059]"
-                />
-              </div>
-            </div>
-
-            <div className="pt-4 flex justify-end">
-              <button
-                type="submit"
-                className="bg-[#8B5E3C] hover:bg-[#724B2F] text-white px-6 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2"
-              >
-                <Save size={16} /> Save Changes
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* TAB 2: OPERATING HOURS */}
-        {activeTab === 'hours' && (
-          <form onSubmit={handleSaveSettings} className="space-y-5 animate-fadeIn">
-            <div className="border-b border-[#E7DFD4] pb-3">
-              <h3 className="text-base font-bold text-[#2A1E1B]">Operating Hours & Scheduling</h3>
-              <p className="text-xs text-[#8A8174]">Control business availability and client booking slot windows</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Tuesday – Sunday Schedule</label>
-                <input
-                  type="text"
-                  value={hoursForm.tueSun}
-                  onChange={(e) => setHoursForm({ ...hoursForm, tueSun: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7DFD4] bg-[#F8F5F0] text-xs font-medium text-[#2A1E1B] outline-none focus:border-[#C5A059]"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Appointment Slot Interval</label>
-                <select
-                  value={hoursForm.slotInterval}
-                  onChange={(e) => setHoursForm({ ...hoursForm, slotInterval: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7DFD4] bg-[#F8F5F0] text-xs font-medium text-[#2A1E1B] outline-none focus:border-[#C5A059]"
+      {notice && (
+        <p
+          role="status"
+          className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800"
+        >
+          {notice}
+        </p>
+      )}
+      {loading ? (
+        <div className={card}>Loading salon settings…</div>
+      ) : (
+        config &&
+        draft && (
+          <section className={card}>
+            <div
+              role="tablist"
+              aria-label="Salon settings"
+              className="mb-8 flex flex-wrap gap-1 rounded-xl border border-[#E7DFD4] bg-[#F8F6F2] p-1.5"
+            >
+              {tabs.map(([id, label, Icon]) => (
+                <button
+                  role="tab"
+                  aria-selected={tab === id}
+                  key={id}
+                  onClick={() => selectTab(id)}
+                  className={
+                    "flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold " +
+                    (tab === id ? "bg-[#2A1E1B] text-white" : "text-[#82786B]")
+                  }
                 >
-                  <option value="15 mins">15 mins</option>
-                  <option value="30 mins">30 mins</option>
-                  <option value="1 hour">1 hour</option>
-                </select>
-              </div>
+                  <Icon size={16} />
+                  {label}
+                </button>
+              ))}
             </div>
-
-            <div className="flex items-center gap-3 pt-2">
-              <input
-                type="checkbox"
-                id="mondayClosed"
-                checked={hoursForm.mondayClosed}
-                onChange={(e) => setHoursForm({ ...hoursForm, mondayClosed: e.target.checked })}
-                className="rounded border-gray-300 text-[#8B5E3C] focus:ring-0 cursor-pointer w-4 h-4"
-              />
-              <label htmlFor="mondayClosed" className="text-xs font-medium text-[#2A1E1B] cursor-pointer">
-                Automatically mark Mondays as Closed for salon maintenance and rest.
-              </label>
-            </div>
-
-            <div className="pt-4 flex justify-end">
-              <button
-                type="submit"
-                className="bg-[#8B5E3C] hover:bg-[#724B2F] text-white px-6 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2"
+            {["profile", "hours", "inventory"].includes(tab) && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setPending(true);
+                }}
               >
-                <Save size={16} /> Save Changes
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* TAB 3: STAFF & ROLES */}
-        {activeTab === 'staff' && (
-          <div className="space-y-5 animate-fadeIn">
-            <div className="flex items-center justify-between border-b border-[#E7DFD4] pb-3">
-              <div>
-                <h3 className="text-base font-bold text-[#2A1E1B]">Staff & Role Permissions</h3>
-                <p className="text-xs text-[#8A8174]">Manage team member access levels (Superadmin, Admin, Staff)</p>
-              </div>
-              <button
-                onClick={() => showToast('Invite team member modal opened')}
-                className="bg-[#8B5E3C] hover:bg-[#724B2F] text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
-              >
-                <Plus size={14} /> Add Staff
-              </button>
-            </div>
-
-            <div className="overflow-x-auto rounded-xl border border-[#E7DFD4]">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#F8F5F0] text-[10px] uppercase font-bold text-[#8A8174] tracking-wider border-b border-[#E7DFD4]">
-                    <th className="p-4 pl-6">Name</th>
-                    <th className="p-4">Email</th>
-                    <th className="p-4 text-center">Assigned Role</th>
-                    <th className="p-4 pr-6 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E7DFD4]/60 text-xs font-sans">
-                  {staffUsers.map((user) => (
-                    <tr key={user.id} className="hover:bg-[#FDFBF7] transition-colors">
-                      <td className="p-4 pl-6 font-bold text-[#2A1E1B]">{user.name}</td>
-                      <td className="p-4 text-[#8A8174]">{user.email}</td>
-                      <td className="p-4 text-center">{renderRoleBadge(user.role)}</td>
-                      <td className="p-4 pr-6 text-right">
-                        <button
-                          onClick={() => showToast(`Editing permissions for ${user.name}`)}
-                          className="text-xs font-bold text-[#8B5E3C] hover:underline"
+                <h2 className="text-lg font-bold">
+                  {tab === "profile"
+                    ? "Salon Profile & Branding"
+                    : tab === "hours"
+                      ? "Operating Hours & Booking"
+                      : "POS & Inventory Preferences"}
+                </h2>
+                <p className="mb-6 mt-1 border-b border-[#E7DFD4] pb-4 text-sm text-[#82786B]">
+                  {tab === "profile"
+                    ? "Contact details and opening hours appear in the website footer."
+                    : tab === "hours"
+                      ? "These hours control available online booking times in Philippine time."
+                      : "Default alerts for new inventory items. Existing item thresholds stay unchanged."}
+                </p>
+                {tab === "profile" && (
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    {field("profile", "salonName", "Salon name", "text", true)}
+                    {field("profile", "phone", "Contact number", "tel", true)}
+                    {field(
+                      "profile",
+                      "address",
+                      "Physical address",
+                      "text",
+                      true,
+                    )}
+                    {field("profile", "email", "Business email", "email")}
+                    {field("profile", "tin", "TIN number (optional)")}
+                    {field("profile", "description", "Footer description")}
+                  </div>
+                )}
+                {tab === "hours" && (
+                  <div className="space-y-3">
+                    {draft.hours.days.map((day, i) => (
+                      <div
+                        key={i}
+                        className="grid grid-cols-2 items-center gap-3 rounded-xl border border-[#E7DFD4] p-4 sm:grid-cols-[1fr_100px_1fr_1fr]"
+                      >
+                        <strong className="text-sm">{days[i]}</strong>
+                        <label className="flex items-center gap-2 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={day.closed}
+                            onChange={(e) =>
+                              change(
+                                "hours",
+                                "days",
+                                draft.hours.days.map((d, j) =>
+                                  j === i
+                                    ? { ...d, closed: e.target.checked }
+                                    : d,
+                                ),
+                              )
+                            }
+                          />
+                          Closed
+                        </label>
+                        {["start", "end"].map((key) => (
+                          <label key={key} className="text-xs text-[#82786B]">
+                            {key === "start" ? "Opens" : "Closes"}
+                            <input
+                              className={input}
+                              aria-label={
+                                days[i] +
+                                " " +
+                                (key === "start" ? "opens" : "closes")
+                              }
+                              type="time"
+                              required
+                              disabled={day.closed}
+                              value={day[key]}
+                              onChange={(e) =>
+                                change(
+                                  "hours",
+                                  "days",
+                                  draft.hours.days.map((d, j) =>
+                                    j === i
+                                      ? { ...d, [key]: e.target.value }
+                                      : d,
+                                  ),
+                                )
+                              }
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    ))}
+                    <label className="block pt-4 text-sm font-semibold">
+                      Booking time interval
+                      <select
+                        className={input}
+                        value={draft.hours.slotInterval}
+                        onChange={(e) =>
+                          change(
+                            "hours",
+                            "slotInterval",
+                            Number(e.target.value),
+                          )
+                        }
+                      >
+                        {[15, 30, 60].map((n) => (
+                          <option key={n} value={n}>
+                            {n} minutes
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <p className="text-xs text-[#82786B]">
+                      A change that would place an upcoming booking outside
+                      operating hours cannot be saved.
+                    </p>
+                  </div>
+                )}
+                {tab === "inventory" && (
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <label className="text-sm font-semibold">
+                      Default low-stock threshold
+                      <input
+                        type="number"
+                        min="0"
+                        max="1000000"
+                        required
+                        className={input}
+                        value={draft.inventory.lowStockThreshold}
+                        onChange={(e) =>
+                          change(
+                            "inventory",
+                            "lowStockThreshold",
+                            e.target.value === "" ? "" : Number(e.target.value),
+                          )
+                        }
+                      />
+                    </label>
+                    <label className="flex items-center gap-3 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={draft.inventory.alertsEnabled}
+                        onChange={(e) =>
+                          change("inventory", "alertsEnabled", e.target.checked)
+                        }
+                      />
+                      Show low-stock alerts
+                    </label>
+                    <div className="rounded-xl bg-[#F8F6F2] p-4 text-sm sm:col-span-2">
+                      <p>
+                        Currency: {config.currency} · Time zone:{" "}
+                        {config.timezone}
+                      </p>
+                      <p className="mt-2 text-xs text-[#82786B]">
+                        Financial tax configuration is managed centrally. This
+                        page does not change prices or completed transactions.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <div className="mt-8 flex justify-end">
+                  <button type="submit" className={button} disabled={!dirty}>
+                    <Save size={16} />
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            )}
+            {tab === "staff" && (
+              <>
+                <h2 className="text-lg font-bold">Staff & Account Roles</h2>
+                <p className="mt-1 text-sm text-[#82786B]">
+                  Accounts and job roles come from Users and the staff roster.
+                </p>
+                <div className="my-5 flex gap-3">
+                  <button
+                    className={button}
+                    onClick={() => onNavigate?.("users")}
+                  >
+                    Manage Users
+                  </button>
+                  <button
+                    className="rounded-xl border px-4 py-2 text-sm"
+                    onClick={() => onNavigate?.("schedule")}
+                  >
+                    Open Schedule
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-[#F8F6F2] text-xs text-[#82786B]">
+                      <tr>
+                        {[
+                          "Name",
+                          "Account role",
+                          "Staff job role",
+                          "Status",
+                        ].map((x) => (
+                          <th key={x} className="p-3">
+                            {x}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {extra?.map((person) => (
+                        <tr
+                          key={person.id}
+                          className="border-b border-[#E7DFD4]"
                         >
-                          Edit Role
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 4: POS & INVENTORY */}
-        {activeTab === 'pos' && (
-          <form onSubmit={handleSaveSettings} className="space-y-5 animate-fadeIn">
-            <div className="border-b border-[#E7DFD4] pb-3">
-              <h3 className="text-base font-bold text-[#2A1E1B]">POS & Inventory Preferences</h3>
-              <p className="text-xs text-[#8A8174]">Configure currency, tax calculations, and automated reorder rules</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Currency</label>
-                <input
-                  type="text"
-                  readOnly
-                  value={posForm.currency}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7DFD4] bg-gray-100 text-xs font-bold text-[#2A1E1B]"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Default Tax / VAT Rate</label>
-                <input
-                  type="text"
-                  value={posForm.taxRate}
-                  onChange={(e) => setPosForm({ ...posForm, taxRate: e.target.value })}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7DFD4] bg-[#F8F5F0] text-xs font-medium text-[#2A1E1B] outline-none focus:border-[#C5A059]"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Low-Stock Default Alert Threshold (Units)</label>
-              <input
-                type="number"
-                value={posForm.lowStockThreshold}
-                onChange={(e) => setPosForm({ ...posForm, lowStockThreshold: e.target.value })}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-[#E7DFD4] bg-[#F8F5F0] text-xs font-medium text-[#2A1E1B] outline-none focus:border-[#C5A059]"
-              />
-            </div>
-
-            <div className="pt-4 flex justify-end">
-              <button
-                type="submit"
-                className="bg-[#8B5E3C] hover:bg-[#724B2F] text-white px-6 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2"
-              >
-                <Save size={16} /> Save Changes
-              </button>
-            </div>
-          </form>
-        )}
-
-      </div>
-
+                          <td className="p-3 font-semibold">{person.name}</td>
+                          <td className="p-3">{person.role}</td>
+                          <td className="p-3">{person.job_title || "—"}</td>
+                          <td className="p-3">
+                            {person.active ? "Active" : "Inactive"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {!extra && <p className="p-4 text-sm">Loading accounts…</p>}
+                </div>
+              </>
+            )}
+            {tab === "database" && (
+              <>
+                <h2 className="text-lg font-bold">Database Overview</h2>
+                <p className="mt-1 text-sm text-[#82786B]">
+                  Connection status and record counts. Credentials and customer
+                  details are never included here.
+                </p>
+                <div className="my-5 flex flex-wrap gap-3">
+                  <button
+                    className="flex items-center gap-2 rounded-xl border px-4 py-2 text-sm"
+                    onClick={() => reload()}
+                  >
+                    <RefreshCw size={16} />
+                    Refresh status
+                  </button>
+                  <button className={button} onClick={backup}>
+                    <Download size={16} />
+                    Download settings backup
+                  </button>
+                </div>
+                <p className="mb-4 text-xs text-[#82786B]">
+                  The download contains salon preferences only. Full database
+                  backups remain in Neon’s backup controls.
+                </p>
+                {extra ? (
+                  <>
+                    <p
+                      role="status"
+                      className="mb-4 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800"
+                    >
+                      Database connected · Checked{" "}
+                      {new Date(extra.checkedAt).toLocaleString("en-PH", {
+                        timeZone: "Asia/Manila",
+                      })}
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      {extra.tables.map((t) => (
+                        <div
+                          className="rounded-xl border border-[#E7DFD4] p-4"
+                          key={t.label}
+                        >
+                          <p className="text-xs text-[#82786B]">{t.label}</p>
+                          <p className="mt-2 text-xl font-bold">
+                            {t.rows.toLocaleString()}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p>Checking database…</p>
+                )}
+              </>
+            )}
+          </section>
+        )
+      )}
+      {pending && (
+        <AdminAuthorizationDialog
+          action={
+            "Save " +
+            tabs.find((x) => x[0] === tab)?.[1].toLowerCase() +
+            " changes"
+          }
+          onClose={() => setPending(false)}
+          onConfirm={save}
+        />
+      )}
     </div>
   );
 }

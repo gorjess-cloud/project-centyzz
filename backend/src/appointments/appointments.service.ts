@@ -1,3 +1,6 @@
+import { MemberBookingService } from './member-booking.service.js';
+import { Optional } from '@nestjs/common';
+import { SalonConfigService,defaultBookingDay } from '../salon/salon-config.service.js';
 import {
   BadRequestException,
   ConflictException,
@@ -24,6 +27,8 @@ interface CreateAppointmentInput {
 
 @Injectable()
 export class AppointmentsService {
+  constructor(@Optional() private readonly salon?:SalonConfigService, @Optional() private readonly memberBookings?:MemberBookingService) {}
+  private operatingDay(date:string){return this.salon?this.salon.bookingDay(date):Promise.resolve(defaultBookingDay());}
   private readonly logger = new Logger(AppointmentsService.name);
 
   async findForStaff(role: string) {
@@ -44,7 +49,7 @@ export class AppointmentsService {
         };
       }));
       data.sort((a, b) => `${a.appointmentDate} ${a.startTime}`.localeCompare(`${b.appointmentDate} ${b.startTime}`));
-      return { success: true, data };
+      return { success: true, data: await this.enrichAppointments(data) };
     } catch (error) {
       this.logger.error('Failed to fetch staff appointments', error instanceof Error ? error.stack : String(error));
       throw new InternalServerErrorException('Unable to retrieve appointments');
@@ -74,6 +79,7 @@ export class AppointmentsService {
     userId: number,
     email: string,
   ) {
+    if(this.memberBookings)return this.memberBookings.create(input,userId,email);
     const user = await db.orm.public.User.where({
       id: userId,
       email: email as Varchar<255>,
@@ -131,7 +137,7 @@ export class AppointmentsService {
         }),
       );
 
-      return { success: true, data };
+      return { success: true, data: await this.enrichAppointments(data) };
     } catch (error) {
       this.logger.error(
         'Failed to fetch member appointments',
@@ -148,6 +154,7 @@ export class AppointmentsService {
     this.validateDate(appointmentDate);
 
     const startMinutes = this.timeToMinutes(startTime);
+    const operating=await this.operatingDay(appointmentDate);
 
     try {
       const salonNow = this.salonDateTime();
@@ -172,9 +179,9 @@ export class AppointmentsService {
       if (
         !Number.isFinite(durationMinutes) ||
         durationMinutes <= 0 ||
-        startMinutes < 12 * 60 ||
-        endMinutes > 21 * 60 ||
-        startMinutes % 30 !== 0
+        operating.closed || startMinutes < operating.open ||
+        endMinutes > operating.close ||
+        (startMinutes-operating.open) % operating.interval !== 0
       ) {
         throw new BadRequestException('Appointment time is outside operating hours');
       }
@@ -228,13 +235,14 @@ export class AppointmentsService {
     }
   }
 
-  async getAvailableSlots(date: string, serviceId: number) {
+  async getAvailableSlots(date: string, serviceId: number | number[]) {
+    if(this.memberBookings)return this.memberBookings.availability(date,Array.isArray(serviceId)?serviceId:[serviceId]);
     this.validateDate(date);
-    this.validateServiceId(serviceId);
+    this.validateServiceId(serviceId as number);
 
     try {
       const service = await db.orm.public.Service
-        .where({ id: serviceId, isActive: true })
+        .where({ id: serviceId as number, isActive: true })
         .all();
 
       if (service.length === 0) {
@@ -259,9 +267,10 @@ export class AppointmentsService {
         ),
       );
 
-      const openingMinutes = 12 * 60;
-      const closingMinutes = 21 * 60;
-      const slotInterval = 30;
+      const operating=await this.operatingDay(date);
+      const openingMinutes=operating.open;
+      const closingMinutes=operating.closed?operating.open:operating.close;
+      const slotInterval=operating.interval;
       const salonNow = this.salonDateTime();
 
       const slots: {
@@ -346,15 +355,16 @@ export class AppointmentsService {
 
     const startMinutes = this.timeToMinutes(requestedTime);
 
-    if (startMinutes < 12 * 60 || startMinutes >= 21 * 60) {
+    const operating=await this.operatingDay(date);
+    if (operating.closed || startMinutes < operating.open || startMinutes >= operating.close) {
       throw new BadRequestException(
-        'Appointments must start between 12:00 and 20:30',
+        'Appointments must start within salon operating hours',
       );
     }
 
-    if (startMinutes % 30 !== 0) {
+    if ((startMinutes-operating.open) % operating.interval !== 0) {
       throw new BadRequestException(
-        'Appointment start times must be in 30-minute intervals',
+        'Appointment start time must match the saved booking interval',
       );
     }
 
@@ -405,7 +415,7 @@ export class AppointmentsService {
         if (
           !Number.isFinite(durationMinutes) ||
           durationMinutes <= 0 ||
-          endMinutes > 21 * 60
+          endMinutes > operating.close
         ) {
           throw new BadRequestException(
             'The selected service cannot fit within salon operating hours',
@@ -538,6 +548,18 @@ export class AppointmentsService {
     }
   }
   
+  private async enrichAppointments<T extends {id:number}>(rows:T[]) {
+    const summaries=await this.memberBookings?.summaries(rows.map(r=>r.id));
+    return rows.map(row=>({...row,...summaries?.get(row.id)}));
+  }
+
+  async getCalendarForUser(id:number,userId:number) {
+    const row=await db.orm.public.Appointment.where({id,userId}).first();
+    if(!row)throw new NotFoundException('Appointment not found.');
+    if(!['PENDING','CONFIRMED'].includes(String(row.status))||(row as any).archivedAt)throw new BadRequestException('Only an active scheduled appointment can be added to calendar.');
+    return this.getCalendarLink(id);
+  }
+
   async getCalendarLink(id: number) {
     const appointment = await this.getAppointmentForCalendar(id);
 
@@ -650,7 +672,7 @@ export class AppointmentsService {
 
     return {
       ...appointment,
-      serviceName: String(services[0].name),
+      serviceName: (await this.memberBookings?.summaries([id]))?.get(id)?.service.name ?? String(services[0].name),
     };
   }
 

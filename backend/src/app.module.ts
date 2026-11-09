@@ -1,3 +1,4 @@
+import {StaffPosModule} from './staff/pos/staff-pos.module.js';
 
 import { Module } from '@nestjs/common';
 
@@ -24,6 +25,7 @@ import { AdminModule } from './admin/admin.module.js';
     SuperadminModule,
     ErrorsModule,
     AdminModule,
+    StaffPosModule,
 
   ],
   controllers: [AppController],

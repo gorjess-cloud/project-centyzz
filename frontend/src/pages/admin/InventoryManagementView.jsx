@@ -1,5 +1,10 @@
-import HeaderActions from '../../components/workspace/HeaderActions';
-import { useState } from 'react';
+import {usePageFind} from '../../components/workspace/AdminWorkspaceContext';
+import useSalonProfile from '../../hooks/useSalonProfile';
+import AdminPageHeader from '../../components/workspace/AdminPageHeader';
+import {adminWorkspaceRequest} from '../../api/admin-workspace';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { readJsonResponse } from '../../api/client';
 import { 
   Search, 
   Plus, 
@@ -15,24 +20,16 @@ import {
   MinusCircle
 } from 'lucide-react';
 
-export default function InventoryManagementView({ showHeaderActions = true }) {
+export default function InventoryManagementView({ showHeaderActions = true, currentUser }) {
+  const salonProfile=useSalonProfile();
   const [toastMessage, setToastMessage] = useState('');
   const [mainTab, setMainTab] = useState('active');
 
-  const [items, setItems] = useState([
-    { id: '1', sku: 'OLP-003', name: 'Olaplex No. 3 Hair Perfector', category: 'Retail (For Sale)', stock: 2, unitCost: 350.00, alertThreshold: 5, recommendedQty: 15, status: 'LOW STOCK', isArchived: false },
-    { id: '2', sku: 'HBS-100', name: 'Hydra Boost Serum', category: 'Retail (For Sale)', stock: 3, unitCost: 350.00, alertThreshold: 5, recommendedQty: 20, status: 'LOW STOCK', isArchived: false },
-    { id: '3', sku: 'CDV-020', name: 'Color Developer 20V', category: 'Retail (For Sale)', stock: 4, unitCost: 350.00, alertThreshold: 5, recommendedQty: 18, status: 'LOW STOCK', isArchived: false },
-    { id: '4', sku: 'KTS-500', name: 'Keratin Treatment Solution', category: 'Retail (For Sale)', stock: 1, unitCost: 350.00, alertThreshold: 5, recommendedQty: 12, status: 'LOW STOCK', isArchived: false },
-    { id: '5', sku: 'PTS-250', name: 'Purple Toning Shampoo', category: 'Retail (For Sale)', stock: 18, unitCost: 350.00, alertThreshold: 5, recommendedQty: 25, status: 'IN STOCK', isArchived: false },
-    { id: '6', sku: 'NGP-BLS', name: 'Nail Gel Polish — Blush Pink', category: 'In Salon Use', stock: 7, unitCost: 350.00, alertThreshold: 5, recommendedQty: 10, status: 'IN STOCK', isArchived: false },
-    { id: '7', sku: 'MAS-001', name: 'Moroccan Argan Shampoo', category: 'In Salon Use', stock: 12, unitCost: 280.00, alertThreshold: 5, recommendedQty: 15, status: 'IN STOCK', isArchived: false },
-    { id: '8', sku: 'SLF-102', name: 'Sulfate-Free Conditioner', category: 'Retail (For Sale)', stock: 15, unitCost: 310.00, alertThreshold: 5, recommendedQty: 20, status: 'IN STOCK', isArchived: true }
-  ]);
+  const [items, setItems] = useState([]);
 
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [availabilityFilter, setAvailabilityFilter] = useState('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery,isHighlightSearch] = usePageFind();
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
@@ -47,6 +44,8 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
   const [deleteTargetItem, setDeleteTargetItem] = useState(null);
   const [excludedPoSkus, setExcludedPoSkus] = useState([]);
 
+  const [inventoryPreferences,setInventoryPreferences]=useState({lowStockThreshold:5,alertsEnabled:true});
+  useEffect(()=>{let active=true;adminWorkspaceRequest(currentUser?.accessToken,'settings').then(config=>{if(active){setInventoryPreferences(config.inventory);setNewItemForm(form=>({...form,lowStockAlert:String(config.inventory.lowStockThreshold)}));}}).catch(()=>{});return()=>{active=false;};},[currentUser?.accessToken]);
   const [newItemForm, setNewItemForm] = useState({
     name: '',
     sku: '',
@@ -61,17 +60,12 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
   });
 
   const [restockForm, setRestockForm] = useState({
-    selectedSku: 'OLP-003',
+    selectedSku: '',
     qtyToAdd: '0',
     note: ''
   });
 
-  const [poOrderQty, setPoOrderQty] = useState({
-    'OLP-003': 13,
-    'HBS-100': 20,
-    'CDV-020': 16,
-    'KTS-500': 19
-  });
+  const [poOrderQty, setPoOrderQty] = useState({});
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -88,8 +82,7 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
       (availabilityFilter === 'LOW' && i.status === 'LOW STOCK') ||
       (availabilityFilter === 'IN' && i.status === 'IN STOCK');
 
-    const matchesSearch = 
-      i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch = isHighlightSearch || i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       i.sku.toLowerCase().includes(searchQuery.toLowerCase());
 
     return matchesTab && matchesCategory && matchesAvailability && matchesSearch;
@@ -98,52 +91,99 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage) || 1;
   const paginatedItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const handleAddNewItem = (e) => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState(null);
+  const [pin, setPin] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [savedOrder, setSavedOrder] = useState(null);
+  const requests = useRef(new Map());
+  const running = useRef(false);
+  const token = currentUser?.accessToken;
+  async function request(path = '', method = 'GET', body, actionPin) {
+    if (!token) throw new Error('Sign in as an Admin to manage inventory.');
+    const fingerprint = method + path + JSON.stringify(body ?? {});
+    let key;
+    if (method !== 'GET') {
+      key = requests.current.get(fingerprint) ?? crypto.randomUUID();
+      requests.current.set(fingerprint, key);
+    }
+    const response = await fetch('/api/admin/inventory' + path, {
+      method, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json',
+        ...(key ? { 'Idempotency-Key': key, 'x-management-pin': actionPin } : {}) },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+    const result = await readJsonResponse(response);
+    if (!response.ok) throw new Error(Array.isArray(result.message) ? result.message.join(' ') : result.message || 'Inventory request failed.');
+    if (key) requests.current.delete(fingerprint);
+    return result;
+  }
+  async function load() {
+    const result = await request();
+    setItems(result);
+    return result;
+  }
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError('');
+    request().then(data => { if (active) setItems(data); })
+      .catch(e => { if (active) setError(e.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [token]);
+  useEffect(() => { setCurrentPage(p => Math.min(p, totalPages)); }, [totalPages]);
+  useEffect(() => {
+    if (!items.some(i => !i.isArchived && i.sku === restockForm.selectedSku)) {
+      setRestockForm(f => ({ ...f, selectedSku: items.find(i => !i.isArchived)?.sku ?? '' }));
+    }
+  }, [items]);
+  const queue = task => { if (!running.current) { setPin(''); setPinError(''); setPending(task); } };
+  async function confirmAction(e) {
     e.preventDefault();
-    if (!newItemForm.name || !newItemForm.sku) return;
-
-    const initialQtyNum = parseInt(newItemForm.initialQuantity) || 0;
-    const thresholdNum = parseInt(newItemForm.lowStockAlert) || 5;
-
-    let computedStatus = initialQtyNum <= thresholdNum ? 'LOW STOCK' : 'IN STOCK';
-
-    const itemToAdd = {
-      id: String(Date.now()),
-      sku: newItemForm.sku,
-      name: newItemForm.name,
-      category: newItemForm.category,
-      stock: initialQtyNum,
-      unitCost: parseFloat(newItemForm.costPrice) || 350.00,
-      alertThreshold: thresholdNum,
-      recommendedQty: 15,
-      status: computedStatus,
-      isArchived: false
-    };
-
-    setItems([itemToAdd, ...items]);
-    setIsAddItemModalOpen(false);
-    showToast(`Added new inventory item "${newItemForm.name}"`);
-    setNewItemForm({ name: '', sku: '', category: 'Retail (For Sale)', unit: 'Pieces', initialQuantity: '0', lowStockAlert: '5', costPrice: '', retailPrice: '', supplier: '', note: '' });
-  };
-
-  const handleRestockItem = (e) => {
+    if (running.current || !pending) return;
+    running.current = true; setBusy(true); setPinError('');
+    let committed = false;
+    try {
+      const result = await request(pending.path, pending.method, pending.body, pin);
+      committed = true;
+      pending.done?.(result);
+      setPending(null); setPin('');
+      showToast(pending.message);
+      try { await load(); setError(''); }
+      catch { setError('Action saved. Refresh inventory to see the latest stock.'); }
+    } catch(e) { if (!committed) setPinError(e.message); }
+    finally { running.current = false; setBusy(false); setPin(''); }
+  }
+  const handleAddNewItem = e => {
     e.preventDefault();
-    const addQty = parseInt(restockForm.qtyToAdd) || 0;
-    if (addQty <= 0) return;
-
-    setItems(items.map(item => {
-      if (item.sku === restockForm.selectedSku) {
-        const updatedStock = item.stock + addQty;
-        const updatedStatus = updatedStock <= item.alertThreshold ? 'LOW STOCK' : 'IN STOCK';
-
-        return { ...item, stock: updatedStock, status: updatedStatus };
-      }
-      return item;
-    }));
-
-    setIsAddItemModalOpen(false);
-    showToast(`Successfully restocked ${addQty} units for SKU ${restockForm.selectedSku}`);
+    queue({ path:'',method:'POST',body:{ ...newItemForm,
+      initialQuantity:Number(newItemForm.initialQuantity),lowStockAlert:Number(newItemForm.lowStockAlert),
+      costPrice:Number(newItemForm.costPrice),retailPrice:Number(newItemForm.retailPrice) },
+      message:'Inventory item saved.',done:() => {
+        setIsAddItemModalOpen(false);
+        setNewItemForm({name:'',sku:'',category:'Retail (For Sale)',unit:'Pieces',initialQuantity:'0',lowStockAlert:String(inventoryPreferences.lowStockThreshold),costPrice:'',retailPrice:'',supplier:'',note:''});
+      } });
   };
+  const handleRestockItem = e => {
+    e.preventDefault();
+    const item = items.find(i => i.sku === restockForm.selectedSku && !i.isArchived);
+    if (!item) { setError('Choose an active inventory item.'); return; }
+    queue({path:'/' + item.id + '/restock',method:'POST',body:{quantity:Number(restockForm.qtyToAdd),note:restockForm.note},
+      message:'Stock updated.',done:() => {setIsAddItemModalOpen(false);setRestockForm(f => ({...f,qtyToAdd:'0',note:''}));} });
+  };
+  function changeState(item, state) {
+    queue({path:'/' + item.id + (state === 'hide' ? '' : '/' + state),method:state === 'hide' ? 'DELETE' : 'PATCH',
+      message: state === 'restore' ? 'Item restored.' : state === 'archive' ? 'Item archived.' : 'Item removed from archive.',
+      done:() => {setArchiveTargetItem(null);setDeleteTargetItem(null);} });
+  }
+  function saveOrder() {
+    queue({path:'/purchase-orders',method:'POST',body:{items:lowStockItemsList.map(i => ({id:i.id,quantity:poOrderQty[i.sku] ?? i.recommendedQty}))},
+      message:'Purchase order saved. Receive delivered stock through Restock Item.',done:order => {
+        setSavedOrder(order);setIsPOModalOpen(false);setIsPODocumentModalOpen(true);setExcludedPoSkus([]);setPoOrderQty({});
+      } });
+  }
 
   const handleExcludePoItem = (sku, name) => {
     setExcludedPoSkus([...excludedPoSkus, sku]);
@@ -152,7 +192,7 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
 
   const lowStockItemsList = items.filter(i => !i.isArchived && i.status === 'LOW STOCK' && !excludedPoSkus.includes(i.sku));
   const poEstimatedTotal = lowStockItemsList.reduce((sum, item) => {
-    const qty = poOrderQty[item.sku] || 10;
+    const qty = poOrderQty[item.sku] ?? item.recommendedQty;
     return sum + (qty * item.unitCost);
   }, 0);
 
@@ -173,7 +213,7 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-8 text-[#2A1E1B] font-sans">
-      
+
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-5 right-5 z-50 flex items-center gap-2 bg-[#3A342B] text-[#F5F1EA] px-4 py-3 rounded-xl shadow-xl border border-[#C5A059]/40 text-xs font-semibold animate-fadeIn">
@@ -183,20 +223,13 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
       )}
 
       {/* Header Bar matching Schedule and Client views */}
-      <header className="mb-6 flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-[#2A1E1B] truncate">Inventory Management</h1>
-          <p className="mt-0.5 text-xs text-[#8A8174] truncate">
-            Track salon stock levels, reorder alerts, and purchase orders
-          </p>
-        </div>
+      <AdminPageHeader title="Inventory Management" subtitle="Track salon stock levels, reorder alerts, and purchase orders" showHeaderActions={showHeaderActions}/>
 
-        {showHeaderActions && (<HeaderActions />)}
-      </header>
-
+      {loading && <p role="status">Loading inventory…</p>}
+      {error && <div role="alert" className="bg-rose-50 border border-rose-200 p-4 rounded-xl text-sm">{error} <button type="button" className="underline ml-3" onClick={() => {setLoading(true);load().then(() => setError('')).catch(e => setError(e.message)).finally(() => setLoading(false));}}>Refresh inventory</button></div>}
       {/* MAIN CONTAINER SQUARE */}
       <div className="bg-white rounded-2xl border border-[#E7DFD4] shadow-sm p-6 sm:p-8 space-y-6">
-        
+
         {/* Controls Row */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
@@ -239,7 +272,7 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                 type="text"
                 placeholder="Search Item name or SKU..."
                 value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                onChange={(e) => { setSearchQuery(e.target.value); if(!isHighlightSearch)setCurrentPage(1); }}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#E7DFD4] bg-[#FFFDF8] text-xs text-[#2A1E1B] placeholder-[#8A8174] outline-none focus:border-[#C5A059] transition-all font-medium"
               />
             </div>
@@ -288,7 +321,7 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
         </div>
 
         {/* Low Stock Alert Box */}
-        {mainTab === 'active' && lowStockCount > 0 && (
+        {mainTab === 'active' && inventoryPreferences.alertsEnabled && lowStockCount > 0 && (
           <div className="bg-[#FFFDF3] border border-[#EADDBF] p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start sm:items-center gap-3">
               <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl shrink-0">
@@ -296,10 +329,10 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
               </div>
               <div>
                 <h3 className="text-xs font-bold text-[#2A1E1B]">
-                  {lowStockCount} products below minimum threshold
+                  {lowStockCount} {lowStockCount === 1 ? 'product at or below' : 'products at or below'} minimum threshold
                 </h3>
                 <p className="text-[11px] text-[#8A8174] mt-0.5">
-                  Hydra Boost Serum, Olaplex No. 3 Hair Perfector, Color Developer 20V +{lowStockCount - 3} more
+                  {items.filter(i => !i.isArchived && i.stock <= i.alertThreshold).slice(0,3).map(i => i.name).join(', ')}{lowStockCount > 3 ? ' +' + (lowStockCount - 3) + ' more' : ''}
                 </p>
               </div>
             </div>
@@ -322,7 +355,7 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
             <thead>
               <tr className="bg-[#FFFDF8] text-[10px] uppercase font-bold text-[#8A8174] tracking-wider border-b border-[#E7DFD4]">
                 <th className="p-4 pl-6 w-10">
-                  <input type="checkbox" className="rounded border-gray-300 text-[#8B5E3C] focus:ring-0 cursor-pointer" />
+
                 </th>
                 <th className="p-4">SKU / Item Code</th>
                 <th className="p-4">Item Name</th>
@@ -336,14 +369,14 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
               {paginatedItems.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="p-8 text-center text-[#8A8174]">
-                    {mainTab === 'active' ? 'No active inventory items found.' : 'Archived bin is empty.'}
+                    {loading ? 'Loading inventory…' : error ? 'Inventory could not be loaded.' : mainTab === 'active' ? 'No active inventory items found. Add your first item to begin.' : 'Archived bin is empty.'}
                   </td>
                 </tr>
               ) : (
                 paginatedItems.map((item) => (
                   <tr key={item.id} className="hover:bg-[#FDFBF7] transition-colors">
                     <td className="p-4 pl-6">
-                      <input type="checkbox" className="rounded border-gray-300 text-[#8B5E3C] focus:ring-0 cursor-pointer" />
+
                     </td>
                     <td className="p-4 font-bold text-[#2A1E1B]">{item.sku}</td>
                     <td className="p-4 font-bold text-[#2A1E1B]">{item.name}</td>
@@ -373,10 +406,7 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                       ) : (
                         <div className="flex items-center justify-center gap-2">
                           <button
-                            onClick={() => {
-                              setItems(items.map(i => i.id === item.id ? { ...i, isArchived: false } : i));
-                              showToast(`Restored "${item.name}" to Active Inventory`);
-                            }}
+                            onClick={() => changeState(item, 'restore')}
                             className="p-1.5 text-emerald-700 hover:bg-emerald-50 rounded-lg flex items-center gap-1 font-bold text-[11px]"
                             title="Restore Item"
                           >
@@ -385,7 +415,7 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                           <button
                             onClick={() => setDeleteTargetItem(item)}
                             className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg"
-                            title="Delete Permanently"
+                            title="Remove from Archive"
                           >
                             <Trash2 size={15} />
                           </button>
@@ -402,7 +432,7 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
         {/* Pagination Footer */}
         <div className="flex flex-col sm:flex-row items-center justify-between text-xs text-[#8A8174] pt-1 gap-3">
           <span>Showing {paginatedItems.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to {Math.min(currentPage * itemsPerPage, filteredItems.length)} of {filteredItems.length} items</span>
-          
+
           <div className="flex items-center gap-2">
             <button
               onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
@@ -430,7 +460,7 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
       {isAddItemModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
           <div className="bg-[#F9F8EF] rounded-[28px] border-2 border-[#B3A772] shadow-2xl max-w-lg w-full p-6 sm:p-8 space-y-5 text-[#443523]">
-            
+
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-[#4A3B2C]">Add Item</h2>
@@ -470,8 +500,8 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
               <form onSubmit={handleAddNewItem} className="space-y-3.5">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Product Name*</label>
-                    <input
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-1">Product Name*</label>
+                    <input id="inventory-field-1"
                       type="text"
                       required
                       placeholder="e.g. Moroccan Argan Shampoo"
@@ -481,8 +511,8 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">SKU*</label>
-                    <input
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-2">SKU*</label>
+                    <input id="inventory-field-2"
                       type="text"
                       required
                       placeholder="e.g. MAS - 001"
@@ -495,8 +525,8 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Category*</label>
-                    <select
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-3">Category*</label>
+                    <select id="inventory-field-3"
                       value={newItemForm.category}
                       onChange={(e) => setNewItemForm({ ...newItemForm, category: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-[#B58D54] bg-white text-xs font-semibold outline-none focus:border-[#2A1E1B]"
@@ -506,8 +536,8 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Unit</label>
-                    <select
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-4">Unit</label>
+                    <select id="inventory-field-4"
                       value={newItemForm.unit}
                       onChange={(e) => setNewItemForm({ ...newItemForm, unit: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-[#B58D54] bg-white text-xs font-semibold outline-none focus:border-[#2A1E1B]"
@@ -521,9 +551,9 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Initial Quantity*</label>
-                    <input
-                      type="number"
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-5">Initial Quantity*</label>
+                    <input id="inventory-field-5"
+                      type="number" min="0" max="1000000" step="1"
                       required
                       value={newItemForm.initialQuantity}
                       onChange={(e) => setNewItemForm({ ...newItemForm, initialQuantity: e.target.value })}
@@ -531,9 +561,9 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Low-Stock Alert*</label>
-                    <input
-                      type="number"
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-6">Low-Stock Alert*</label>
+                    <input id="inventory-field-6"
+                      type="number" min="0" max="1000000" step="1"
                       required
                       value={newItemForm.lowStockAlert}
                       onChange={(e) => setNewItemForm({ ...newItemForm, lowStockAlert: e.target.value })}
@@ -544,20 +574,20 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Cost Price (₱)</label>
-                    <input
-                      type="text"
-                      placeholder="P 0.00"
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-7">Cost Price (₱)</label>
+                    <input id="inventory-field-7"
+                      type="number" required min="0" max="99999999.99" step="0.01"
+                      placeholder="0.00"
                       value={newItemForm.costPrice}
                       onChange={(e) => setNewItemForm({ ...newItemForm, costPrice: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-[#B58D54] bg-white text-xs outline-none focus:border-[#2A1E1B]"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Retail Price (₱)</label>
-                    <input
-                      type="text"
-                      placeholder="P 0.00"
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-8">Retail Price (₱)</label>
+                    <input id="inventory-field-8"
+                      type="number" required min="0" max="99999999.99" step="0.01"
+                      placeholder="0.00"
                       value={newItemForm.retailPrice}
                       onChange={(e) => setNewItemForm({ ...newItemForm, retailPrice: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-[#B58D54] bg-white text-xs outline-none focus:border-[#2A1E1B]"
@@ -566,8 +596,8 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Supplier</label>
-                  <input
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-9">Supplier</label>
+                  <input id="inventory-field-9"
                     type="text"
                     placeholder="e.g. Beauty Pro Distributors"
                     value={newItemForm.supplier}
@@ -577,8 +607,8 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Note (optional)</label>
-                  <textarea
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-10">Note (optional)</label>
+                  <textarea id="inventory-field-10"
                     rows={2}
                     placeholder="Storage instructions, Expiry date, etc."
                     value={newItemForm.note}
@@ -608,8 +638,8 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
             {addItemTab === 'RESTOCK' && (
               <form onSubmit={handleRestockItem} className="space-y-4">
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Search Product</label>
-                  <select
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-11">Search Product</label>
+                  <select id="inventory-field-11"
                     value={restockForm.selectedSku}
                     onChange={(e) => setRestockForm({ ...restockForm, selectedSku: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#38C69F] bg-white text-xs font-semibold outline-none focus:border-[#C5A059]"
@@ -622,19 +652,19 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Qty to Add</label>
-                    <input
-                      type="number"
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-12">Qty to Add</label>
+                    <input id="inventory-field-12"
+                      type="number" min="1" max="1000000" step="1"
                       required
-                      placeholder="0"
+                      placeholder="1"
                       value={restockForm.qtyToAdd}
                       onChange={(e) => setRestockForm({ ...restockForm, qtyToAdd: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-[#38C69F] bg-white text-xs outline-none focus:border-[#C5A059]"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">New Total</label>
-                    <input
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-13">New Total</label>
+                    <input id="inventory-field-13"
                       type="text"
                       readOnly
                       value={(items.find(i => i.sku === restockForm.selectedSku)?.stock || 0) + (parseInt(restockForm.qtyToAdd) || 0)}
@@ -644,8 +674,8 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Note (optional)</label>
-                  <textarea
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-14">Note (optional)</label>
+                  <textarea id="inventory-field-14"
                     rows={3}
                     placeholder="e.g. Received from supplier, Batch #A24-09..."
                     value={restockForm.note}
@@ -680,11 +710,11 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
       {isPOModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
           <div className="bg-[#F9F8EF] rounded-[28px] border-2 border-[#B3A772] shadow-2xl max-w-4xl w-full p-8 sm:p-10 space-y-6 text-[#443523] overflow-hidden">
-            
+
             <div className="flex items-start justify-between border-b border-[#E7DFD4] pb-4">
               <div>
                 <h2 className="text-2xl font-bold text-[#4A3B2C]">Create Purchase Order</h2>
-                <p className="text-xs text-[#8A8174] mt-0.5">{lowStockItemsList.length} items queued for reorder &bull; 2026-08-20</p>
+                <p className="text-xs text-[#8A8174] mt-0.5">{lowStockItemsList.length} items queued for reorder &bull; {new Date().toLocaleDateString()}</p>
               </div>
               <button onClick={() => setIsPOModalOpen(false)} className="text-[#8A8174] hover:text-[#2A1E1B] p-1">
                 <X size={20} />
@@ -693,20 +723,20 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
 
             <div className="grid grid-cols-2 gap-6 text-xs">
               <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">PO NUMBER:</label>
-                <input
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-15">PO NUMBER:</label>
+                <input id="inventory-field-15"
                   type="text"
                   readOnly
-                  value="PO-359553"
+                  value="Assigned when saved"
                   className="w-full px-4 py-2.5 rounded-xl border border-[#B3A772] bg-white font-bold text-[#2A1E1B]"
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">REQUESTED BY:</label>
-                <input
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="inventory-field-16">REQUESTED BY:</label>
+                <input id="inventory-field-16"
                   type="text"
                   readOnly
-                  value="Admin - Centy'zz Hair & Beauty Salon"
+                  value={currentUser?.name || [currentUser?.firstName,currentUser?.lastName].filter(Boolean).join(' ') || 'Signed-in Admin'}
                   className="w-full px-4 py-2.5 rounded-xl border border-[#B3A772] bg-white font-bold text-[#2A1E1B]"
                 />
               </div>
@@ -728,8 +758,8 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                   </div>
                 ) : (
                   lowStockItemsList.map((item) => {
-                    const qty = poOrderQty[item.sku] || 10;
-                    const lineTotal = qty * (item.unitCost || 350);
+                    const qty = poOrderQty[item.sku] ?? item.recommendedQty;
+                    const lineTotal = qty * item.unitCost;
 
                     return (
                       <div key={item.id} className="p-4 grid grid-cols-12 items-center text-xs font-sans">
@@ -740,7 +770,7 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                               • LOW STOCK
                             </span>
                             <span className="inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#E5F6F0] text-[#1E5C4E]">
-                              Rec. Reorder: +{item.recommendedQty || 15} units
+                              Rec. Reorder: +{item.recommendedQty} units
                             </span>
                           </div>
                         </div>
@@ -749,9 +779,8 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
 
                         <div className="col-span-2 text-center">
                           <input
-                            type="number"
-                            value={qty}
-                            onChange={(e) => setPoOrderQty({ ...poOrderQty, [item.sku]: parseInt(e.target.value) || 0 })}
+                            type="number" min="1" max="1000000" step="1" value={qty}
+                            onChange={(e) => setPoOrderQty({ ...poOrderQty, [item.sku]: Number(e.target.value) })}
                             className="w-20 px-3 py-1.5 text-center rounded-xl border border-[#B3A772] font-bold text-xs outline-none focus:ring-2 focus:ring-[#B8A97A]"
                           />
                         </div>
@@ -793,14 +822,11 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                 </button>
                 <button
                   type="button"
-                  disabled={lowStockItemsList.length === 0}
-                  onClick={() => {
-                    setIsPOModalOpen(false);
-                    setIsPODocumentModalOpen(true);
-                  }}
+                  disabled={lowStockItemsList.length === 0 || lowStockItemsList.some(i => !Number.isInteger(poOrderQty[i.sku] ?? i.recommendedQty) || (poOrderQty[i.sku] ?? i.recommendedQty) < 1 || (poOrderQty[i.sku] ?? i.recommendedQty) > 1000000)}
+                  onClick={saveOrder}
                   className="px-6 py-3 rounded-xl bg-[#4A3F32] hover:bg-[#2A1E1B] text-white font-bold text-xs shadow-md transition-all disabled:opacity-50"
                 >
-                  Submit Purchase Order
+                  Save Purchase Order
                 </button>
               </div>
             </div>
@@ -810,10 +836,17 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
       )}
 
       {/* MODAL: PRINT PO DOCUMENT */}
-      {isPODocumentModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-[#E7DFD4] shadow-2xl max-w-3xl w-full p-8 my-8 text-[#2A1E1B] space-y-6">
-            
+      {isPODocumentModalOpen && createPortal(
+        <div id="inventory-print-root" role="dialog" aria-modal="true" aria-label="Purchase order document" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn overflow-y-auto">
+          <style>{`@media print {
+  body > *:not(#inventory-print-root) { display: none !important; }
+  #inventory-print-root { position: static !important; display: block !important; overflow: visible !important; padding: 0 !important; background: white !important; }
+  #inventory-print-root > section { max-width: none !important; margin: 0 !important; padding: 0 !important; border: 0 !important; box-shadow: none !important; }
+  #inventory-print-root button { display: none !important; }
+  #inventory-print-root tr { break-inside: avoid; }
+}`}</style>
+          <section className="bg-white rounded-2xl border border-[#E7DFD4] shadow-2xl max-w-3xl w-full p-8 my-8 text-[#2A1E1B] space-y-6">
+
             <div className="flex items-center justify-between border-b border-[#E7DFD4] pb-4 print:hidden">
               <div className="flex items-center gap-2">
                 <FileText className="text-[#C5A059] h-5 w-5" />
@@ -823,7 +856,6 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                 <button
                   onClick={() => {
                     window.print();
-                    showToast('Sending Purchase Order to printer...');
                   }}
                   className="px-4 py-2 rounded-xl bg-[#2A1E1B] text-white hover:bg-[#C5A059] text-xs font-bold flex items-center gap-2 shadow-sm transition-all"
                 >
@@ -837,20 +869,20 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
             </div>
 
             <div className="bg-[#FFFDF8] border border-[#E7DFD4] p-8 rounded-xl shadow-xs space-y-6 text-xs font-sans">
-              
+
               <div className="flex justify-between items-start border-b-2 border-[#2A1E1B] pb-6">
                 <div>
-                  <h1 className="text-2xl font-serif font-bold text-[#2A1E1B] tracking-wide">CENTY'ZZ SALON</h1>
+                  <h1 className="text-2xl font-serif font-bold text-[#2A1E1B] tracking-wide">{salonProfile.salonName}</h1>
                   <p className="text-[10px] uppercase tracking-widest text-[#C5A059] font-bold">Hair & Beauty Studio</p>
-                  <p className="text-[11px] text-[#8A8174] mt-1">Unit A, Block 15 Lot 2, Bagumbong, Caloocan City</p>
-                  <p className="text-[11px] text-[#8A8174]">Phone: 0917 187 2638</p>
+                  <p className="text-[11px] text-[#8A8174] mt-1">{salonProfile.address}</p>
+                  <p className="text-[11px] text-[#8A8174]">Phone: {salonProfile.phone}</p>
                 </div>
 
                 <div className="text-right">
                   <h2 className="text-xl font-bold tracking-wider text-[#2A1E1B]">PURCHASE ORDER</h2>
-                  <p className="text-[11px] font-bold text-[#2A1E1B] mt-1">PO No: PO-2026-08-31-01</p>
-                  <p className="text-[11px] text-[#8A8174]">Date: 2026-08-31</p>
-                  <p className="text-[11px] text-[#8A8174]">Issued By: Admin</p>
+                  <p className="text-[11px] font-bold text-[#2A1E1B] mt-1">PO No: {savedOrder?.number}</p>
+                  <p className="text-[11px] text-[#8A8174]">Date: {savedOrder && new Date(savedOrder.createdAt).toLocaleDateString()}</p>
+                  <p className="text-[11px] text-[#8A8174]">Issued By: {savedOrder?.requestedBy}</p>
                 </div>
               </div>
 
@@ -866,8 +898,8 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E7DFD4] font-sans">
-                  {lowStockItemsList.map((item, idx) => {
-                    const qty = poOrderQty[item.sku] || 10;
+                  {(savedOrder?.items ?? []).map((item, idx) => {
+                    const qty = item.quantity;
                     const total = qty * item.unitCost;
 
                     return (
@@ -875,7 +907,7 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                         <td className="p-2.5 text-center font-bold text-gray-500">{idx + 1}</td>
                         <td className="p-2.5">
                           <p className="font-bold">{item.sku}</p>
-                          <span className="text-[9px] text-amber-700 font-bold">(LOW STOCK)</span>
+                          <span className="text-[9px] text-gray-500">{item.unit}</span>
                         </td>
                         <td className="p-2.5 font-bold">{item.name}</td>
                         <td className="p-2.5 text-center font-bold">{qty}</td>
@@ -891,21 +923,22 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                 <div className="bg-[#F8F5F0] p-4 rounded-xl border border-[#E7DFD4] space-y-2 text-xs w-64">
                   <div className="flex justify-between text-gray-600">
                     <span>Subtotal:</span>
-                    <span className="font-bold text-[#2A1E1B]">₱ {poEstimatedTotal.toFixed(2)}</span>
+                    <span className="font-bold text-[#2A1E1B]">₱ {(savedOrder?.total ?? 0).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between border-t border-[#E7DFD4] pt-2 font-bold text-base text-[#2A1E1B]">
                     <span>TOTAL:</span>
-                    <span>₱ {poEstimatedTotal.toFixed(2)}</span>
+                    <span>₱ {(savedOrder?.total ?? 0).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
 
             </div>
 
-          </div>
-        </div>
+          </section>
+        </div>, document.body
       )}
 
+      {pending && <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4"><form onSubmit={confirmAction} role="dialog" aria-modal="true" aria-labelledby="inventory-pin-title" className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4"><h2 id="inventory-pin-title" className="font-bold">Confirm inventory action</h2><label className="block text-sm">Management PIN<input autoFocus required type="password" inputMode="numeric" autoComplete="off" value={pin} onChange={e => setPin(e.target.value)} disabled={busy} className="block border rounded-xl w-full p-3 mt-2" /></label>{pinError && <p role="alert" className="text-rose-700 text-sm">{pinError}</p>}<div className="flex gap-3 justify-end"><button type="button" disabled={busy} onClick={() => {setPending(null);setPin('');}}>Cancel</button><button type="submit" disabled={busy} className="bg-[#8B5E3C] text-white rounded-xl px-4 py-2">{busy ? 'Saving…' : 'Confirm'}</button></div></form></div>}
       {/* MODAL: ARCHIVE ITEM */}
       {archiveTargetItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
@@ -929,11 +962,7 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  setItems(items.map(i => i.id === archiveTargetItem.id ? { ...i, isArchived: true } : i));
-                  showToast(`Moved "${archiveTargetItem.name}" to Archived Bin`);
-                  setArchiveTargetItem(null);
-                }}
+                onClick={() => changeState(archiveTargetItem, 'archive')}
                 className="px-5 py-2 rounded-xl bg-[#2A1E1B] text-white text-xs font-bold hover:bg-[#C5A059] transition-all"
               >
                 Move to Archive
@@ -948,14 +977,14 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-3xl border border-rose-200 shadow-2xl max-w-md w-full p-6 space-y-5 text-[#2A1E1B]">
             <div className="flex items-center justify-between border-b border-[#E7DFD4] pb-3">
-              <h3 className="font-bold text-base text-rose-700">Delete Item Permanently</h3>
+              <h3 className="font-bold text-base text-rose-700">Remove Archived Item</h3>
               <button onClick={() => setDeleteTargetItem(null)} className="text-gray-400 hover:text-black">
                 <X size={18} />
               </button>
             </div>
 
             <p className="text-xs text-gray-600 leading-relaxed">
-              This action cannot be undone. Are you sure you want to permanently delete <strong className="text-[#2A1E1B]">{deleteTargetItem.name}</strong> from the database?
+              Remove <strong className="text-[#2A1E1B]">{deleteTargetItem.name}</strong> from this list? Stock movements and history will be retained.
             </p>
 
             <div className="flex items-center justify-end gap-3 pt-2">
@@ -966,14 +995,10 @@ export default function InventoryManagementView({ showHeaderActions = true }) {
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  setItems(items.filter(i => i.id !== deleteTargetItem.id));
-                  showToast(`Permanently deleted "${deleteTargetItem.name}"`);
-                  setDeleteTargetItem(null);
-                }}
+                onClick={() => changeState(deleteTargetItem, 'hide')}
                 className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all"
               >
-                Delete Permanently
+                Remove from Archive
               </button>
             </div>
           </div>

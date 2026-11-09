@@ -35,7 +35,7 @@ export default function AdminSidebar({
     ...extraItems,
   ];
 
-  const fullName = currentUser?.fullName || currentUser?.name || [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(" ") || "Millicent Campillos";
+  const fullName = currentUser?.fullName || currentUser?.name || [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(" ") || "Admin";
   const initials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 
   const sidebarSurface = "border-[#E7DFD4] bg-[#FFFDF8]";
@@ -155,7 +155,7 @@ export default function AdminSidebar({
         <button 
           type="button"
           onClick={onLogout}
-          className={`w-full flex items-center p-2.5 rounded-xl text-red-600/80 hover:bg-red-500/10 transition-all duration-200 active:scale-95 ${
+          className={`w-full flex items-center p-2.5 rounded-xl text-red-600 hover:bg-red-50 hover:text-red-700 transition-all duration-200 active:scale-95 ${
             isExpanded ? 'justify-start gap-3' : 'justify-center'
           }`}
           title={!isExpanded ? 'Log Out' : undefined}

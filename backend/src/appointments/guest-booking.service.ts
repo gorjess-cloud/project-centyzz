@@ -1,15 +1,16 @@
+import { Optional } from '@nestjs/common';
+import { SalonConfigService,defaultBookingDay } from '../salon/salon-config.service.js';
+import { BOOKABLE_STAFF_JOB_ROLES } from '../admin/users/staff-job-roles.js';
 import 'dotenv/config';
 import {
-  BadGatewayException,
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
-  ServiceUnavailableException,
 } from '@nestjs/common';
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import pg from 'pg';
 import type { PoolClient } from 'pg';
 
@@ -56,18 +57,21 @@ const HOLD_SQL = `a.status IN ('PENDING', 'CONFIRMED') OR (a.status = 'AWAITING_
 
 @Injectable()
 export class GuestBookingService {
+  constructor(@Optional() private readonly salon?:SalonConfigService) {}
+  private operatingDay(date:string){return this.salon?this.salon.bookingDay(date):Promise.resolve(defaultBookingDay());}
   private checkDate(date: string) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date || date < salonNow().date) {
       throw new BadRequestException('Choose a valid current or future appointment date');
     }
   }
-  private checkStart(date: string, startTime: string) {
+  private async checkStart(date: string, startTime: string) {
     this.checkDate(date);
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) throw new BadRequestException('startTime must be HH:mm');
     const start = minutes(startTime);
     const now = salonNow();
-    if (start < 720 || start >= 1260 || start % 30 || (date === now.date && start <= now.minutes)) {
-      throw new BadRequestException('Choose a future slot within salon hours (12:00–21:00)');
+    const day=await this.operatingDay(date);
+    if (day.closed || start < day.open || start >= day.close || (start-day.open) % day.interval || (date === now.date && start <= now.minutes)) {
+      throw new BadRequestException('Choose a future slot within the salon’s saved operating hours');
     }
     return start;
   }
@@ -102,7 +106,8 @@ export class GuestBookingService {
     const result = await client.query(`SELECT st.id, u."firstName", u."lastName"
       FROM public.staff st JOIN public."user" u ON u.id = st.user_id
       WHERE st.id = $1::uuid AND st.is_active = TRUE AND st.archived_at IS NULL
-        AND u.role = 'STAFF' AND u."isActive" = TRUE AND u.archived_at IS NULL`, [stylistId]);
+        AND u.role = 'STAFF' AND u."isActive" = TRUE AND u.archived_at IS NULL
+        AND st.job_title = ANY($2::text[])`, [stylistId,BOOKABLE_STAFF_JOB_ROLES]);
     if (!result.rowCount) throw new BadRequestException('Selected specialist is unavailable');
     return result.rows[0] as { id: string; firstName: string; lastName: string };
   }
@@ -125,8 +130,10 @@ export class GuestBookingService {
       const duration = Number(service.duration);
       if (!Number.isSafeInteger(duration) || duration <= 0) throw new InternalServerErrorException('Invalid service duration');
       const now = salonNow();
-      const slots = [];
-      for (let start = 720; start + duration <= 1260; start += 30) {
+      const slots: {startTime:string;endTime:string;available:boolean}[] = [];
+      const day=await this.operatingDay(date);
+      if(day.closed)return {date,serviceId,stylistId,serviceDurationMinutes:duration,slots};
+      for (let start = day.open; start + duration <= day.close; start += day.interval) {
         const end = start + duration;
         slots.push({ startTime: hhmm(start), endTime: hhmm(end), available: !(date === now.date && start <= now.minutes) && !this.overlapping(rows, stylistId, start, end) });
       }
@@ -137,9 +144,12 @@ export class GuestBookingService {
     // Match the same lock for every guest checkout on this date.
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`centyzz-guest-booking:${date}`]);
   }
-  async createCheckout(input: BookingInput, publicOrigin: string) {
+  async createCheckout(input: BookingInput) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ForbiddenException('Demo checkout is disabled in production');
+    }
     const { serviceId, stylistId, appointmentDate, startTime } = input;
-    const start = this.checkStart(appointmentDate, startTime);
+    const start = await this.checkStart(appointmentDate, startTime);
     const name = String(input.customerName ?? '').trim();
     const email = String(input.customerEmail ?? '').trim().toLowerCase();
     const phone = String(input.customerPhone ?? '').trim();
@@ -156,7 +166,7 @@ export class GuestBookingService {
       const stylist = await this.stylist(client, stylistId);
       const duration = Number(service.duration);
       const end = start + duration;
-      if (!Number.isSafeInteger(duration) || duration <= 0 || end > 1260) throw new BadRequestException('Service does not fit this slot');
+      if (!Number.isSafeInteger(duration) || duration <= 0 || end > (await this.operatingDay(appointmentDate)).close) throw new BadRequestException('Service does not fit this slot');
       if (this.overlapping(await this.existing(client, appointmentDate), stylistId, start, end)) {
         throw new ConflictException('That time was just reserved. Choose another available time.');
       }
@@ -169,7 +179,7 @@ export class GuestBookingService {
       const insert = await client.query(`INSERT INTO public.appointments
         (reference_code, service_id, customer_name, customer_email, appointment_date, start_time, end_time, status,
          staff_id, guest_phone, total_amount, deposit_amount, payment_status, payment_provider, reservation_expires_at, booking_token_hash)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,'AWAITING_DEPOSIT',$8,$9,$10,$11,'UNPAID','PAYMONGO_TEST',NOW() + INTERVAL '15 minutes',$12)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,'AWAITING_DEPOSIT',$8,$9,$10,$11,'UNPAID','DEMO',NOW() + INTERVAL '15 minutes',$12)
         RETURNING id`, [referenceCode, serviceId, name, email, appointmentDate, startTime, hhmm(end), stylistId, phone,
           (cents / 100).toFixed(2), (depositCents / 100).toFixed(2), hash(token)]);
       booking = { id: insert.rows[0].id, referenceCode, depositAmount: depositCents / 100,
@@ -181,38 +191,8 @@ export class GuestBookingService {
     } finally { client.release(); }
 
     if (!booking) throw new InternalServerErrorException('Booking could not be created');
-    const testKey = process.env.PAYMONGO_TEST_SECRET_KEY;
-    if (testKey?.startsWith('sk_test_')) {
-      try {
-        const result = await fetch('https://api.paymongo.com/v2/checkout_sessions', {
-          method: 'POST',
-          headers: { Authorization: `Basic ${Buffer.from(`${testKey}:`).toString('base64')}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: { attributes: {
-            billing: { name, email, phone },
-            line_items: [{ name: booking.serviceName, quantity: 1, amount: Math.round(booking.depositAmount * 100), currency: 'PHP' }],
-            payment_method_types: ['card', 'gcash', 'qrph'],
-            description: `Centyzz booking ${booking.referenceCode} (50% deposit)`,
-            reference_number: booking.referenceCode,
-            success_url: `${publicOrigin}/?centyzz_booking=success`,
-            cancel_url: `${publicOrigin}/?centyzz_booking=cancel`,
-            metadata: { booking_reference: booking.referenceCode },
-          } } }),
-        });
-        const body = await result.json() as { data?: { id?: string; attributes?: { checkout_url?: string } }; errors?: unknown };
-        const checkoutUrl = body.data?.attributes?.checkout_url;
-        if (!result.ok || !checkoutUrl || !body.data?.id) throw new BadGatewayException('Unable to initialize PayMongo test checkout');
-        await pool.query(`UPDATE public.appointments SET payment_reference = $2 WHERE id = $1 AND status='AWAITING_DEPOSIT'`, [booking.id, body.data.id]);
-        return { ...booking, token, mode: 'PAYMONGO_TEST', checkoutUrl, holdMinutes: HOLD_MINUTES };
-      } catch (error) {
-        await pool.query(`UPDATE public.appointments SET status='CANCELLED', payment_status='FAILED' WHERE id=$1 AND status='AWAITING_DEPOSIT'`, [booking.id]);
-        throw error instanceof BadGatewayException ? error : new BadGatewayException('PayMongo test checkout could not be created');
-      }
-    }
-    if (process.env.PAYMONGO_DEMO_ENABLED === 'true' && process.env.NODE_ENV !== 'production') {
-      return { ...booking, token, mode: 'DEMO', holdMinutes: HOLD_MINUTES };
-    }
-    await pool.query(`UPDATE public.appointments SET status='CANCELLED', payment_status='FAILED' WHERE id=$1 AND status='AWAITING_DEPOSIT'`, [booking.id]);
-    throw new ServiceUnavailableException('Configure PayMongo TEST credentials or explicitly enable local demo checkout');
+    // Development-only prototype: no payment gateway and no real money movement.
+    return { ...booking, token, mode: 'DEMO', holdMinutes: HOLD_MINUTES };
   }
   async createMemberAppointment(input: MemberBookingInput, userId: number, email: string) {
     const start = this.checkStart(input.appointmentDate, input.startTime);
@@ -249,7 +229,7 @@ export class GuestBookingService {
     } finally { client.release(); }
   }
   async completeDemo(id: number, token: string) {
-    if (process.env.NODE_ENV === 'production' || process.env.PAYMONGO_DEMO_ENABLED !== 'true') {
+    if (process.env.NODE_ENV === 'production') {
       throw new ForbiddenException('Demo checkout is unavailable');
     }
     if (!Number.isSafeInteger(id) || id < 1 || !/^[0-9a-f]{48}$/.test(token)) {
@@ -293,94 +273,40 @@ export class GuestBookingService {
     return { referenceCode: b.reference_code, status: b.status, paymentStatus: b.payment_status,
       depositAmount: Number(b.deposit_amount), holdExpired: b.status === 'AWAITING_DEPOSIT' && new Date(b.reservation_expires_at) <= new Date() };
   }
-  async paymongoWebhook(signature: string | undefined, raw: Buffer, event: unknown) {
-    const secret = process.env.PAYMONGO_TEST_WEBHOOK_SECRET;
-    if (!secret || !signature || !raw) throw new ForbiddenException('Webhook verification unavailable');
-    const sections = Object.fromEntries(signature.split(',').map((x) => x.trim().split('=')));
-    const t = sections.t ?? '';
-    const expected = createHmac('sha256', secret).update(`${t}.${raw.toString('utf8')}`).digest('hex');
-    const received = sections.te ?? '';
-    if (!/^\d+$/.test(t) || Math.abs(Date.now() / 1000 - Number(t)) > 300 || !/^[0-9a-f]{64}$/i.test(received)
-      || !timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(received, 'hex'))) {
-      throw new ForbiddenException('Invalid PayMongo webhook signature');
-    }
-    // PayMongo supports a legacy `data.attributes` event and the v2
-    // `event_type: send.webhook` envelope. Both must be TEST events.
-    const outer = event as { event_type?: string; data?: Record<string, unknown> };
-    const root = outer?.data;
-    const payload = (outer?.event_type === 'send.webhook'
-      ? root
-      : (root?.attributes as Record<string, unknown> | undefined)) as Record<string, unknown> | undefined;
-    if (payload?.type !== 'checkout_session.payment.paid' || payload.livemode !== false) {
-      return { received: true };
-    }
-    const checkout = payload.data as {id?: string; attributes?: {reference_number?: string; payments?: Array<{attributes?: {status?: string; amount?: number; currency?: string}}>} } | undefined;
-    const checkoutId = checkout?.id;
-    const reference = checkout?.attributes?.reference_number;
-    if (!checkoutId || !reference) throw new BadRequestException('Invalid PayMongo event');
-    // A signed payment is not necessarily an available booking: an expired
-    // hold might have been rebooked. Recheck inside the date lock before
-    // updating the appointment so a late payment cannot double-book a stylist.
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const selected = await client.query(`SELECT id, reference_code, appointment_date, start_time::text,
-        end_time::text, staff_id, status, payment_status, deposit_amount, reservation_expires_at
-        FROM public.appointments WHERE reference_code=$1 AND payment_reference=$2 FOR UPDATE`, [reference, checkoutId]);
-      if (!selected.rowCount) {
-        await client.query('COMMIT');
-        return { received: true };
-      }
-      const appointment = selected.rows[0] as DbAppointment;
-      if (appointment.payment_status !== 'UNPAID' || appointment.status !== 'AWAITING_DEPOSIT') {
-        await client.query('COMMIT');
-        return { received: true };
-      }
-      const paymentAttempts = checkout?.attributes?.payments;
-      if (!Array.isArray(paymentAttempts) || !paymentAttempts.some((entry) =>
-        entry.attributes?.status === 'paid' &&
-        entry.attributes?.currency === 'PHP' &&
-        Number(entry.attributes.amount) === Math.round(Number(appointment.deposit_amount) * 100)
-      )) {
-        throw new BadRequestException('PayMongo paid amount or currency did not match the test deposit');
-      }
-      await this.lockDate(client, appointment.appointment_date);
-      const existing = await client.query(`SELECT a.start_time::text, a.end_time::text, a.staff_id
-        FROM public.appointments a WHERE a.id <> $1 AND a.appointment_date=$2 AND (${HOLD_SQL})`,
-      [appointment.id, appointment.appointment_date]);
-      const taken = this.overlapping(existing.rows, String(appointment.staff_id),
-        minutes(appointment.start_time), minutes(appointment.end_time));
-      await client.query(`UPDATE public.appointments SET payment_status='TEST_PAID',
-        status=$2, reservation_expires_at=NULL WHERE id=$1`,
-      [appointment.id, taken ? 'PAYMENT_REVIEW' : 'PENDING']);
-      await client.query('COMMIT');
-      return { received: true };
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally { client.release(); }
+  async getGuestCalendarAppointmentId(reference: string, token: string): Promise<number> {
+    if (!reference || !/^[0-9a-f]{48}$/.test(token || '')) throw new BadRequestException('Booking reference and token required');
+    const found = await pool.query(`SELECT id FROM public.appointments
+      WHERE reference_code=$1 AND booking_token_hash=$2
+        AND status IN ('PENDING','CONFIRMED') AND payment_status IN ('PAID','TEST_PAID','DEMO_PAID')`,
+      [reference, hash(token)]);
+    if (!found.rowCount) throw new NotFoundException('A paid, scheduled booking is required to add to calendar');
+    return Number(found.rows[0].id);
   }
-  async listForStaff(id: number, role: string) {
+  async listForStaff(id: number, role: string, archived=false) {
     const isAdmin = ['ADMIN', 'SUPERADMIN'].includes(String(role).toUpperCase());
     if (!isAdmin && String(role).toUpperCase() !== 'STAFF') throw new ForbiddenException('Staff access required');
-    const result = await pool.query(`SELECT a.*, s.name AS service_name, s.price AS service_price, s.duration_minutes,
+    const result = await pool.query(`SELECT a.*, coalesce(bundle.names,s.name) AS service_name, coalesce(bundle.price,s.price) AS service_price, coalesce(bundle.duration_minutes,s.duration_minutes) AS duration_minutes,bundle.services AS booked_services,
       u."firstName" AS stylist_first, u."lastName" AS stylist_last
       FROM public.appointments a JOIN public.services s ON s.id=a.service_id
+      LEFT JOIN public.appointment_service_summary bundle ON bundle.appointment_id=a.id
       LEFT JOIN public.staff st ON st.id = a.staff_id
       LEFT JOIN public."user" u ON u.id = st.user_id
       WHERE ($1::boolean = TRUE OR EXISTS (
         SELECT 1 FROM public.staff mine WHERE mine.id = a.staff_id AND mine.user_id = $2
-          AND mine.is_active = TRUE AND mine.archived_at IS NULL
+          AND ($3::boolean OR (mine.is_active = TRUE AND mine.archived_at IS NULL))
       ))
-        AND a.status NOT IN ('AWAITING_DEPOSIT','PAYMENT_REVIEW','CANCELLED')
-      ORDER BY a.appointment_date DESC, a.start_time DESC LIMIT 250`, [isAdmin, id]);
+        AND (a.archived_at IS NOT NULL OR a.status='CANCELLED')=$3
+        AND ($3::boolean OR a.status NOT IN ('AWAITING_DEPOSIT','PAYMENT_REVIEW','CANCELLED'))
+      ORDER BY a.appointment_date DESC, a.start_time DESC LIMIT 1000`, [isAdmin, id,archived]);
     return { success: true, data: result.rows.map((a) => ({
       id: a.id, referenceCode: a.reference_code, userId: a.user_id, serviceId: a.service_id,
       customerName: a.customer_name, customerEmail: a.customer_email, appointmentDate: a.appointment_date,
       startTime: String(a.start_time), endTime: String(a.end_time), status: a.status, notes: a.notes,
       stylistId: a.staff_id, stylistName: [a.stylist_first, a.stylist_last].filter(Boolean).join(' ') || 'Unassigned',
+      isArchived:a.archived_at!=null||a.status==='CANCELLED',archivedAt:a.archived_at,archiveReason:a.archive_reason||'',
       paymentStatus: a.payment_status, depositAmount: a.deposit_amount ? Number(a.deposit_amount) : null,
       totalAmount: a.total_amount ? Number(a.total_amount) : null,
+      services:a.booked_services??[],
       service: { id: a.service_id, name: a.service_name, price: Number(a.service_price), durationMinutes: a.duration_minutes },
     })) };
   }
@@ -394,7 +320,7 @@ export class GuestBookingService {
         SELECT 1 FROM public.staff mine WHERE mine.id = appointments.staff_id AND mine.user_id = $4
           AND mine.is_active = TRUE AND mine.archived_at IS NULL
       ))
-      AND status IN ('PENDING','CONFIRMED') RETURNING id, status`, [id, normalized, isAdmin, userId]);
+      AND archived_at IS NULL AND status IN ('PENDING','CONFIRMED') RETURNING id, status`, [id, normalized, isAdmin, userId]);
     if (!found.rowCount) throw new NotFoundException('Appointment not found or not assigned to you');
     return { success: true, data: found.rows[0] };
   }

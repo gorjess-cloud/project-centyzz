@@ -1,3 +1,5 @@
+import { MemberBookingService } from './member-booking.service.js';
+import { SalonConfigModule } from '../salon/salon-config.module.js';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
 import { AppointmentsController } from './appointments.controller.js';
@@ -5,8 +7,8 @@ import { AppointmentsService } from './appointments.service.js';
 import { GuestBookingService } from './guest-booking.service.js';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule,SalonConfigModule],
   controllers: [AppointmentsController],
-  providers: [AppointmentsService, GuestBookingService],
+  providers: [AppointmentsService, GuestBookingService, MemberBookingService],
 })
 export class AppointmentsModule {}

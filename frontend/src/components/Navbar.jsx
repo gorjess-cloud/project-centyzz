@@ -27,7 +27,7 @@ export default function Navbar({ activePage, setActivePage, setServiceFilter, se
               className="h-10 w-10 object-contain transition-transform duration-500 hover:scale-105 sm:h-12 sm:w-12" 
             />
             <div className="leading-none">
-              <span className={`text-2xl sm:text-[2.2rem] font-serif tracking-[-0.08em] font-bold block uppercase ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>
+              <span className={`text-2xl sm:text-[2.2rem] tracking-[-0.08em] font-bold block uppercase ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>
                 CENTYZZ
               </span>
               <span className="text-[10px] tracking-[0.35em] text-[#C5A059] block uppercase font-medium pt-1">

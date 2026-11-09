@@ -1,5 +1,10 @@
 {
   "dependencies": {
-    "hi-base32": "^0.5.1"
+    "@nestjs/passport": "^12.0.0",
+    "hi-base32": "^0.5.1",
+    "passport": "^0.7.0"
+  },
+  "devDependencies": {
+    "@types/passport": "^1.0.17"
   }
 }

@@ -54,7 +54,7 @@ export default function HomePage({ setActivePage, setServiceFilter, onOpenBookin
             Luxury Beauty Sanctuary
           </div>
 
-          <h1 className="text-[clamp(2.75rem,12vw,4rem)] leading-[0.92] sm:text-[5.5rem] lg:text-[7rem] font-serif font-light text-white">
+          <h1 className="text-[clamp(2.75rem,12vw,4rem)] leading-[0.92] sm:text-[5.5rem] lg:text-[7rem] font-light text-white">
             Your Beauty,<br />
             <span className="italic font-normal text-[#D4AF37]">Our Passion</span>
           </h1>
@@ -85,7 +85,7 @@ export default function HomePage({ setActivePage, setServiceFilter, onOpenBookin
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-2xl mx-auto mb-12">
             <span className="text-xs uppercase tracking-widest text-[#503007] font-semibold">SIGNATURE COLLECTIONS</span>
-            <h2 className={`text-3xl sm:text-4xl font-serif font-bold mt-2 ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>Our Beauty Services</h2>
+            <h2 className={`text-3xl sm:text-4xl font-bold mt-2 ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>Our Beauty Services</h2>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 lg:gap-8">
@@ -100,7 +100,7 @@ export default function HomePage({ setActivePage, setServiceFilter, onOpenBookin
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent p-8 flex flex-col justify-end text-white">
                 <span className="text-xs uppercase tracking-wider text-[#D4AF37] font-semibold">HAIR CARE & TRANSFORMATIONS</span>
-                <h3 className="text-2xl font-serif font-bold mt-1">Balayage, Brazilian Rebond, Hair Color</h3>
+                <h3 className="text-2xl font-bold mt-1">Balayage, Brazilian Rebond, Hair Color</h3>
                 <p className={`text-xs mt-1 text-gray-300`}>Tailored color glosses, precision cuts, and deep repair treatments.</p>
               </div>
             </div>
@@ -116,7 +116,7 @@ export default function HomePage({ setActivePage, setServiceFilter, onOpenBookin
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent p-8 flex flex-col justify-end text-white">
                 <span className="text-xs uppercase tracking-wider text-[#D4AF37] font-semibold">NAIL ARTISTRY & SPA</span>
-                <h3 className="text-2xl font-serif font-bold mt-1">Spa Pedicures/Manicures & Gel Nail Art</h3>
+                <h3 className="text-2xl font-bold mt-1">Spa Pedicures/Manicures & Gel Nail Art</h3>
                 <p className={`text-xs mt-1 text-gray-300`}>Non-toxic long-wear gel polish, foil accents, and cuticle nourishment.</p>
               </div>
             </div>
@@ -153,7 +153,7 @@ export default function HomePage({ setActivePage, setServiceFilter, onOpenBookin
 
             {/* Right Headline Block */}
             <div className="lg:col-span-7 lg:pl-8 space-y-4">
-              <h2 className={`text-3xl sm:text-5xl font-serif font-light leading-tight ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>
+              <h2 className={`text-3xl sm:text-5xl font-light leading-tight ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>
                 Expert care for your <br />
                 <span className="font-bold italic text-[#C5A059]">Hair</span> and <span className="font-bold italic text-[#C5A059]">Nails.</span>
               </h2>
@@ -169,7 +169,7 @@ export default function HomePage({ setActivePage, setServiceFilter, onOpenBookin
       <section className={`py-16 ${sectionShell}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           <div>
-            <h2 className={`text-2xl sm:text-3xl font-serif font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>
+            <h2 className={`text-2xl sm:text-3xl font-bold ${isDarkMode ? 'text-[#F5F1EA]' : 'text-[#2A1E1B]'}`}>
               Real People. <span className="italic font-normal text-[#C5A059]">Real Results.</span>
             </h2>
             <p className={`text-xs mt-1 ${subText}`}>
@@ -214,7 +214,7 @@ export default function HomePage({ setActivePage, setServiceFilter, onOpenBookin
             {/* Share Your Experience Form Block */}
             <div className={`lg:col-span-4 p-6 rounded-3xl border ${cardBg} shadow-md space-y-4`}>
               <div>
-                <h3 className={`text-base font-bold font-serif ${isDarkMode ? 'text-white' : 'text-[#2A1E1B]'}`}>
+                <h3 className={`text-base font-bold ${isDarkMode ? 'text-white' : 'text-[#2A1E1B]'}`}>
                   Share Your Experience
                 </h3>
                 <p className="text-[11px] text-gray-400 mt-0.5">

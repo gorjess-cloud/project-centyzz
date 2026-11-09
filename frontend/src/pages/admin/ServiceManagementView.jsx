@@ -1,6 +1,7 @@
-import HeaderActions from '../../components/workspace/HeaderActions';
+import {usePageFind} from '../../components/workspace/AdminWorkspaceContext';
+import AdminPageHeader from '../../components/workspace/AdminPageHeader';
 import ConfirmationModal from '../../components/ConfirmationModal';
-import { useState, useEffect } from 'react';
+import { useState, useEffect,useCallback } from 'react';
 import { 
   Search, 
   Filter, 
@@ -31,25 +32,23 @@ const formatPromoDate = (date) => {
 };
 
 export default function ServiceManagementView({ currentUser, showHeaderActions = true }) {
-  const getAuthToken = () => currentUser?.accessToken || '';
+  const getAuthToken = useCallback(() => currentUser?.accessToken || '',[currentUser?.accessToken]);
 
   // Active Promo Banner State
-  const [activePromo, setActivePromo] = useState({
-    title: 'Nail Bar Weekday Special',
-    appliesTo: 'Classic Gel Manicure',
-    discountText: '₱200 off',
-    startDate: '2026-08-15',
-    endDate: '2026-08-31',
-    status: 'ACTIVE'
-  });
+  const [promos,setPromos]=useState([]);
+  const [promoLoadError,setPromoLoadError]=useState('');
+  const [editingPromo,setEditingPromo]=useState(null);
+  const [promoError,setPromoError]=useState('');
+  const [savingPromo,setSavingPromo]=useState(false);
 
   // Services Data from DB
   const [services, setServices] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
   const [activeTab, setActiveTab] = useState('ACTIVE'); // 'ACTIVE' or 'ARCHIVED'
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery,isHighlightSearch] = usePageFind();
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [selectedServiceIds, setSelectedServiceIds] = useState([]);
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -69,31 +68,18 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
   // Form States
   const [serviceForm, setServiceForm] = useState({
     name: '',
-    category: 'HAIR',
+    categoryId: '',
     price: '',
     durationHours: '1',
     durationMins: '0',
     description: ''
   });
 
-  const [promoForm, setPromoForm] = useState({
-    title: activePromo.title,
-    appliesTo: activePromo.appliesTo,
-    discountType: '% Off',
-    value: '20',
-    startDate: activePromo.startDate,
-    endDate: activePromo.endDate
-  });
-
-  const openPromoEditor = () => {
-    setPromoForm({
-      title: '',
-      appliesTo: '',
-      discountType: '% Off',
-      value: '',
-      startDate: '',
-      endDate: ''
-    });
+  const [promoForm,setPromoForm]=useState({title:'',appliesTo:'All Services',discountType:'% Off',value:'',startDate:'',endDate:'',minPurchase:'0.00',usageLimit:'',isActive:true});
+  const openPromoEditor=(promo=null)=>{
+    // React click events are not promo records.
+    const selected=promo?.id?promo:null;setEditingPromo(selected);setPromoError('');
+    setPromoForm(selected?{title:selected.title,appliesTo:selected.appliesTo,discountType:selected.discountType==='PERCENTAGE'?'% Off':'₱ Off',value:String(selected.discountValue),startDate:selected.startDate,endDate:selected.endDate,minPurchase:String(selected.minPurchase??0),usageLimit:selected.usageLimit??'',isActive:selected.isActive,revision:selected.revision}:{title:'',appliesTo:'All Services',discountType:'% Off',value:'',startDate:'',endDate:'',minPurchase:'0.00',usageLimit:'',isActive:true});
     setIsEditPromoOpen(true);
   };
 
@@ -105,24 +91,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
   // -------------------------------------------------------------
   // API FETCH: Get Promo & Services from Backend & Neon DB
   // -------------------------------------------------------------
-  useEffect(() => {
-    const loadPromoFromApi = async () => {
-      try {
-        const response = await fetch('/api/admin/promos', {
-          headers: { 'Authorization': `Bearer ${getAuthToken()}` },
-        });
-        if (response.ok) {
-          const data = await response.json();
-          if (data) {
-            setActivePromo(data);
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching promo:', err);
-      }
-    };
-    loadPromoFromApi();
-  }, []);
+  useEffect(()=>{let current=true;fetch('/api/admin/promos/list',{headers:{Authorization:'Bearer '+currentUser?.accessToken}}).then(async response=>{const data=await response.json();if(!response.ok)throw Error(data.message||'Unable to load promos.');if(current){setPromos(data);setPromoLoadError('');}}).catch(error=>{if(current)setPromoLoadError(error.message);});return()=>{current=false;};},[currentUser?.accessToken]);
 
   useEffect(() => {
     let isMounted = true;
@@ -133,21 +102,16 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
         const isArchivedParam = activeTab === 'ARCHIVED';
         const token = getAuthToken();
 
-        const response = await fetch(`/api/admin/services?archived=${isArchivedParam}`, {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-          },
-        });
-
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const [response, categoryResponse] = await Promise.all([
+          fetch(`/api/admin/services?archived=${isArchivedParam}`, { headers }),
+          fetch('/api/admin/services/categories', { headers }),
+        ]);
         if (!response.ok) throw new Error(`Unable to load services (HTTP ${response.status}).`);
-        if (response.ok) {
-          const data = await response.json();
-          if (isMounted) setLoadError('');
-          if (isMounted && Array.isArray(data)) {
-            setServices(data);
-          }
-        }
+        if (!categoryResponse.ok) throw new Error(`Unable to load service categories (HTTP ${categoryResponse.status}).`);
+        const [data, categoryData] = await Promise.all([response.json(), categoryResponse.json()]);
+        if (!Array.isArray(data) || !Array.isArray(categoryData)) throw new Error('Invalid service catalog response.');
+        if (isMounted) { setServices(data); setCategories(categoryData); setLoadError(''); }
       } catch (err) {
         console.error('Error fetching services:', err);
         if (isMounted) setLoadError(err.message || 'Unable to load services.');
@@ -161,7 +125,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
     return () => {
       isMounted = false;
     };
-  }, [activeTab, currentUser?.accessToken]);
+  }, [activeTab, getAuthToken]);
 
   const refreshServices = async () => {
     try {
@@ -190,11 +154,10 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
   const tabFilteredServices = services;
 
   const filteredServices = tabFilteredServices.filter((s) => {
-    const matchesSearch = 
-      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch = isHighlightSearch || s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.category.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesCategory = categoryFilter === 'ALL' || s.category === categoryFilter;
+    const matchesCategory = categoryFilter === 'ALL' || String(s.categoryId) === categoryFilter;
 
     return matchesSearch && matchesCategory;
   });
@@ -216,35 +179,10 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
     );
   };
 
-  const handleSavePromoSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await fetch('/api/admin/promos', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(promoForm),
-      });
-
-      if (response.ok) {
-        setActivePromo({
-          title: promoForm.title,
-          appliesTo: promoForm.appliesTo,
-          discountText: promoForm.discountType === '% Off' ? `${promoForm.value}% off` : `₱${promoForm.value} off`,
-          startDate: promoForm.startDate,
-          endDate: promoForm.endDate,
-          status: 'ACTIVE'
-        });
-        setIsEditPromoOpen(false);
-        showToast('Successfully updated promotional campaign in database!');
-      } else {
-        showToast('Failed to save promo');
-      }
-    } catch (err) {
-      console.error('Error saving promo:', err);
-    }
+  const handleSavePromoSubmit=async e=>{
+    e.preventDefault();if(savingPromo)return;setSavingPromo(true);setPromoError('');
+    try{const response=await fetch(editingPromo?'/api/admin/promos/'+editingPromo.id:'/api/admin/promos',{method:editingPromo?'PATCH':'POST',headers:{Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json'},body:JSON.stringify(promoForm)});const data=await response.json();if(!response.ok)throw Error(Array.isArray(data.message)?data.message.join(' '):data.message||'Unable to save promo.');setPromos(rows=>editingPromo?rows.map(row=>row.id===data.id?data:row):[data,...rows]);setIsEditPromoOpen(false);showToast(editingPromo?'Promo updated.':'New promo created.');}
+    catch(error){setPromoError(error.message);}finally{setSavingPromo(false);}
   };
 
   // -------------------------------------------------------------
@@ -273,7 +211,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
       if (response.ok) {
         setIsAddServiceOpen(false);
         setEditingService(null);
-        setServiceForm({ name: '', category: 'HAIR', price: '', durationHours: '1', durationMins: '0', description: '' });
+        setServiceForm({ name: '', categoryId: '', price: '', durationHours: '1', durationMins: '0', description: '' });
         refreshServices();
         showToast(editingService ? `Successfully updated service` : `Successfully added new service`);
       } else {
@@ -350,27 +288,16 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
     });
   };
   const renderCategoryBadge = (category) => {
-    const cat = (category || 'HAIR').toUpperCase();
-    if (cat === 'HAIR') {
-      return (
-
-        <span className="inline-flex items-center gap-1.5 bg-[#FDEBB6] text-[#8C6D23] text-[10px] font-bold tracking-wider px-3 py-1 rounded-full border border-[#F3DE9F]">
-          <Sparkles className="h-3 w-3" /> HAIR
-        </span>
-      );
-    }
-    if (cat === 'NAILS') {
-      return (
-        <span className="inline-flex items-center gap-1.5 bg-[#E1F5FE] text-[#0288D1] text-[10px] font-bold tracking-wider px-3 py-1 rounded-full border border-[#B3E5FC]">
-          <Tag className="h-3 w-3" /> NAILS
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1.5 bg-[#FCE4EC] text-[#C2185B] text-[10px] font-bold tracking-wider px-3 py-1 rounded-full border border-[#F8BBD0]">
-        <Tag className="h-3 w-3" /> SKIN
-      </span>
-    );
+    const name = category || 'Uncategorized';
+    const normalized = name.toLowerCase();
+    const hair = normalized.startsWith('hair');
+    const colors = hair ? 'bg-[#FDEBB6] text-[#8C6D23] border-[#F3DE9F]'
+      : normalized.includes('nail') ? 'bg-[#E1F5FE] text-[#0288D1] border-[#B3E5FC]'
+      : normalized.includes('aesthetic') || normalized.includes('lash') ? 'bg-[#FCE4EC] text-[#C2185B] border-[#F8BBD0]'
+      : 'bg-[#F1ECE4] text-[#736457] border-[#E5DED3]';
+    return <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-3 py-1 rounded-full border ${colors}`}>
+      {hair ? <Sparkles className="h-3 w-3 shrink-0" /> : <Tag className="h-3 w-3 shrink-0" />}{name}
+    </span>;
   };
 
   return (
@@ -386,15 +313,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
       )}
 
       {/* Header Bar */}
-      <header className="mb-6 flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-[#2A1E1B]">Service Management</h1>
-          <p className="text-xs text-[#8A8174]">Manage salon treatment catalog, pricing, durations, and active promo discounts</p>
-        </div>
-
-        {/* Group 2: System Quick Actions */}
-        {showHeaderActions && (<HeaderActions />)}
-      </header>
+      <AdminPageHeader title="Service Management" subtitle="Manage salon treatment catalog, pricing, durations, and active promo discounts" showHeaderActions={showHeaderActions}/>
 
       {/* Main Workspace Card */}
       <div className="bg-white rounded-2xl border border-[#E9E4D8] shadow-sm p-6 sm:p-8 space-y-6">
@@ -440,23 +359,22 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8A8174]" />
               <input
                 type="text"
-                placeholder="Search Here..."
+                placeholder={isHighlightSearch?"Highlight text on this page…":"Search records…"}
                 value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                onChange={(e) => { setSearchQuery(e.target.value); if(!isHighlightSearch)setCurrentPage(1); }}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs text-[#2A1E1B] placeholder-[#8A8174] outline-none focus:border-[#C5A059] transition-all"
               />
             </div>
 
             <div className="relative">
               <select
+                aria-label="Filter services by category"
                 value={categoryFilter}
                 onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
                 className="appearance-none pl-9 pr-8 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs font-semibold text-[#443523] outline-none cursor-pointer focus:border-[#C5A059]"
               >
                 <option value="ALL">All Categories</option>
-                <option value="HAIR">Hair</option>
-                <option value="NAILS">Nails</option>
-                <option value="SKIN">Skin</option>
+                {categories.map(category => <option key={category.id} value={String(category.id)}>{category.name}</option>)}
               </select>
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8A8174] pointer-events-none" />
             </div>
@@ -464,7 +382,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
             <button
               onClick={() => {
                 setEditingService(null);
-                setServiceForm({ name: '', category: 'HAIR', price: '', durationHours: '1', durationMins: '0', description: '' });
+                setServiceForm({ name: '', categoryId: '', price: '', durationHours: '1', durationMins: '0', description: '' });
                 setIsAddServiceOpen(true);
               }}
               className="flex items-center gap-2 bg-[#8B5E3C] hover:bg-[#724B2F] text-white px-4 py-2.5 rounded-xl text-xs font-semibold shadow-sm transition-all active:scale-95 border border-[#C5A059]/40"
@@ -483,30 +401,11 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
           </div>
         </div>
 
-        {/* Promo Banner Alert */}
-        {activeTab === 'ACTIVE' && (
-          <div className="bg-[#F7F4EF] border border-[#E8DDCF] rounded-2xl p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
-            <div className="flex items-center gap-3.5">
-              <div className="p-3 bg-[#EFE4D4] text-[#8B5E3C] rounded-xl border border-[#DFCBB5] shrink-0">
-                <Tag className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-[#2A1E1B]">{activePromo.title}</h3>
-                <p className="text-[11px] text-[#8A8174] mt-0.5">
-                  <span className="font-semibold text-[#443523]">{activePromo.appliesTo}</span> &bull; <span className="text-[#8B5E3C] font-bold">{activePromo.discountText}</span> &bull; {formatPromoDate(activePromo.startDate)} – {formatPromoDate(activePromo.endDate)}
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={openPromoEditor}
-              className="flex items-center gap-2 bg-[#8B5E3C] hover:bg-[#724B2F] text-white px-4 py-2.5 rounded-xl text-xs font-semibold transition-all shadow-xs self-start sm:self-auto border border-[#C5A059]/30"
-            >
-              <Edit3 className="h-3.5 w-3.5" />
-              Edit Current Promo
-            </button>
-          </div>
-        )}
+        {promoLoadError&&<p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{promoLoadError}</p>}
+        {activeTab==='ACTIVE'&&<section aria-label="Service promos" className="space-y-3">
+          {promos.length===0&&!promoLoadError&&<p className="rounded-xl border border-[#E8DDCF] p-4 text-xs text-[#8A8174]">No promos created yet. Create a promo to offer a checkout code.</p>}
+          {promos.map(promo=><div key={promo.id} className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#E8DDCF] bg-[#F7F4EF] p-4"><div><h3 className="text-sm font-bold text-[#2A1E1B]">{promo.title} <span className="ml-2 rounded-full bg-white px-2 py-1 text-[10px] text-[#8B5E3C]">{promo.status}</span></h3><p className="mt-2 text-xs text-[#8A8174]">{promo.appliesTo} · {promo.discountText} · {formatPromoDate(promo.startDate)} – {formatPromoDate(promo.endDate)}</p><p className="mt-1 text-xs text-[#8A8174]">Used {promo.usageCount} / {promo.usageLimit??'Unlimited'} · Minimum ₱{Number(promo.minPurchase).toFixed(2)}</p></div><button type="button" onClick={()=>openPromoEditor(promo)} className="flex items-center gap-2 rounded-xl bg-[#8B5E3C] px-4 py-2.5 text-xs font-semibold text-white"><Edit3 size={14}/>Edit {promo.title}</button></div>)}
+        </section>}
 
         {/* Services Data Table */}
         <div className="overflow-x-auto overflow-y-visible rounded-xl border border-[#E9E4D8]">
@@ -562,7 +461,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
                       </td>
 
                       <td className="p-4">
-                        {renderCategoryBadge(s.category)}
+                        {renderCategoryBadge(s.categoryName || s.category)}
                       </td>
 
                       <td className="p-4">
@@ -615,7 +514,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
                                     setEditingService(s);
                                     setServiceForm({
                                       name: s.name,
-                                      category: s.category,
+                                      categoryId: String(s.categoryId ?? ''),
                                       price: s.price.replace('₱', '').replace(/,/g, ''),
                                       durationHours: String(Math.floor(Number(s.durationMinutes || 0) / 60)),
                                       durationMins: String(Number(s.durationMinutes || 0) % 60),
@@ -710,7 +609,7 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
       {/* ================= MODAL 1: ADD / EDIT SERVICE ================= */}
       {isAddServiceOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white rounded-3xl border border-[#E9E4D8] shadow-2xl w-full max-w-lg p-6 sm:p-8 space-y-5">
+          <div className="bg-white rounded-3xl border border-[#E9E4D8] shadow-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto p-6 sm:p-8 space-y-5">
             <div className="flex items-center justify-between border-b border-[#E9E4D8] pb-3">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-[#F6F4EF] text-[#8B5E3C] rounded-xl border border-[#E9E4D8]">
@@ -740,13 +639,17 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Category</label>
                   <select
-                    value={serviceForm.category}
-                    onChange={(e) => setServiceForm({ ...serviceForm, category: e.target.value })}
+                    required
+                    aria-label="Service category"
+                    value={serviceForm.categoryId}
+                    onChange={(e) => setServiceForm({ ...serviceForm, categoryId: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs font-semibold text-[#443523] outline-none focus:border-[#C5A059]"
                   >
-                    <option value="HAIR">Hair</option>
-                    <option value="NAILS">Nails</option>
-                    <option value="SKIN">Skin</option>
+                    <option value="" disabled>Select a category</option>
+                    {categories.filter(category => (category.isActive && !category.isArchived) ||
+                      (editingService && String(category.id) === serviceForm.categoryId)).map(category =>
+                        <option key={category.id} value={String(category.id)}>{category.name}{!category.isActive || category.isArchived ? ' (unavailable for new services)' : ''}</option>
+                    )}
                   </select>
                 </div>
 
@@ -833,36 +736,37 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
                 <div className="p-2 bg-[#F6F4EF] text-[#8B5E3C] rounded-xl border border-[#E9E4D8]">
                   <Tag className="h-4 w-4" />
                 </div>
-                <h3 className="text-base font-bold text-[#2A1E1B]">Create / Edit Promo</h3>
+                <h3 className="text-base font-bold text-[#2A1E1B]">{editingPromo?'Edit Promo':'Create Promo'}</h3>
               </div>
               <button onClick={() => setIsEditPromoOpen(false)} className="text-[#8A8174] hover:text-[#2A1E1B]">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSavePromoSubmit} className="space-y-4">
+            <form onSubmit={handleSavePromoSubmit} className="space-y-4"><fieldset disabled={savingPromo} className="space-y-4">
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Promo Title</label>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="promo-code">Promo Code</label>
                 <input
                   type="text"
                   required
-                  value={promoForm.title}
-                  onChange={(e) => setPromoForm({ ...promoForm, title: e.target.value })}
+                  id="promo-code" value={promoForm.title}
+                  maxLength={50} placeholder="HAIR20" onChange={(e) => setPromoForm({ ...promoForm, title: e.target.value.toUpperCase() })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059]"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Applies to Service</label>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="promo-scope">Applies to Service</label>
                 <input
                   type="text"
                   required
-                  value={promoForm.appliesTo}
+                  id="promo-scope" list="promo-service-scopes" value={promoForm.appliesTo}
                   onChange={(e) => setPromoForm({ ...promoForm, appliesTo: e.target.value })}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059]"
                 />
               </div>
 
+              <datalist id="promo-service-scopes"><option value="All Services"/>{categories.map(c=><option key={'category-'+c.id} value={'Category: '+c.name}/>)}{services.map(service=><option key={'service-'+service.id} value={'Service: '+service.name}/>)}</datalist>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Discount Type</label>
@@ -883,11 +787,11 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Discount Value</label>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="promo-value">Discount Value</label>
                   <input
-                    type="text"
+                    type="number" min="0.01" step="0.01" max={promoForm.discountType==='% Off'?'99.99':'1000000'}
                     required
-                    value={promoForm.value}
+                    id="promo-value" value={promoForm.value}
                     onChange={(e) => setPromoForm({ ...promoForm, value: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059]"
                   />
@@ -896,28 +800,32 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">Start Date</label>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="promo-start">Start Date</label>
                   <input
                     type="date"
                     required
-                    value={promoForm.startDate}
+                    id="promo-start" value={promoForm.startDate}
                     onChange={(e) => setPromoForm({ ...promoForm, startDate: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1">End Date</label>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8174] mb-1" htmlFor="promo-end">End Date</label>
                   <input
                     type="date"
                     required
-                    value={promoForm.endDate}
+                    id="promo-end" value={promoForm.endDate}
                     onChange={(e) => setPromoForm({ ...promoForm, endDate: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E9E4D8] bg-[#FFFDF8] text-xs outline-none focus:border-[#C5A059]"
                   />
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3"><label className="text-xs font-semibold">Minimum purchase (PHP)<input type="number" min="0" step="0.01" className="mt-1 w-full rounded-xl border p-2" value={promoForm.minPurchase} onChange={e=>setPromoForm({...promoForm,minPurchase:e.target.value})}/></label><label className="text-xs font-semibold">Usage limit (blank = unlimited)<input type="number" min="1" step="1" className="mt-1 w-full rounded-xl border p-2" value={promoForm.usageLimit} onChange={e=>setPromoForm({...promoForm,usageLimit:e.target.value})}/></label></div>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={promoForm.isActive} onChange={e=>setPromoForm({...promoForm,isActive:e.target.checked})}/>Enable this promo</label>
+              <p className="text-[11px] text-[#8A8174]">Dates use Philippine time. End date includes the entire day. Usage counts are preserved when editing.</p>
+              {promoError&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{promoError}</p>}
               <div className="pt-3 flex items-center justify-end gap-3">
                 <button
                   type="button"
@@ -930,9 +838,9 @@ export default function ServiceManagementView({ currentUser, showHeaderActions =
                   type="submit"
                   className="px-6 py-2.5 rounded-xl bg-[#8B5E3C] hover:bg-[#724B2F] text-white text-xs font-bold shadow-md transition-all active:scale-95"
                 >
-                  Save Promo
+                  {savingPromo?'Saving…':editingPromo?'Save Promo Changes':'Create Promo'}
                 </button>
-              </div>
+              </div></fieldset>
             </form>
           </div>
         </div>

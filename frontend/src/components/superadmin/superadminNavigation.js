@@ -1,4 +1,4 @@
-import { BarChart3, CalendarDays, ClipboardList, FileText, LayoutDashboard, Scissors, Settings2, ShieldCheck, ShieldUser, Users, UserRound } from 'lucide-react';
+import { BarChart3, FileText, LayoutDashboard, Scissors, Settings2, ShieldCheck, ShieldUser, Users, UserRound } from 'lucide-react';
 
 export const superadminNavigationGroups = [
   {
@@ -10,15 +10,12 @@ export const superadminNavigationGroups = [
       { id: 'clients', label: 'Clients', icon: UserRound },
       { id: 'reports', label: 'Reports', icon: BarChart3 },
       { id: 'logs', label: 'Logs', icon: FileText },
-      { id: 'inventory', label: 'Inventory', icon: ClipboardList },
-      { id: 'schedule', label: 'Schedule', icon: CalendarDays },
     ],
   },
   {
     label: 'System management',
     items: [
       { id: 'settings', label: 'Settings', icon: Settings2 },
-      { id: 'roles', label: 'Permission Controls', icon: ShieldUser },
       { id: 'audit', label: 'System Audit Logs', icon: ShieldCheck },
     ],
   },

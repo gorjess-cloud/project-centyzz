@@ -14,6 +14,7 @@ export interface AuthenticatedUser {
   email: string;
   role: string;
   purpose: 'access';
+  credentialVersion?: number;
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -49,6 +50,9 @@ export class JwtAuthGuard implements CanActivate {
       }
       if (isManagementRole(account.role)) {
         const security = await this.managementSecurity.requireConfigured(user.sub);
+        if (['ADMIN','STAFF'].includes(user.role) && (user.credentialVersion ?? 0) !== (security.credential_version ?? 0)) {
+          throw new UnauthorizedException('Credentials changed. Sign in again.');
+        }
         if (security.needs_setup) throw new UnauthorizedException('Complete management account setup first');
       }
       request.user = user;

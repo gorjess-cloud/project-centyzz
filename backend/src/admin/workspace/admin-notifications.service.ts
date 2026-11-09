@@ -1,0 +1,18 @@
+import {BadRequestException,Injectable,OnModuleDestroy} from '@nestjs/common';import {Pool} from 'pg';
+import {SalonConfigService} from '../../salon/salon-config.service.js';import {ReportsService} from '../reports/reports.service.js';import {reportToday,moveDay} from '../reports/report-math.js';
+@Injectable() export class AdminNotificationsService implements OnModuleDestroy{
+ readonly pool=new Pool({connectionString:process.env.DATABASE_URL,max:3,connectionTimeoutMillis:10000,query_timeout:10000});
+ constructor(private readonly config:SalonConfigService,private readonly reports:ReportsService){}
+ onModuleDestroy(){return this.pool.end();}
+ async list(userId:number){const day=reportToday();const [bookings,stock,reads,settings]=await Promise.all([
+  this.pool.query(`SELECT a.id,a.customer_name,a.appointment_date,a.start_time::text,a.status,a.staff_id,a.updated_at,s.name AS service FROM public.appointments a LEFT JOIN public.services s ON s.id=a.service_id WHERE a.archived_at IS NULL AND a.appointment_date BETWEEN $1 AND $2 AND a.status IN ('PENDING','CONFIRMED') AND (a.status='PENDING' OR a.staff_id IS NULL) ORDER BY a.appointment_date,a.start_time,a.id LIMIT 40`,[day,moveDay(day,6)]),
+  this.pool.query(`SELECT p.id,p.name,i.quantity_on_hand,i.reorder_threshold FROM public.products p JOIN public.inventory i ON i.product_id=p.id WHERE p.is_active AND p.archived_at IS NULL AND p.inventory_hidden_at IS NULL AND i.quantity_on_hand<=i.reorder_threshold ORDER BY i.quantity_on_hand,p.id LIMIT 30`),
+  this.pool.query('SELECT notification_key,read_at FROM public.admin_notification_reads WHERE user_id=$1',[userId]),this.config.get()]);
+  const seen=new Map(reads.rows.map(r=>[r.notification_key,r.read_at]));const items:any[]=bookings.rows.map(b=>({key:'appointment:'+b.id+':'+b.status+':'+new Date(b.updated_at).getTime(),title:b.status==='PENDING'?'Pending appointment':'Staff assignment needed',message:b.customer_name+' · '+(b.service||'Service unavailable')+' · '+b.appointment_date+' '+b.start_time.slice(0,5)+(b.staff_id?'':' · Unassigned'),page:'schedule',kind:'appointment'}));
+  if(settings.inventory.alertsEnabled)for(const p of stock.rows)items.push({key:'stock:'+p.id+':'+p.quantity_on_hand+':'+p.reorder_threshold,title:Number(p.quantity_on_hand)===0?'Out of stock':'Low stock',message:p.name+' · '+p.quantity_on_hand+' remaining (threshold '+p.reorder_threshold+')',page:'inventory',kind:'stock'});
+  const [sales,closed]=await Promise.all([this.reports.revenueForDates(day,moveDay(day,-1)),this.pool.query('SELECT 1 FROM public.closeout_reports WHERE public.admin_report_day(report_date)=$1::date AND is_closed AND archived_at IS NULL AND cashier_staff_id IS NULL LIMIT 1',[day])]);
+  if(sales.revenue!==0&&!closed.rowCount)items.push({key:'closeout:'+day,title:'Daily closeout not saved',message:'Review '+day+' sales and record the actual cash count.',page:'reports',kind:'closeout'});
+  return {items:items.map(item=>({...item,readAt:seen.get(item.key)||null})),updatedAt:new Date().toISOString()};
+ }
+ async read(userId:number,body:any){if(!Array.isArray(body?.keys)||body.keys.length>100||body.keys.some((v:unknown)=>typeof v!=='string'||v.length>180))throw new BadRequestException('Choose valid notifications.');const available=new Set((await this.list(userId)).items.map(i=>i.key));const keys=[...new Set<string>(body.keys)].filter(key=>available.has(key));if(keys.length)await this.pool.query('INSERT INTO public.admin_notification_reads(user_id,notification_key) SELECT $1,k FROM unnest($2::text[]) k ON CONFLICT(user_id,notification_key) DO NOTHING',[userId,keys]);return {success:true};}
+}

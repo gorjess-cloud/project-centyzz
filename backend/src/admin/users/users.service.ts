@@ -1,3 +1,4 @@
+import { STAFF_JOB_ROLES, staffJobRole } from './staff-job-roles.js';
 import { 
   Injectable, 
   NotFoundException, 
@@ -47,6 +48,8 @@ export class UsersService {
     }
   }
 
+  getStaffJobRoles() { return [...STAFF_JOB_ROLES]; }
+
   // 2. Create User
   async createUser(dto: any) {
     const targetRole = String(dto.role || 'STAFF').toUpperCase();
@@ -54,6 +57,7 @@ export class UsersService {
       throw new BadRequestException('Role must be ADMIN or STAFF.');
     }
 
+    const jobRole = targetRole === 'STAFF' ? staffJobRole(dto.staffJobRole) : null;
     const firstName = typeof dto.firstName === 'string' ? dto.firstName.trim() : '';
     const lastName = typeof dto.lastName === 'string' ? dto.lastName.trim() : '';
     const email = typeof dto.email === 'string' ? dto.email.toLowerCase().trim() : '';
@@ -76,24 +80,26 @@ export class UsersService {
     const tempPin = generateTemporaryPin();
     const hashedPassword = await bcrypt.hash(tempPassword, 12);
 
-    const created = await db.orm.public.User.create({
-      firstName,
-      lastName,
-      email,
-      passwordHash: hashedPassword,
-      role: targetRole,
-      isActive: true,
-      emailVerified: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
+    // Account, linked staff profile, assigned job role and PIN are one atomic onboarding action.
+    const client=await this.security.pool.connect();
+    let created:any;
     try {
-      await this.security.provision(created.id, tempPin);
-    } catch (error) {
-      // No account should remain usable without its management PIN.
-      await this.security.pool.query('DELETE FROM public."user" WHERE id=$1', [created.id]).catch(() => {});
+      await client.query('BEGIN');
+      created=(await client.query(`INSERT INTO public."user"("firstName","lastName",email,"passwordHash",role,"isActive","emailVerified","createdAt","updatedAt")
+        VALUES($1,$2,$3,$4,$5,true,true,now(),now()) RETURNING id,email,"firstName","lastName"`,[firstName,lastName,email,hashedPassword,targetRole])).rows[0];
+      if(jobRole) {
+        // The database trigger also handles direct SQL and role changes; this explicit upsert
+        // makes the selected job role part of the same account-creation transaction.
+        await client.query(`INSERT INTO public.staff(user_id,employee_code,job_title) VALUES($1,$2,$3)
+          ON CONFLICT(user_id) DO UPDATE SET job_title=excluded.job_title,updated_at=now()`,[created.id,'CNTZ-USER-'+created.id,jobRole]);
+      }
+      await this.security.provision(created.id,tempPin,client);
+      await client.query('COMMIT');
+    }catch(error:any){
+      await client.query('ROLLBACK');
+      if(error.code==='23505')throw new BadRequestException('A user with this email address already exists.');
       throw error;
-    }
+    }finally{client.release();}
     return {
       id: created.id,
       email: created.email,
@@ -103,6 +109,7 @@ export class UsersService {
       temporaryPassword: tempPassword,
       temporaryPin: tempPin,
       mustCompleteSetup: true,
+      ...(jobRole ? {staffJobRole:jobRole} : {}),
     };
   }
 

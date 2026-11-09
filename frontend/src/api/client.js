@@ -89,7 +89,7 @@ export const api = {
   updateMyProfile: (token, profile) => patch('/api/auth/me', profile, token),
   getServices: () => get('/api/services'),
   getPublicPromos: () => get('/api/promos'),
-  getStaffAppointments: (token) => get('/api/appointments/staff', token),
+  getStaffAppointments: (token,archived=false) => get('/api/appointments/staff'+(archived?'?archived=true':''), token),
   updateStaffAppointmentStatus: (token, id, status) =>
     patch(`/api/appointments/${encodeURIComponent(id)}/staff-status`, { status }, token),
   validatePromo: (promoCode) => post('/api/promos/validate', { promoCode }),
@@ -100,10 +100,12 @@ export const api = {
   createGuestCheckout: (booking) => post('/api/appointments/guest-checkout', booking),
   finishGuestDemo: (appointmentId, token) =>
     post(`/api/appointments/guest-demo/${encodeURIComponent(appointmentId)}/complete`, { token }),
+  getGuestCalendar: (reference, token) => post('/api/appointments/guest-calendar', { reference, token }),
+  getAppointmentCalendar: (id, token) => get(`/api/appointments/mine/${encodeURIComponent(id)}/calendar`, token),
   getGuestCheckoutStatus: (reference, token) =>
     get(`/api/appointments/guest-checkout-status?reference=${encodeURIComponent(reference)}&token=${encodeURIComponent(token)}`),
   getAvailableSlots: (date, serviceId) =>
-    get(`/api/appointments/available-slots?date=${encodeURIComponent(date)}&service_id=${encodeURIComponent(serviceId)}`),
+    get(`/api/appointments/available-slots?date=${encodeURIComponent(date)}&${Array.isArray(serviceId)?'service_ids':'service_id'}=${encodeURIComponent(Array.isArray(serviceId)?serviceId.join(','):serviceId)}`),
   createMyAppointment: (token, appointment) =>
     post('/api/appointments/mine', appointment, token),
   createMyStylistAppointment: (token, appointment) =>

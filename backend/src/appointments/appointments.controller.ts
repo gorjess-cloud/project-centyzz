@@ -1,11 +1,7 @@
 import {
   Body,
-  Headers,
   Controller,
   Get,
-  HttpCode,
-  HttpStatus,
-  BadRequestException,
   GoneException,
   Param,
   Patch,
@@ -52,34 +48,32 @@ export class AppointmentsController {
   ) { return this.guestBookings.availableSlots(date, serviceId, stylistId); }
 
   @Post('guest-checkout')
-  async guestCheckout(@Body() booking: GuestCheckoutDto) {
-    // Never trust Host/Origin supplied by a browser for payment callback URLs.
-    const publicOrigin = process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173';
-    return this.guestBookings.createCheckout(booking, publicOrigin);
+  guestCheckout(@Body() booking: GuestCheckoutDto) {
+    return this.guestBookings.createCheckout(booking);
   }
 
+  // Prototype only: a token holder can confirm a simulated deposit in development.
   @Post('guest-demo/:id/complete')
-  completeGuestDemo(@Param('id', ParseIntPipe) id: number, @Body() body: DemoFinishDto) {
-    return this.guestBookings.completeDemo(id, body.token);
-  }
+  completeDemo(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { token?: string },
+  ) { return this.guestBookings.completeDemo(id, body.token ?? ''); }
 
   @Get('guest-checkout-status')
   guestCheckoutStatus(@Query('reference') reference: string, @Query('token') token: string) {
     return this.guestBookings.status(reference, token);
   }
 
-  @Post('paymongo-webhook')
-  @HttpCode(HttpStatus.OK)
-  paymongoWebhook(@Req() request: import('express').Request & { rawBody?: Buffer },
-    @Headers('paymongo-signature') signature?: string) {
-    if (!request.rawBody) throw new BadRequestException('Raw webhook body unavailable');
-    return this.guestBookings.paymongoWebhook(signature, request.rawBody, request.body);
+  @Post('guest-calendar')
+  async guestCalendar(@Body() body: { reference?: string; token?: string }) {
+    const id = await this.guestBookings.getGuestCalendarAppointmentId(body.reference ?? '', body.token ?? '');
+    return this.appointmentsService.getCalendarLink(id);
   }
 
   @Get('staff')
   @UseGuards(JwtAuthGuard)
-  getStaffAppointments(@Req() request: AuthenticatedRequest) {
-    return this.guestBookings.listForStaff(request.user.sub, request.user.role);
+  getStaffAppointments(@Req() request: AuthenticatedRequest,@Query('archived') archived?:string) {
+    return this.guestBookings.listForStaff(request.user.sub, request.user.role,archived==='true');
   }
 
   @Patch(':id/staff-status')
@@ -95,11 +89,12 @@ export class AppointmentsController {
   @Get('available-slots')
   getAvailableSlots(
     @Query('date') date: string,
-    @Query('service_id', ParseIntPipe) serviceId: number,
+    @Query('service_id') serviceId?: string,
+    @Query('service_ids') serviceIds?: string,
   ) {
     return this.appointmentsService.getAvailableSlots(
       date,
-      serviceId,
+      serviceIds !== undefined ? serviceIds.split(',').map(Number) : Number(serviceId),
     );
   }
 
@@ -132,6 +127,12 @@ export class AppointmentsController {
     // Public guest bookings must use the deposit-aware, stylist-aware flow.
     // Members continue to use POST /api/appointments/mine.
     throw new GoneException('For guest bookings use POST /api/appointments/guest-checkout');
+  }
+
+  @Get('mine/:id/calendar')
+  @UseGuards(JwtAuthGuard)
+  getMyCalendar(@Param('id',ParseIntPipe) id:number,@Req() request:AuthenticatedRequest) {
+    return this.appointmentsService.getCalendarForUser(id,request.user.sub);
   }
 
   @Get(':id/calendar')
