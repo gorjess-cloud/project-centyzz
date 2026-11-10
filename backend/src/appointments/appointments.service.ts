@@ -235,8 +235,8 @@ export class AppointmentsService {
     }
   }
 
-  async getAvailableSlots(date: string, serviceId: number | number[]) {
-    if(this.memberBookings)return this.memberBookings.availability(date,Array.isArray(serviceId)?serviceId:[serviceId]);
+  async getAvailableSlots(date: string, serviceId: number | number[], stylistId?: string) {
+    if(this.memberBookings)return this.memberBookings.availability(date,Array.isArray(serviceId)?serviceId:[serviceId],stylistId);
     this.validateDate(date);
     this.validateServiceId(serviceId as number);
 

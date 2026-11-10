@@ -2,6 +2,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 import App from './App.jsx';
 import SuperAdminLayout from './components/superadmin/SuperAdminLayout.jsx';
@@ -15,7 +16,9 @@ createRoot(document.getElementById('root')).render(
     <GoogleOAuthProvider clientId={googleClientId || ''}>
       <WorkspaceThemeProvider>
         <UnsavedChangesProvider>
-          {import.meta.env.DEV && window.location.pathname === '/superadmin-preview' ? <SuperAdminLayout /> : <App />}
+          {import.meta.env.DEV && window.location.pathname === '/superadmin-preview'
+            ? <SuperAdminLayout />
+            : <BrowserRouter><App /></BrowserRouter>}
         </UnsavedChangesProvider>
       </WorkspaceThemeProvider>
     </GoogleOAuthProvider>

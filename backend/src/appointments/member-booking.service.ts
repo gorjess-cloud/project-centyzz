@@ -1,3 +1,4 @@
+import { BOOKABLE_STAFF_JOB_ROLES } from '../admin/users/staff-job-roles.js';
 import {
   BadRequestException,
   ConflictException,
@@ -98,17 +99,30 @@ export class MemberBookingService implements OnModuleDestroy {
       return row;
     });
   }
-  async availability(date: string, ids: number[]) {
+  private async stylist(c: Pick<PoolClient, 'query'>, id: string | undefined, lock = false) {
+    if (typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+      throw new BadRequestException('Choose a stylist before booking.');
+    const row = (await c.query(`SELECT st.id, concat_ws(' ',u."firstName",u."lastName") AS name
+      FROM public.staff st JOIN public."user" u ON u.id=st.user_id
+      WHERE st.id=$1::uuid AND st.is_active AND st.archived_at IS NULL
+        AND u.role='STAFF' AND u."isActive" AND u.archived_at IS NULL
+        AND NOT coalesce(u."isArchived",false) AND st.job_title=ANY($2::text[])
+      ${lock ? 'FOR SHARE OF st,u' : ''}`, [id, BOOKABLE_STAFF_JOB_ROLES])).rows[0];
+    if (!row) throw new BadRequestException('Selected stylist is unavailable. Choose another stylist.');
+    return row;
+  }
+  async availability(date: string, ids: number[], stylistId?: string) {
     this.date(date);
     memberServiceIds(ids);
+    const stylist = await this.stylist(this.pool, stylistId);
     const services = await this.catalog(this.pool, ids);
     const duration = services.reduce((n, s) => n + s.duration_minutes, 0),
       day = await this.salon.bookingDay(date),
       now = this.now();
     const booked = (
       await this.pool.query(
-        `SELECT start_time::text,end_time::text FROM public.appointments WHERE appointment_date=$1 AND ${occupied}`,
-        [date],
+        `SELECT start_time::text,end_time::text FROM public.appointments WHERE appointment_date=$1 AND ${occupied} AND (staff_id=$2::uuid OR staff_id IS NULL)`,
+        [date, stylist.id],
       )
     ).rows;
     const slots = [] as {
@@ -135,13 +149,13 @@ export class MemberBookingService implements OnModuleDestroy {
             ),
         });
       }
-    return { date, serviceIds: ids, serviceDurationMinutes: duration, slots };
+    return { date, serviceIds: ids, stylistId: stylist.id, serviceDurationMinutes: duration, slots };
   }
   async summaries(ids: number[]) {
     if (!ids.length) return new Map<number, any>();
     const rows = (
       await this.pool.query(
-        'SELECT * FROM public.appointment_service_summary WHERE appointment_id=ANY($1::int[])',
+        `SELECT bundle.*, a.staff_id, concat_ws(' ',u."firstName",u."lastName") AS stylist_name FROM public.appointment_service_summary bundle JOIN public.appointments a ON a.id=bundle.appointment_id LEFT JOIN public.staff st ON st.id=a.staff_id LEFT JOIN public."user" u ON u.id=st.user_id WHERE appointment_id=ANY($1::int[])`,
         [ids],
       )
     ).rows;
@@ -149,6 +163,8 @@ export class MemberBookingService implements OnModuleDestroy {
       rows.map((r) => [
         r.appointment_id,
         {
+          stylistId: r.staff_id,
+          stylistName: r.stylist_name || 'Unassigned',
           services: r.services,
           service: {
             id: r.services[0].id,
@@ -161,6 +177,7 @@ export class MemberBookingService implements OnModuleDestroy {
     );
   }
   async create(input: any, userId: number, email: string) {
+    if (typeof input.stylistId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.stylistId)) throw new BadRequestException('Choose a stylist before booking.');
     const ids = memberServiceIds(input.serviceIds ?? [input.serviceId]);
     if (input.serviceIds && input.serviceId !== undefined)
       throw new BadRequestException('Send serviceIds or serviceId, not both.');
@@ -176,7 +193,7 @@ export class MemberBookingService implements OnModuleDestroy {
     )
       throw new BadRequestException('Invalid booking reference.');
     const hash = createHash('sha256')
-      .update(JSON.stringify([ids, date, input.startTime]))
+      .update(JSON.stringify([ids, date, input.startTime, input.stylistId.toLowerCase()]))
       .digest('hex');
     const c = await this.pool.connect();
     try {
@@ -213,6 +230,7 @@ export class MemberBookingService implements OnModuleDestroy {
       await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
         'centyzz-guest-booking:' + date,
       ]);
+      const stylist = await this.stylist(c, input.stylistId, true);
       const services = await this.catalog(c, ids, true),
         duration = services.reduce((n, s) => n + s.duration_minutes, 0),
         day = await this.salon.bookingDay(date),
@@ -229,8 +247,8 @@ export class MemberBookingService implements OnModuleDestroy {
           'All selected services must fit in a future slot within salon operating hours.',
         );
       const conflict = await c.query(
-        `SELECT id FROM public.appointments WHERE appointment_date=$1 AND ${occupied} AND start_time<$3::time AND end_time>$2::time LIMIT 1`,
-        [date, input.startTime, hhmm(end)],
+        `SELECT id FROM public.appointments WHERE appointment_date=$1 AND ${occupied} AND start_time<$3::time AND end_time>$2::time AND (staff_id=$4::uuid OR staff_id IS NULL) LIMIT 1`,
+        [date, input.startTime, hhmm(end), stylist.id],
       );
       if (conflict.rowCount)
         throw new ConflictException(
@@ -242,7 +260,7 @@ export class MemberBookingService implements OnModuleDestroy {
       const reference = `CNTZ-${date.replaceAll('-', '')}-${randomBytes(4).toString('hex').toUpperCase()}`;
       const created = (
         await c.query(
-          `INSERT INTO public.appointments(reference_code,user_id,service_id,customer_name,customer_email,appointment_date,start_time,end_time,status,total_amount,booking_request_key,booking_request_hash) VALUES($1,$2,$3,$4,$5,$6,$7::time,$8::time,'PENDING',$9,$10,$11) RETURNING id,reference_code AS "referenceCode",appointment_date AS "appointmentDate",start_time::text AS "startTime",end_time::text AS "endTime",status`,
+          `INSERT INTO public.appointments(reference_code,user_id,service_id,customer_name,customer_email,appointment_date,start_time,end_time,status,total_amount,booking_request_key,booking_request_hash,staff_id) VALUES($1,$2,$3,$4,$5,$6,$7::time,$8::time,'PENDING',$9,$10,$11,$12::uuid) RETURNING id,reference_code AS "referenceCode",appointment_date AS "appointmentDate",start_time::text AS "startTime",end_time::text AS "endTime",status`,
           [
             reference,
             userId,
@@ -255,6 +273,7 @@ export class MemberBookingService implements OnModuleDestroy {
             price.toFixed(2),
             key,
             hash,
+            stylist.id,
           ],
         )
       ).rows[0];
@@ -282,6 +301,8 @@ export class MemberBookingService implements OnModuleDestroy {
         success: true,
         data: {
           ...created,
+          stylistId: stylist.id,
+          stylistName: stylist.name,
           services: services.map((s) => ({
             id: s.id,
             name: s.name,

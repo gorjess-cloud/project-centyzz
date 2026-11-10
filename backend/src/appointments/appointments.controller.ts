@@ -91,10 +91,12 @@ export class AppointmentsController {
     @Query('date') date: string,
     @Query('service_id') serviceId?: string,
     @Query('service_ids') serviceIds?: string,
+    @Query('stylist_id') stylistId?: string,
   ) {
     return this.appointmentsService.getAvailableSlots(
       date,
       serviceIds !== undefined ? serviceIds.split(',').map(Number) : Number(serviceId),
+      stylistId,
     );
   }
 

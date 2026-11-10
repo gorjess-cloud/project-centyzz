@@ -62,6 +62,7 @@ describe('Combined Client appointments and Calendar', () => {
   });
   it('accepts the grouped request DTO and retains legacy one-service requests', async () => {
     const base = {
+      stylistId: '11111111-1111-4111-8111-111111111111',
       customerName: 'Client',
       customerEmail: 'client@example.com',
       appointmentDate: '2026-11-12',
@@ -86,6 +87,22 @@ describe('Combined Client appointments and Calendar', () => {
         )
       ).length,
     ).toBeGreaterThan(0);
+  });
+  it('requires a valid stylist on Client booking requests', async () => {
+    for (const stylistId of [undefined, '', '123']) {
+      const errors = await validate(Object.assign(new CreateAppointmentDto(), {
+        stylistId, serviceIds: [3,4], customerName: 'Client', customerEmail: 'client@example.com',
+        appointmentDate: '2026-11-12', startTime: '14:00',
+      }));
+      expect(errors.some(error => error.property === 'stylistId')).toBe(true);
+    }
+  });
+  it('checks availability for the chosen stylist and all services', async () => {
+    const member = { availability: vi.fn().mockResolvedValue({slots: []}) };
+    const service = new AppointmentsService(undefined, member as unknown as MemberBookingService);
+    const stylist = '11111111-1111-4111-8111-111111111111';
+    await service.getAvailableSlots('2026-11-12', [3,4], stylist);
+    expect(member.availability).toHaveBeenCalledExactlyOnceWith('2026-11-12', [3,4], stylist);
   });
   it('delegates the full group once to the atomic booking service with the trusted user', async () => {
     const member = {

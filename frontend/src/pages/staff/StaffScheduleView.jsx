@@ -106,11 +106,11 @@ export default function StaffScheduleView({ currentUser }) {
   const row = 'flex justify-between text-xs text-[#443523]';
 
   return (
-    <div className="fade-in flex min-h-[calc(100vh-2.5rem)] flex-col">
+    <div className="fade-in flex min-h-[calc(100vh-2.5rem)] flex-col lg:h-[calc(100vh-5rem)] lg:min-h-0 lg:overflow-hidden">
       <h1 className="text-2xl font-bold text-[#2A1E1B]">Appointments</h1>
       <p className="mb-6 mt-0.5 text-xs text-[#8A8174]">Scan client appointment receipt or look up guest</p>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:h-[calc(100vh-9rem)] lg:grid-cols-3">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3">
         <section className={`${card} flex min-h-0 flex-col p-4 lg:col-span-1`} aria-label="Assigned appointments">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-bold text-[#2A1E1B]">{['ADMIN', 'SUPERADMIN'].includes(currentUser?.role) ? 'Salon Appointments' : 'My Assigned Appointments'}</h2>

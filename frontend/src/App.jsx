@@ -1,3 +1,4 @@
+import {useLocation,useNavigate} from 'react-router-dom';
 import CredentialRecoveryPage from './pages/CredentialRecoveryPage';
 import MaintenanceGate from './components/superadmin/MaintenanceGate';
 import './components/superadmin/maintenance-v2.css';
@@ -25,7 +26,11 @@ import { useWorkspaceTheme } from './components/workspace/WorkspaceContext';
 import { useUnsavedChanges } from './components/UnsavedChangesProvider';
 
 
+const memberRoutePages={'/booking':'member-book','/member':'home','/member/services':'member-services','/member/bookings':'member-bookings','/member/account':'member-account'};
+const memberPagePaths=Object.fromEntries(Object.entries(memberRoutePages).map(([path,page])=>[page,path]));
 export default function App() {
+  const location=useLocation(),navigate=useNavigate();
+  const routePage=memberRoutePages[location.pathname];
   const [credentialRecoveryHash] = useState(() => window.location.hash.startsWith('#/recover/') ? window.location.hash : null);
   const [activePage, setActivePage] = useState(() => {
     if (window.location.pathname === '/forgot-pin') return 'forgot-pin';
@@ -70,10 +75,18 @@ export default function App() {
     const timer = window.setInterval(refresh, 15000);
     return () => { active = false; window.clearInterval(timer); };
   }, [memberUser?.accessToken, memberUser?.role]);
+  const isEmployee = ['ADMIN', 'SUPERADMIN', 'STAFF'].includes(memberUser?.role);
+  const page = isEmployee ? 'admin' : memberUser
+    ? (routePage || (location.pathname === '/' ? 'home' : activePage))
+    : activePage;
+  useEffect(()=>{if(routePage&&!memberUser)navigate('/',{replace:true});},[routePage,memberUser,navigate]);
   const { guardNavigation } = useUnsavedChanges();
   const navigatePage = (page) => {
-    if (page === activePage) return;
-    guardNavigation(() => setActivePage(page));
+    const destination = memberUser ? (memberPagePaths[page] || '/') : '/';
+    guardNavigation(() => {
+      setActivePage(page);
+      navigate(destination);
+    });
   };
 
   useEffect(() => {
@@ -98,14 +111,7 @@ export default function App() {
   }, [memberUser?.accessToken, memberUser?.mustCompleteSetup, appointmentsRefreshKey]);
 
   const handleOpenBooking = (service = null) => {
-    if (memberUser) {
-      guardNavigation(() => {
-        setIsBookingOpen(false);
-        setSelectedService(service);
-        setActivePage('member-book');
-      });
-      return;
-    }
+    if (memberUser) { handleMemberBooking(service); return; }
 
     setSelectedService(service);
     setBookingSessionId((currentId) => currentId + 1);
@@ -117,6 +123,7 @@ export default function App() {
       setIsBookingOpen(false);
       setSelectedService(service);
       setActivePage('member-book');
+      navigate('/booking', { state: { selectedService: service ?? [] } });
     });
   };
 
@@ -126,23 +133,10 @@ export default function App() {
     setAppointmentsRefreshKey((key) => key + 1);
   };
 
-  const isAuthPage = activePage === 'auth' || activePage === 'forgot-pin';
-  const isAdminDashboard = activePage === 'admin';
+  const isAuthPage = page === 'auth' || page === 'forgot-pin';
+  const isAdminDashboard = page === 'admin';
   const isMemberDashboard = Boolean(memberUser)
-    && ['home', 'member-services', 'member-bookings', 'member-book', 'member-account'].includes(activePage);
-
-  const enterDemoDashboard = (user) => {
-    setMemberAppointments([]);
-    setAppointmentsError('');
-    setIsLoadingAppointments(false);
-
-    const role = (user?.role || 'CLIENT').toUpperCase();
-    const isEmployee = ['ADMIN', 'SUPERADMIN', 'STAFF'].includes(role);
-
-    const userData = { ...user, role: isEmployee ? role : 'CLIENT', isDemo: true };
-    setMemberUser(userData);
-    setActivePage(isEmployee ? 'admin' : 'home');
-  };
+    && ['home', 'member-services', 'member-bookings', 'member-book', 'member-account'].includes(page);
 
   const enterMemberDashboard = (user, accessToken) => {
     setIsBookingOpen(false);
@@ -163,6 +157,7 @@ export default function App() {
 
     setMemberUser(userData);
     setActivePage(isEmployee ? 'admin' : 'home');
+    navigate(isEmployee ? '/' : '/member', { replace: true });
   };
 
   const completeManagementSetup = (user, accessToken) => {
@@ -190,6 +185,7 @@ export default function App() {
       setAppointmentsError('');
       setIsLoadingAppointments(false);
       setActivePage('home');
+      navigate('/', { replace: true });
       logoutPending.current = false;
     });
   };
@@ -222,10 +218,10 @@ export default function App() {
 
   return (
     <div className={`min-h-screen flex flex-col justify-between overflow-x-clip font-sans ${isDarkMode ? 'bg-[#111111] text-[#F5F1EA]' : 'bg-[#FDFBF7] text-[#3A2E2B]'}`}>
-      
+
       {!isAuthPage && !isMemberDashboard && !isAdminDashboard && (
-        <Navbar 
-          activePage={activePage} 
+        <Navbar
+          activePage={page}
           setActivePage={navigatePage}
           onOpenBooking={handleOpenBooking}
           setServiceFilter={setServiceFilter}
@@ -243,14 +239,14 @@ export default function App() {
         )}
 
         {isAdminDashboard && !memberUser?.mustCompleteSetup && (
-          <AdminLayout 
-            currentUser={memberUser || { firstName: 'Millicent', lastName: 'Campillos', email: 'MillicentCampillos@example.com', role: 'ADMIN' }} 
+          <AdminLayout
+            currentUser={memberUser || { firstName: 'Millicent', lastName: 'Campillos', email: 'MillicentCampillos@example.com', role: 'ADMIN' }}
             onLogout={requestLogout}
             onUserUpdated={handleProfileUpdated}
           />
         )}
 
-        {!isAdminDashboard && activePage === 'home' && (
+        {!isAdminDashboard && page === 'home' && (
           memberUser ? (
             <MemberHomePage
               user={memberUser}
@@ -259,7 +255,6 @@ export default function App() {
               setActivePage={navigatePage}
               onOpenBooking={handleMemberBooking}
               onLogout={requestLogout}
-              onLogout={handleLogout}
               onUserUpdated={handleProfileUpdated}
               appointments={memberAppointments}
               isLoadingAppointments={isLoadingAppointments}
@@ -274,7 +269,7 @@ export default function App() {
             />
           )
         )}
-        {!isAdminDashboard && activePage === 'member-account' && memberUser && (
+        {!isAdminDashboard && page === 'member-account' && memberUser && (
           <MemberHomePage
             user={memberUser}
             isDarkMode={isDarkMode}
@@ -282,7 +277,6 @@ export default function App() {
             setActivePage={navigatePage}
             onOpenBooking={handleMemberBooking}
             onLogout={requestLogout}
-            onLogout={handleLogout}
             onUserUpdated={handleProfileUpdated}
             initialSection="account"
             appointments={memberAppointments}
@@ -290,7 +284,7 @@ export default function App() {
             appointmentsError={appointmentsError}
           />
         )}
-        {!isAdminDashboard && activePage === 'member-services' && memberUser && (
+        {!isAdminDashboard && page === 'member-services' && memberUser && (
           <MemberServicesPage
             user={memberUser}
             isDarkMode={isDarkMode}
@@ -302,7 +296,7 @@ export default function App() {
             appointmentsError={appointmentsError}
           />
         )}
-        {!isAdminDashboard && activePage === 'member-book' && memberUser && (
+        {!isAdminDashboard && page === 'member-book' && memberUser && (
           <MemberBook
             user={memberUser}
             isDarkMode={isDarkMode}
@@ -313,7 +307,7 @@ export default function App() {
             onAppointmentCreated={handleAppointmentCreated}
           />
         )}
-        {!isAdminDashboard && activePage === 'member-bookings' && memberUser && (
+        {!isAdminDashboard && page === 'member-bookings' && memberUser && (
           <MemberBookingsPage
             user={memberUser}
             isDarkMode={isDarkMode}
@@ -321,10 +315,13 @@ export default function App() {
             setActivePage={navigatePage}
             onOpenBooking={handleMemberBooking}
             onLogout={requestLogout}
+            appointments={memberAppointments}
+            isLoadingAppointments={isLoadingAppointments}
+            appointmentsError={appointmentsError}
           />
         )}
-        {!isAdminDashboard && activePage === 'services' && (
-          <ServicesPage 
+        {!isAdminDashboard && page === 'services' && (
+          <ServicesPage
             serviceFilter={serviceFilter}
             setServiceFilter={setServiceFilter}
             onOpenBooking={handleOpenBooking}
@@ -334,7 +331,7 @@ export default function App() {
             isDarkMode={isDarkMode}
           />
         )}
-        {!isAdminDashboard && activePage === 'promos' && (
+        {!isAdminDashboard && page === 'promos' && (
           <PromosPage
             onOpenBooking={handleOpenBooking}
             setActivePage={navigatePage}
@@ -342,10 +339,10 @@ export default function App() {
             isDarkMode={isDarkMode}
           />
         )}
-        {!isAdminDashboard && activePage === 'about' && (
+        {!isAdminDashboard && page === 'about' && (
           <AboutPage isDarkMode={isDarkMode} />
         )}
-        {!isAdminDashboard && activePage === 'auth' && (
+        {!isAdminDashboard && page === 'auth' && (
           <AuthPage
             mode={authMode}
             setMode={setAuthMode}
@@ -356,7 +353,7 @@ export default function App() {
             setIsDarkMode={setIsDarkMode}
           />
         )}
-        {!isAdminDashboard && activePage === 'forgot-pin' && (
+        {!isAdminDashboard && page === 'forgot-pin' && (
           <ForgotPinPage
             isDarkMode={isDarkMode}
             setIsDarkMode={setIsDarkMode}

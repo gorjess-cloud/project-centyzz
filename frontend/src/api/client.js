@@ -103,8 +103,8 @@ export const api = {
   getAppointmentCalendar: (id, token) => get(`/api/appointments/mine/${encodeURIComponent(id)}/calendar`, token),
   getGuestCheckoutStatus: (reference, token) =>
     get(`/api/appointments/guest-checkout-status?reference=${encodeURIComponent(reference)}&token=${encodeURIComponent(token)}`),
-  getAvailableSlots: (date, serviceId) =>
-    get(`/api/appointments/available-slots?date=${encodeURIComponent(date)}&${Array.isArray(serviceId)?'service_ids':'service_id'}=${encodeURIComponent(Array.isArray(serviceId)?serviceId.join(','):serviceId)}`),
+  getAvailableSlots: (date, serviceId, stylistId) =>
+    get(`/api/appointments/available-slots?date=${encodeURIComponent(date)}&${Array.isArray(serviceId)?'service_ids':'service_id'}=${encodeURIComponent(Array.isArray(serviceId)?serviceId.join(','):serviceId)}&stylist_id=${encodeURIComponent(stylistId || '')}`),
   createMyAppointment: (token, appointment) =>
     post('/api/appointments/mine', appointment, token),
 };

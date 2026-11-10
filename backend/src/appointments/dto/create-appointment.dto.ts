@@ -16,6 +16,9 @@ import {
 } from 'class-validator';
 
 export class CreateAppointmentDto {
+  @IsUUID()
+  stylistId: string;
+
   @ValidateIf((o) => o.serviceIds === undefined)
   @IsInt()
   @Min(1)

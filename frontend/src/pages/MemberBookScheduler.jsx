@@ -32,6 +32,7 @@ export default function MemberBookScheduler({
   onLogout,
   selectedService,
   onAppointmentCreated,
+  embedded = false,
 }) {
   const [serviceGroups, setServiceGroups] = useState([]);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
@@ -40,6 +41,18 @@ export default function MemberBookScheduler({
   const [appointmentDate, setAppointmentDate] = useState(getSalonDate);
   const [availability, setAvailability] = useState({});
   const [selectedTime, setSelectedTime] = useState('');
+  const [stylists, setStylists] = useState([]);
+  const [stylistId, setStylistId] = useState('');
+  const [stylistsError, setStylistsError] = useState('');
+  const [loadingStylists, setLoadingStylists] = useState(true);
+  const chosenStylist = stylists.find(item => String(item.id) === stylistId);
+  useEffect(() => {
+    let active = true;
+    api.getGuestStylists().then(result => { if (active) setStylists(Array.isArray(result) ? result : result.data || []); })
+      .catch(error => { if (active) setStylistsError(error.message); })
+      .finally(() => { if (active) setLoadingStylists(false); });
+    return () => { active = false; };
+  }, []);
   const [createdBooking,setCreatedBooking]=useState(null);
   const [calendarError,setCalendarError]=useState('');
   const [openingCalendar,setOpeningCalendar]=useState(false);
@@ -49,7 +62,8 @@ export default function MemberBookScheduler({
   const [formError, setFormError] = useState('');
 
   const services = useMemo(
-    () => serviceGroups.flatMap((group) => group.services || []),
+    () => (Array.isArray(serviceGroups) ? serviceGroups : [])
+      .flatMap((group) => Array.isArray(group?.services) ? group.services : []),
     [serviceGroups],
   );
   const fullName = user?.fullName || user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Member';
@@ -57,9 +71,9 @@ export default function MemberBookScheduler({
   const profilePhoto = (() => { try { return localStorage.getItem(`centyzz-member-avatar:${user?.id ?? user?.email ?? 'member'}`) || ''; } catch { return ''; } })();
   const selectedServices = selectedServiceIds.map((id) => services.find((item) => String(item.id) === String(id))).filter(Boolean);
   const selectionKey=selectedServiceIds.join(',');
-  const slotKey=appointmentDate+':'+selectionKey;
+  const slotKey=appointmentDate+':'+selectionKey+':'+stylistId;
   const slotData=availability[slotKey];
-  const isLoadingSlots=selectedServiceIds.length>0&&!slotData;
+  const isLoadingSlots=selectedServiceIds.length>0&&Boolean(stylistId)&&!slotData;
   const totalPrice=selectedServices.reduce((n,item)=>n+Number(item.price),0);
   const totalDuration=selectedServices.reduce((n,item)=>n+Number(item.durationMinutes),0);
 
@@ -76,14 +90,18 @@ export default function MemberBookScheduler({
     api.getServices()
       .then((result) => {
         if (!isCurrent) return;
-        const groups = Array.isArray(result) ? result : [];
+        const groups = Array.isArray(result)
+          ? result
+          : Array.isArray(result?.data)
+            ? result.data
+            : [];
         setServiceGroups(groups);
         const requested = Array.isArray(selectedService) ? selectedService : selectedService ? [selectedService] : [];
-        const availableServices = groups.flatMap((group) => group.services || []);
+        const availableServices = groups.flatMap((group) => Array.isArray(group?.services) ? group.services : []);
         const matches = requested.map((requestedService) => {
           const requestedName = String(requestedService?.title || requestedService?.name || '').toLowerCase();
-          return availableServices.find((item) => String(item.id) === String(requestedService?.id))
-            || availableServices.find((item) => requestedName && item.name.toLowerCase() === requestedName);
+          return availableServices.find((item) => String(item?.id) === String(requestedService?.id))
+            || availableServices.find((item) => requestedName && String(item?.name || '').toLowerCase() === requestedName);
         }).filter(Boolean);
         setSelectedServiceIds(matches.map((item) => String(item.id)));
       })
@@ -99,13 +117,13 @@ export default function MemberBookScheduler({
   }, [selectedService]);
 
   useEffect(() => {
-    if (!selectionKey || !appointmentDate) return;
+    if (!selectionKey || !appointmentDate || !stylistId) return;
     let current=true;
-    api.getAvailableSlots(appointmentDate,selectionKey.split(',').map(Number))
+    api.getAvailableSlots(appointmentDate,selectionKey.split(',').map(Number),stylistId)
       .then(result=>{if(current)setAvailability({[slotKey]:{slots:result.slots||[]}});})
       .catch(error=>{if(current)setAvailability({[slotKey]:{slots:[],error:error.message}});});
     return ()=>{current=false;};
-  },[appointmentDate,selectionKey,slotKey]);
+  },[appointmentDate,selectionKey,slotKey,stylistId]);
 
   const changeSelection=(id)=>{
     setSelectedServiceIds(ids=>ids.includes(String(id))?ids.filter(value=>value!==String(id)):[...ids,String(id)]);
@@ -114,8 +132,9 @@ export default function MemberBookScheduler({
   const handleSubmit=async event=>{
     event.preventDefault();if(submitting.current)return;
     if(!user?.accessToken){setFormError('Please sign in to book an appointment.');return;}
+    if(!chosenStylist){setFormError('Choose a stylist before booking.');return;}
     if(!selectedServices.length||!selectedTime){setFormError('Select your services and one available appointment time.');return;}
-    const payload={serviceIds:selectedServiceIds.map(Number),customerName:fullName,customerEmail:user.email,appointmentDate,startTime:selectedTime};
+    const payload={stylistId,serviceIds:selectedServiceIds.map(Number),customerName:fullName,customerEmail:user.email,appointmentDate,startTime:selectedTime};
     const signature=JSON.stringify(payload);
     if(!bookingAttempt.current||bookingAttempt.current.signature!==signature)bookingAttempt.current={signature,key:crypto.randomUUID()};
     submitting.current=true;setIsSubmitting(true);setFormError('');
@@ -130,9 +149,10 @@ export default function MemberBookScheduler({
     catch(error){popup?.close();setCalendarError(error.message);}finally{setOpeningCalendar(false);}
   };
 
+
   return (
-    <div className={`min-h-screen pb-24 lg:flex lg:pb-0 ${surface}`}>
-      <aside className={`relative hidden w-20 shrink-0 flex-col border-r lg:sticky lg:top-0 lg:flex lg:h-screen ${sidebarSurface}`}>
+    <div className={`${embedded ? "min-h-0" : "min-h-screen pb-24 lg:flex lg:pb-0"} ${surface}`}>
+      {!embedded && <aside className={`relative hidden w-20 shrink-0 flex-col border-r lg:sticky lg:top-0 lg:flex lg:h-screen ${sidebarSurface}`}>
         <div className="flex h-16 items-center justify-center border-b border-inherit">
           <img src="/logo.png" alt="Centy'zz Salon" className="h-10 w-10 rounded-full object-cover" />
         </div>
@@ -160,18 +180,18 @@ export default function MemberBookScheduler({
         <button type="button" onClick={onLogout} aria-label="Log out" className="mb-3 flex h-10 items-center justify-center text-red-600 hover:bg-red-50 hover:text-red-700">
           <LogOut className="h-4 w-4" />
         </button>
-      </aside>
+      </aside>}
 
-      <main className="min-w-0 flex-1 px-3 py-4 sm:px-6 sm:py-5 lg:px-8">
+      <main className={`min-w-0 flex-1 px-3 py-4 sm:px-6 sm:py-5 ${embedded ? "lg:px-6" : "lg:px-8"}`}>
         <div className="mx-auto max-w-5xl">
           <header className="mb-6 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <button type="button" onClick={() => setActivePage('member-bookings')} aria-label="Back to bookings" className="text-[#8A8174] hover:text-[#C5A059]">
+              {!embedded && <button type="button" onClick={() => setActivePage('member-bookings')} aria-label="Back to bookings" className="text-[#8A8174] hover:text-[#C5A059]">
                 <ArrowLeft className="h-5 w-5" />
-              </button>
+              </button>}
               <div>
                 <h1 className="text-xl font-bold">Book an appointment</h1>
-                <p className={`mt-0.5 text-xs ${mutedText}`}>Choose a service, date, and available time.</p>
+                <p className={`mt-0.5 text-xs ${mutedText}`}>Choose your services, stylist, date, and available time.</p>
               </div>
             </div>
             <button type="button" onClick={() => setIsDarkMode((current) => !current)} aria-label="Toggle dark mode" className={`rounded-full border p-2.5 ${cardSurface}`}>
@@ -179,7 +199,7 @@ export default function MemberBookScheduler({
             </button>
           </header>
 
-          {createdBooking ? <section className={`rounded-xl border p-6 ${cardSurface}`} role="status"><h2 className="text-lg font-bold">Appointment saved</h2><p className="mt-2 text-sm">Your selected services are booked together in one appointment.</p><p className="mt-2 text-sm">{selectedServices.map(item=>item.name).join(', ')}</p><p className="mt-2 text-sm">{formatDate(appointmentDate)} · {selectedTime} · {totalDuration} minutes</p><p className="mt-2 text-sm">Save the prefilled event in Google Calendar to add it to your calendar.</p><div className="mt-5 flex flex-wrap gap-3"><button type="button" disabled={openingCalendar} onClick={openCalendar} className="rounded-lg bg-[#4A3928] px-4 py-3 text-sm text-white">{openingCalendar?'Opening calendar…':'Add to Google Calendar'}</button><button type="button" className="rounded-lg border px-4 py-3 text-sm" onClick={()=>setActivePage('member-bookings')}>View my bookings</button></div>{calendarError&&<p role="alert" className="mt-3 text-sm text-red-600">{calendarError}</p>}</section> : <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+          {createdBooking ? <section className={`rounded-xl border p-6 ${cardSurface}`} role="status"><h2 className="text-lg font-bold">Appointment saved</h2><p className="mt-2 text-sm">Your selected services are booked together in one appointment.</p><p className="mt-2 text-sm">Stylist: {createdBooking.stylistName || chosenStylist?.name}</p><p className="mt-2 text-sm">{selectedServices.map(item=>item.name).join(', ')}</p><p className="mt-2 text-sm">{formatDate(appointmentDate)} · {selectedTime} · {totalDuration} minutes</p><p className="mt-2 text-sm">Save the prefilled event in Google Calendar to add it to your calendar.</p><div className="mt-5 flex flex-wrap gap-3"><button type="button" disabled={openingCalendar} onClick={openCalendar} className="rounded-lg bg-[#4A3928] px-4 py-3 text-sm text-white">{openingCalendar?'Opening calendar…':'Add to Google Calendar'}</button><button type="button" className="rounded-lg border px-4 py-3 text-sm" onClick={()=>setActivePage('member-bookings')}>View my bookings</button></div>{calendarError&&<p role="alert" className="mt-3 text-sm text-red-600">{calendarError}</p>}</section> : <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
             <section className={`space-y-6 rounded-xl border p-5 sm:p-6 ${cardSurface}`}>
               <div>
                 <label htmlFor="member-book-service" className="mb-2 block text-xs font-semibold">Selected services</label>
@@ -202,6 +222,18 @@ export default function MemberBookScheduler({
               </div>
 
               <div>
+                <label htmlFor="member-book-stylist" className="mb-2 block text-xs font-semibold">Stylist / specialist</label>
+                <select id="member-book-stylist" required disabled={isSubmitting || loadingStylists} value={stylistId}
+                  onChange={event => { setStylistId(event.target.value); setSelectedTime(''); setAvailability({}); setFormError(''); bookingAttempt.current=null; }}
+                  className={`w-full rounded-lg border px-3 py-2.5 text-sm ${inputSurface}`}>
+                  <option value="">{loadingStylists ? 'Loading stylists…' : 'Choose your stylist'}</option>
+                  {stylists.map(item => <option key={item.id} value={String(item.id)}>{item.name}</option>)}
+                </select>
+                {stylistsError && <p role="alert" className="mt-2 text-xs text-red-600">{stylistsError}</p>}
+                {!loadingStylists && !stylistsError && !stylists.length && <p role="alert" className="mt-2 text-xs">No active specialists are available.</p>}
+              </div>
+
+              <div>
                 <label htmlFor="member-book-date" className="mb-2 block text-xs font-semibold">Appointment date</label>
                 <input id="member-book-date" type="date" min={getSalonDate()} value={appointmentDate} onChange={(event) => { setAppointmentDate(event.target.value); setSelectedTime(''); setAvailability({}); bookingAttempt.current=null; }} required className={`w-full rounded-lg border px-3 py-2.5 text-sm ${inputSurface}`} />
               </div>
@@ -211,8 +243,8 @@ export default function MemberBookScheduler({
                   <Clock className="h-4 w-4 text-[#C5A059]" />
                   <h2 className="text-xs font-semibold">Available times</h2>
                 </div>
-                {!selectedServiceIds.length ? (
-                  <p className={`text-sm ${mutedText}`}>Select one or more services to view available times.</p>
+                {!selectedServiceIds.length || !stylistId ? (
+                  <p className={`text-sm ${mutedText}`}>Select your services and stylist to view available times.</p>
                 ) : isLoadingSlots ? (
                   <p role="status" className={`text-sm ${mutedText}`}>Checking availability...</p>
                 ) : (
@@ -229,7 +261,7 @@ export default function MemberBookScheduler({
             <aside className="space-y-4">
               <section className={`rounded-xl border p-5 ${cardSurface}`}>
                 <h2 className="text-sm font-bold">Appointment summary</h2>
-                <dl className={`mt-4 space-y-3 text-xs ${mutedText}`}>
+                <dl className={`mt-4 space-y-3 text-xs ${mutedText}`}><div className="flex justify-between gap-3"><dt>Stylist</dt><dd className="text-right font-medium">{chosenStylist?.name || 'Choose a stylist'}</dd></div>
                   <div className="flex justify-between gap-3"><dt>Member</dt><dd className="text-right font-medium">{fullName}</dd></div>
                   <div className="flex justify-between gap-3"><dt>Email</dt><dd className="break-all text-right font-medium">{user?.email || 'Not provided'}</dd></div>
                   <div className="flex justify-between gap-3"><dt>Service</dt><dd className="text-right font-medium">{selectedServices.map(item=>item.name).join(', ') || 'Not selected'}</dd></div>
@@ -238,7 +270,7 @@ export default function MemberBookScheduler({
                 </dl>
                 {selectedServices.length>0 && <p className="mt-4 border-t border-inherit pt-3 text-sm font-bold">₱{totalPrice.toFixed(2)} · {totalDuration} minutes</p>}
               </section>
-              <button type="submit" disabled={isSubmitting || isLoadingServices || isLoadingSlots || !selectedServices.length || !selectedTime} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#4A3928] px-4 py-3 text-xs font-semibold text-white transition-colors hover:bg-[#725334] disabled:cursor-not-allowed disabled:opacity-50">
+              <button type="submit" disabled={isSubmitting || isLoadingServices || loadingStylists || isLoadingSlots || !chosenStylist || !selectedServices.length || !selectedTime} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#4A3928] px-4 py-3 text-xs font-semibold text-white transition-colors hover:bg-[#725334] disabled:cursor-not-allowed disabled:opacity-50">
                 {isSubmitting ? 'Saving appointment...' : <><Check className="h-4 w-4" /> Confirm appointment</>}
               </button>
             </aside>
@@ -246,12 +278,12 @@ export default function MemberBookScheduler({
         </div>
       </main>
 
-      <nav aria-label="Member mobile navigation" className="fixed bottom-3 left-1/2 z-40 flex w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 items-center justify-around rounded-full border border-white/10 bg-[#4A3928]/95 px-2 py-1.5 text-white shadow-xl backdrop-blur-md lg:hidden">
+      {!embedded && <nav aria-label="Member mobile navigation" className="fixed bottom-3 left-1/2 z-40 flex w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 items-center justify-around rounded-full border border-white/10 bg-[#4A3928]/95 px-2 py-1.5 text-white shadow-xl backdrop-blur-md lg:hidden">
         <button type="button" onClick={() => setActivePage('home')} className="flex flex-col items-center p-2 text-[10px]"><Home className="h-5 w-5" /><span>Home</span></button>
         <button type="button" onClick={() => setActivePage('member-services')} className="flex flex-col items-center p-2 text-[10px]"><Scissors className="h-5 w-5" /><span>Services</span></button>
         <button type="button" onClick={() => setActivePage('member-bookings')} aria-current="page" className="flex flex-col items-center p-2 text-[10px] font-bold text-[#F1E7C6]"><CalendarDays className="h-5 w-5" /><span>Bookings</span></button>
         <button type="button" onClick={() => setActivePage('member-account')} className="flex flex-col items-center p-2 text-[10px]"><UserRound className="h-5 w-5" /><span>Account</span></button>
-      </nav>
+      </nav>}
     </div>
   );
 }

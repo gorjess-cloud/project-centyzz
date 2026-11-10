@@ -59,21 +59,25 @@ const limitPhoneDigits = (value) => {
     .join('');
 };
 
-function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
+function BookingModal(props) {
+  if (!props.isOpen) return null;
+  const serviceKey = props.selectedService?.id ?? props.selectedService?.name ?? props.selectedService?.title ?? 'default';
+  return <BookingSession key={serviceKey} {...props} />;
+}
+
+function BookingSession({ onClose, selectedService, isDarkMode }) {
   const [step, setStep] = useState('form');
   const [serviceGroups, setServiceGroups] = useState([]);
-  const [loadingServices, setLoadingServices] = useState(false);
+  const [loadingServices, setLoadingServices] = useState(true);
   const [servicesError, setServicesError] = useState('');
   const [category, setCategory] = useState(''); // Database category id, not a display label
   const [serviceId, setServiceId] = useState(''); // Exactly one service for a guest
-  const [slots, setSlots] = useState([]);
-  const [loadingSlots, setLoadingSlots] = useState(false);
-  const [slotsError, setSlotsError] = useState('');
+  const [availability, setAvailability] = useState(null);
   const [checkingSlot, setCheckingSlot] = useState(false);
   const [formError, setFormError] = useState('');
   const [stylists, setStylists] = useState([]);
   const [stylistId, setStylistId] = useState('');
-  const [loadingStylists, setLoadingStylists] = useState(false);
+  const [loadingStylists, setLoadingStylists] = useState(true);
   const [checkout, setCheckout] = useState(null);
   const [checkoutStatus, setCheckoutStatus] = useState(null);
   const [openingCalendar, setOpeningCalendar] = useState(false);
@@ -104,33 +108,24 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   const depositAmount = totalPriceNumber * 0.5;
   const balanceRemaining = totalPriceNumber - depositAmount;
   const selectedDate = toDateKey(currentDate.getFullYear(), currentDate.getMonth(), selectedDay);
+  const availabilityKey = serviceId && stylistId ? `${selectedDate}:${serviceId}:${stylistId}` : '';
+  const hasCurrentAvailability = availability?.key === availabilityKey;
+  const slots = hasCurrentAvailability ? availability.slots : [];
+  const slotsError = hasCurrentAvailability ? availability.error : '';
+  const loadingSlots = Boolean(availabilityKey && !hasCurrentAvailability);
+  const setSlots = (nextSlots) => setAvailability({ key: availabilityKey, slots: nextSlots, error: '' });
+  const requestedId = selectedService?.id;
+  const requestedName = String(selectedService?.name || selectedService?.title || '').trim().toLowerCase();
   const selectedSlot = slots.find((slot) => slot.startTime === selectedTime && slot.available);
 
   // Home and Services both open this same component. A Services-page click supplies
   // its real database id; Home defaults to the first available database service.
   useEffect(() => {
-    if (!isOpen) return undefined;
     let active = true;
-    // A demo checkout stays inside this modal; no PayMongo redirect is required.
-    setStep('form');
-    setCheckout(null);
-    setCheckoutStatus(null);
-    setFormError('');
-    setStylistId('');
-    setStylists([]);
-    setLoadingStylists(true);
     api.getGuestStylists().then((data) => {
       if (active) setStylists(Array.isArray(data) ? data : data?.data || []);
     }).catch((err) => { if (active) setFormError('Could not load specialists: ' + err.message); })
       .finally(() => { if (active) setLoadingStylists(false); });
-    setSlots([]);
-    setSelectedTime('');
-    setServicesError('');
-    setLoadingServices(true);
-    const salonDate = getSalonToday().split('-').map(Number);
-    setCurrentDate(new Date(salonDate[0], salonDate[1] - 1, 1));
-    setSelectedDay(salonDate[2]);
-
     api.getServices()
       .then((result) => {
         if (!active) return;
@@ -139,9 +134,8 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
         const available = groups.flatMap((group) =>
           (group.services || []).map((service) => ({ ...service, categoryId: String(group.id) }))
         );
-        const requestedName = String(selectedService?.name || selectedService?.title || '').trim().toLowerCase();
         const matched = available.find((service) =>
-          selectedService?.id != null && String(service.id) === String(selectedService.id)
+          requestedId != null && String(service.id) === String(requestedId)
         ) || available.find((service) =>
           requestedName && service.name.toLowerCase() === requestedName
         ) || available[0];
@@ -153,28 +147,22 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
       })
       .finally(() => { if (active) setLoadingServices(false); });
     return () => { active = false; };
-  }, [isOpen, selectedService]);
+  }, [requestedId, requestedName]);
 
   // Refetch when the date or selected service changes. Ignore responses from
   // superseded requests so stale slots cannot become selectable.
   useEffect(() => {
-    if (!isOpen || !serviceId || !stylistId) { setSlots([]); setSelectedTime(''); return undefined; }
+    if (!availabilityKey) return undefined;
     let active = true;
-    setSlots([]);
-    setSelectedTime('');
-    setSlotsError('');
-    setFormError('');
-    setLoadingSlots(true);
     api.getGuestAvailableSlots(selectedDate, Number(serviceId), stylistId)
       .then((result) => {
-        if (active) setSlots(Array.isArray(result.slots) ? result.slots : []);
+        if (active) setAvailability({ key: availabilityKey, slots: Array.isArray(result.slots) ? result.slots : [], error: '' });
       })
       .catch((error) => {
-        if (active) { setSlots([]); setSlotsError(error.message); }
-      })
-      .finally(() => { if (active) setLoadingSlots(false); });
+        if (active) setAvailability({ key: availabilityKey, slots: [], error: error.message });
+      });
     return () => { active = false; };
-  }, [isOpen, serviceId, stylistId, selectedDate]);
+  }, [availabilityKey, serviceId, stylistId, selectedDate]);
 
   const handleCategoryChange = (event) => {
     const next = event.target.value;
@@ -195,7 +183,6 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
     ? 'bg-[#3A342B] border border-[#8D7444] text-[#F5F1EA] hover:bg-[#51432D] hover:border-[#C5A059]'
     : 'bg-[#2A1E1B] text-white hover:bg-[#C5A059]';
 
-  if (!isOpen) return null;
 
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June', 
@@ -341,20 +328,20 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
   };
 
   const handleResetAndClose = () => {
-    setStep('form');
+    if (submittingCheckout || checkingSlot) return;
     onClose();
   };
 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-md animate-fadeIn">
-      <div className={`${modalSurface} rounded-3xl border shadow-2xl relative transition-all duration-300 w-full overflow-hidden ${
+      <div className={`${modalSurface} rounded-3xl border shadow-2xl relative transition-all duration-300 w-full max-h-[calc(100dvh-3rem)] overflow-y-auto ${
         step === 'form' ? 'max-w-5xl' : 'max-w-md'
       }`}>
         
         {/* Close Button */}
         <button 
-          onClick={handleResetAndClose} 
+          onClick={handleResetAndClose} disabled={submittingCheckout || checkingSlot}
           aria-label="Close modal"
           className={`absolute top-4 right-4 z-10 p-2 ${isDarkMode ? 'text-[#D6D0C8] hover:text-white bg-[#302D29] hover:bg-[#403B34]' : 'text-[#2A1E1B]/60 hover:text-[#2A1E1B] bg-white/80 hover:bg-white'} rounded-full transition-colors shadow-sm`}
         >
@@ -695,6 +682,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
               
               <button 
                 onClick={() => setStep('form')}
+                disabled={submittingCheckout}
                 className={`w-full py-2.5 rounded-2xl border ${isDarkMode ? 'bg-[#242220] border-[#3A342B] hover:bg-[#302D29] text-[#F5F1EA]' : 'bg-white border-[#E8DFD1] hover:bg-[#F6F0E6] text-[#2A1E1B]'} font-medium text-xs transition-colors`}
               >
                 Go Back & Edit
@@ -717,7 +705,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
               className={`w-full py-3 rounded-xl ${primaryButton} font-bold text-xs disabled:opacity-50`}>
               {submittingCheckout ? 'Confirming demo…' : 'Simulate deposit and confirm booking'}
             </button>
-            <button type="button" onClick={handleResetAndClose} className={`w-full py-2 rounded-xl border ${fieldStyle}`}>Cancel</button>
+            <button type="button" onClick={handleResetAndClose} disabled={submittingCheckout || checkingSlot} className={`w-full py-2 rounded-xl border ${fieldStyle}`}>Cancel</button>
           </div>
         )}
 
@@ -749,7 +737,7 @@ function BookingModal({ isOpen, onClose, selectedService, isDarkMode }) {
               <button type="button" onClick={refreshStatus} disabled={submittingCheckout} className={`w-full py-3 rounded-xl ${primaryButton} font-bold text-xs`}>
                 {submittingCheckout ? 'Checking…' : 'Refresh payment status'}
               </button>}
-            <button type="button" onClick={handleResetAndClose} className={`w-full py-2 rounded-xl border ${fieldStyle}`}>Close</button>
+            <button type="button" onClick={handleResetAndClose} disabled={submittingCheckout || checkingSlot} className={`w-full py-2 rounded-xl border ${fieldStyle}`}>Close</button>
           </div>
         )}
 
