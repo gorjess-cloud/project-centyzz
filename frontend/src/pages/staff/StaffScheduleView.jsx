@@ -1,96 +1,70 @@
-import { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { Search, CreditCard, Trash2, CalendarClock, Tag, Check, CalendarDays, Clock3, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Toast, useToast, Badge, EmptyState, ConfirmModal, peso, card, input } from '../../components/staff/ui';
-import useModalScrollLock from '../../hooks/useModalScrollLock';
-import { api } from '../../api/client';
-
-const TAX = 0.0825;
-const initials = (n = '') => n.split(' ').slice(0, 2).map((p) => p[0] || '').join('');
-const salonClock = () => {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  return { date: `${values.year}-${values.month}-${values.day}`, minutes: Number(values.hour) * 60 + Number(values.minute) };
-};
-const isUpcoming = (appointment, now) => {
-  const status = String(appointment.status || '').toUpperCase();
-  if (['CANCELLED', 'COMPLETED', 'DONE', 'NO_SHOW', 'CHECKED_OUT'].includes(status)) return false;
-  const date = String(appointment.appointmentDate || '').slice(0, 10);
-  if (!date || date < now.date) return false;
-  if (date > now.date) return true;
-  const [hours, minutes] = String(appointment.endTime || appointment.startTime || '').slice(0, 5).split(':').map(Number);
-  return Number.isFinite(hours) && Number.isFinite(minutes) && hours * 60 + minutes > now.minutes;
-};
+import { useEffect, useState } from 'react';
 
 export default function StaffScheduleView({ currentUser }) {
-  const [code, setCode] = useState('');
-  const [appt, setAppt] = useState(null);
   const [appointments, setAppointments] = useState([]);
-  const [appointmentView,setAppointmentView]=useState('active');
-  const [appointmentPage,setAppointmentPage]=useState(1);
-  const appointmentsPerPage=5;
-  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
-  const [appointmentsError, setAppointmentsError] = useState('');
-  const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0);
-  const [now, setNow] = useState(salonClock);
-  const [promo, setPromo] = useState('');
-  const [promoApplied, setPromoApplied] = useState(false);
-  const [promoValue, setPromoValue] = useState(0);
-  const [promoType, setPromoType] = useState('PERCENTAGE');
-  const [toast, say] = useToast();
-  const [confirm, setConfirm] = useState(null);
-  useModalScrollLock(Boolean(confirm?.title));
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(salonClock()), 30_000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    let current = true;
-
     if (!currentUser?.accessToken) {
       setAppointments([]);
-      setAppointmentsError('Sign in with a staff account to load appointments.');
-      setAppointmentsLoading(false);
-      return undefined;
+      return;
     }
 
-    setAppointmentsLoading(true);
-    setAppointmentsError('');
+    const demoAppointments = [
+      {
+        id: 1,
+        customerName: 'Alice Reyes',
+        serviceName: 'Lash Lift',
+        appointmentDate: '2026-11-15',
+        startTime: '09:00',
+        status: 'PENDING',
+      },
+      {
+        id: 2,
+        customerName: 'Mia Santos',
+        serviceName: 'Hair Cut & Style',
+        appointmentDate: '2026-11-16',
+        startTime: '13:30',
+        status: 'CONFIRMED',
+      },
+    ];
 
-    api.getStaffAppointments(currentUser.accessToken, appointmentView === 'archived')
-      .then((result) => {
-        if (current) {
-          setAppointments(result.data ?? []);
-          setAppointmentsError('');
-        }
-      })
-      .catch((error) => {
-        if (current) setAppointmentsError(error.message || 'Unable to load appointments.');
-      })
-      .finally(() => {
-        if (current) setAppointmentsLoading(false);
-      });
+    setAppointments(demoAppointments);
+  }, [currentUser?.accessToken]);
 
-    return () => { current = false; };
-  }, [currentUser?.accessToken, appointmentsRefreshKey, appointmentView]);
+  return (
+    <div className="rounded-3xl border border-[#E7DFD4] bg-[#FFFDF8] p-6 shadow-sm">
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#C5A059]">Schedule</p>
+          <h2 className="mt-2 text-2xl font-bold text-[#2A1E1B]">Today's appointments</h2>
+        </div>
+        <span className="rounded-full bg-[#F6F0E6] px-3 py-1 text-xs font-semibold text-[#6F4C2E]">
+          {appointments.length} scheduled
+        </span>
+      </div>
 
-  const upcomingAppointments = useMemo(() => appointments
-    .filter((appointment) => isUpcoming(appointment, now))
-    .sort((first, second) => `${first.appointmentDate} ${first.startTime}`.localeCompare(`${second.appointmentDate} ${second.startTime}`)), [appointments, now]);
-  const todayAppointments = upcomingAppointments.filter((appointment) => String(appointment.appointmentDate).slice(0, 10) === now.date);
-  const laterAppointments = upcomingAppointments.filter((appointment) => String(appointment.appointmentDate).slice(0, 10) > now.date);
-  const displayAppointments = appointmentView === 'archived'
-    ? appointments
-    : appointments.filter((appointment) => !['CANCELLED', 'NO_SHOW', 'COMPLETED', 'DONE', 'CHECKED_OUT'].includes(String(appointment.status || '').toUpperCase()));
-  const loadingAppointments = Boolean(currentUser?.accessToken) && appointmentsLoading;
-  const scheduleError = currentUser?.accessToken ? appointmentsError : 'Sign in with a staff account to load appointments.';
-  const visibleAppt = appt && displayAppointments.some((appointment) => String(appointment.id) === String(appt.id)) ? appt : null;
-  const subtotal = visibleAppt ? visibleAppt.items.reduce((sum, item) => sum + Number(item.price || 0), 0) : 0;
-  const discount = promoApplied ? Math.min(promoType.includes('PERCENT') ? subtotal * promoValue / 100 : promoValue, subtotal) : 0;
-  const tax = (subtotal - discount) * TAX;
-  const total = subtotal - discount + tax;
-  const query = code.trim().toLowerCase();
+      <div className="space-y-3">
+        {appointments.length === 0 ? (
+          <p className="text-sm text-[#8A8174]">No appointments scheduled for this staff account yet.</p>
+        ) : (
+          appointments.map((appointment) => (
+            <div key={appointment.id} className="rounded-2xl border border-[#E7DFD4] bg-white p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-[#2A1E1B]">{appointment.customerName}</p>
+                  <p className="text-sm text-[#8A8174]">{appointment.serviceName}</p>
+                </div>
+                <span className="rounded-full bg-[#EBDBC8] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#6F4C2E]">
+                  {appointment.status}
+                </span>
+              </div>
+              <p className="mt-3 text-sm text-[#5F574E]">
+                {appointment.appointmentDate} · {appointment.startTime}
+              </p>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}

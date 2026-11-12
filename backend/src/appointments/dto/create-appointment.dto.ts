@@ -10,7 +10,6 @@ import {
   IsInt,
   IsNotEmpty,
   IsString,
-  IsUUID,
   Matches,
   MaxLength,
   Min,
