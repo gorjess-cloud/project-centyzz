@@ -186,7 +186,7 @@ export default function MemberServicesPage({
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search services..."
-                  className={`w-36 rounded-full border px-3 py-1.5 text-xs outline-none focus:border-[#C5A059] sm:w-48 ${cardSurface} ${isDarkMode ? "text-[#F5F1EA] placeholder:text-[#8A8174]" : "text-[#443523] placeholder:text-[#8A8174]"}`}
+                  className={`w-32 min-w-0 rounded-full border px-3 py-1.5 text-xs outline-none focus:border-[#C5A059] sm:w-48 ${cardSurface} ${isDarkMode ? "text-[#F5F1EA] placeholder:text-[#8A8174]" : "text-[#443523] placeholder:text-[#8A8174]"}`}
                 />
               )}
 
@@ -272,28 +272,27 @@ export default function MemberServicesPage({
                         onClick={() => handleAddToCart(service, details)}
                         aria-pressed={isAdded}
                         aria-label={`${isAdded ? "Remove" : "Add"} ${details.title} ${isAdded ? "from" : "to"} cart`}
-                        className={`group relative flex min-w-0 items-center gap-3 overflow-hidden rounded-2xl border p-3 text-left transition-all duration-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A059] sm:flex-col sm:items-stretch sm:justify-between sm:p-2.5 sm:hover:-translate-y-1 ${cardSurface} ${isAdded ? "border-[#C5A059] ring-2 ring-[#C5A059]/30" : ""}`}
+                        className={`group relative flex min-w-0 items-stretch gap-3 overflow-hidden rounded-2xl border p-3 text-left transition-all duration-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A059] sm:flex-col sm:items-stretch sm:justify-between sm:p-2.5 sm:hover:-translate-y-1 ${cardSurface} ${isAdded ? "border-[#C5A059] ring-2 ring-[#C5A059]/30" : ""}`}
                       >
-                        <img src={serviceImage} alt="" loading="lazy" className="h-20 w-20 shrink-0 rounded-xl object-cover sm:h-32 sm:w-full" />
+                        <img src={serviceImage} alt="" loading="lazy" className="h-24 w-24 shrink-0 self-center rounded-xl object-cover sm:h-32 sm:w-full" />
 
                         {isAdded && <span className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-[#4A3928] text-white shadow sm:right-3 sm:top-3"><Check className="h-4 w-4" /></span>}
 
                         <div className="flex min-w-0 flex-1 flex-col self-stretch sm:flex-1">
-                          <h2 className="line-clamp-2 pr-12 text-sm font-bold leading-snug sm:min-h-[32px] sm:pr-0 sm:text-xs">
+                          <h2 className="line-clamp-2 pr-8 text-sm font-bold leading-snug sm:min-h-[32px] sm:pr-0 sm:text-xs">
                             {details.title}
                           </h2>
                           <p className={`mt-1 line-clamp-2 text-xs leading-relaxed sm:text-[10px] ${mutedText}`}>
                             {service.description || "Professional salon care tailored for a premium finishing look."}
                           </p>
-                        </div>
-
-                        <div className="mt-3 flex items-baseline justify-between border-t border-inherit pt-2.5 px-0.5">
-                          <span className="text-xs font-extrabold text-[#B48B43]">
-                            {formatPrice(details.price)}
-                          </span>
-                          <span className={`text-[9px] ${mutedText}`}>
-                            {details.duration}
-                          </span>
+                          <div className="mt-auto flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 border-t border-inherit px-0.5 pt-2.5 sm:mt-3">
+                            <span className="text-xs font-extrabold text-[#B48B43]">
+                              {formatPrice(details.price)}
+                            </span>
+                            <span className={`text-[9px] ${mutedText}`}>
+                              {details.duration}
+                            </span>
+                          </div>
                         </div>
                       </button>
                     );

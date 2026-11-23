@@ -195,7 +195,7 @@ export class GuestBookingService {
     return { ...booking, token, mode: 'DEMO', holdMinutes: HOLD_MINUTES };
   }
   async createMemberAppointment(input: MemberBookingInput, userId: number, email: string) {
-    const start = this.checkStart(input.appointmentDate, input.startTime);
+    const start = await this.checkStart(input.appointmentDate, input.startTime);
     const client = await pool.connect();
     try {
       await client.query('BEGIN');

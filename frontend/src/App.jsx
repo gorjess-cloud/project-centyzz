@@ -77,13 +77,19 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!memberUser?.accessToken || memberUser?.mustCompleteSetup) return undefined;
+    if (
+      !memberUser?.accessToken ||
+      memberUser?.mustCompleteSetup ||
+      !['home', 'member-services', 'member-bookings', 'member-account'].includes(activePage)
+    ) return undefined;
 
     let isCurrent = true;
+    setIsLoadingAppointments(true);
+    setAppointmentsError('');
 
     api.getMyAppointments(memberUser.accessToken)
       .then((result) => {
-        if (isCurrent) setMemberAppointments(result.data ?? []);
+        if (isCurrent) setMemberAppointments(Array.isArray(result.data) ? result.data : []);
       })
       .catch((error) => {
         if (isCurrent) setAppointmentsError(error.message);
@@ -95,7 +101,7 @@ export default function App() {
     return () => {
       isCurrent = false;
     };
-  }, [memberUser?.accessToken, memberUser?.mustCompleteSetup, appointmentsRefreshKey]);
+  }, [memberUser?.accessToken, memberUser?.mustCompleteSetup, appointmentsRefreshKey, activePage]);
 
   const handleOpenBooking = (service = null) => {
     if (memberUser) {
@@ -308,6 +314,9 @@ export default function App() {
             setActivePage={navigatePage}
             onOpenBooking={handleMemberBooking}
             onLogout={requestLogout}
+            appointments={memberAppointments}
+            isLoadingAppointments={isLoadingAppointments}
+            appointmentsError={appointmentsError}
           />
         )}
         {!isAdminDashboard && activePage === 'services' && (
@@ -363,7 +372,7 @@ export default function App() {
         />
       )}
 
-      {confirmLogout && <ConfirmationModal title="Log out?" message="Are you sure you want to log out of your account?" confirmLabel="Log out" danger onCancel={() => setConfirmLogout(false)} onConfirm={confirmAndLogout} />}
+      {confirmLogout && <ConfirmationModal title="Log out?" message="Are you sure you want to log out of your account?" confirmLabel="Log out" danger isDarkMode={isDarkMode} onCancel={() => setConfirmLogout(false)} onConfirm={confirmAndLogout} />}
 
       {!memberUser && !isAdminDashboard && (
         <BookingModal
