@@ -1,5 +1,5 @@
 import AdminWorkspaceProvider from './workspace/AdminWorkspaceProvider';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useUnsavedChanges } from './UnsavedChangesProvider';
 import { useWorkspaceTheme, WorkspaceNavigationContext } from './workspace/WorkspaceContext';
 import { workspacePages } from './workspace/navigation';
@@ -18,7 +18,13 @@ import ScheduleManagementView from '../pages/admin/ScheduleManagementView';
 import AccountManagementView from '../pages/admin/AccountManagementView'; // Fixed import path to point to pages/admin/
 
 export default function AdminLayout({ currentUser, onLogout, onUserUpdated }) {
-  const [activePage, setActivePage] = useState('dashboard');
+  const pageKey = `centyzz-workspace-page:${String(currentUser?.role || 'ADMIN').toLowerCase()}:${currentUser?.id || currentUser?.email || 'user'}`;
+  const adminPages = ['dashboard', 'users', 'services', 'inventory', 'clients', 'reports', 'logs', 'schedule', 'settings', 'account'];
+  const [activePage, setActivePage] = useState(() => {
+    try { const saved = localStorage.getItem(pageKey); return adminPages.includes(saved) ? saved : 'dashboard'; }
+    catch { return 'dashboard'; }
+  });
+  useEffect(() => { try { localStorage.setItem(pageKey, activePage); } catch { /* Keep navigation in memory if storage is unavailable. */ } }, [activePage, pageKey]);
   const { guardNavigation } = useUnsavedChanges();
   const navigate = (page) => {
     if (page === activePage) return;

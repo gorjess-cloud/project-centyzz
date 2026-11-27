@@ -15,6 +15,8 @@ export default function WorkspaceThemeProvider({ children }) {
 
   useEffect(() => {
     try { localStorage.setItem(storageKey, theme); } catch { /* Keep the in-memory preference if storage is unavailable. */ }
+    document.documentElement.dataset.theme = theme;
+    document.body.dataset.theme = theme;
   }, [theme]);
 
   function toggleTheme() {

@@ -7,7 +7,6 @@ import { Toast, useToast, Badge, EmptyState, ConfirmModal, StaffOverlay, peso, c
 import { PaymentMethods, SplitPayment, CashModal, QrModal, ReceiptSummary, DemoReceiptModal } from '../../components/staff/payment';
 import { useWorkspaceTheme } from '../../components/workspace/WorkspaceContext';
 import { api } from '../../api/client';
-import { getServiceImage } from '../../utils/serviceImages';
 
 const GROUPS = ['All Categories', 'Hair Services', 'Nail Services', 'Skin & Lashes'];
 const SUBCATEGORIES = [
@@ -117,7 +116,7 @@ export default function StaffPOSView({ onSale,currentUser }) {
             group: categoryIndex(category.category),
             sub: serviceSubcategory(service.name, categoryIndex(category.category)),
             name: service.name,
-            image: getServiceImage(service.name, category.category),
+            image: service.imageUrl || null,
             price: Number(service.price),
             icon: serviceIcon[categoryIndex(category.category)],
           })),
@@ -243,11 +242,17 @@ export default function StaffPOSView({ onSale,currentUser }) {
               const Icon = s.icon; const n = qtyOf(s.id);
               return (
                 <button key={s.id} onClick={() => change(s, 1)} aria-label={`Add ${s.name}, ${peso(s.price)}`}
-                  className={`${card} group relative flex h-64 touch-manipulation flex-col overflow-hidden p-0 text-left transition hover:-translate-y-0.5 hover:border-[#C5A059] hover:shadow-md active:scale-95 lg:h-72 ${n > 0 ? 'border-[#C5A059] ring-2 ring-[#C5A059]/30' : ''}`}>
-                  <span className="line-clamp-2 px-3.5 pt-3 text-sm font-bold leading-snug text-[#4A3928]">{s.name}</span>
-                  {n > 0 && <span className="pop-in absolute right-3 top-3 z-10 flex h-7 min-w-7 items-center justify-center rounded-full bg-[#4A3928] px-2 text-[11px] font-bold text-white shadow">{n}</span>}
-                  <span className="flex h-36 w-full shrink-0 items-center justify-center overflow-hidden bg-[#F6F0E6] text-[#4A3928] transition group-hover:bg-[#EBDBC8] lg:h-44">{s.image ? <img src={s.image} alt={s.name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" /> : <Icon size={42} strokeWidth={1.5} />}</span>
-                  <span className="self-end rounded-full bg-[#F6F0E6] px-3 py-1 text-sm font-bold text-[#8B5E3C]">₱ {s.price.toLocaleString()}</span>
+                  className={`${card} group relative flex min-h-64 touch-manipulation flex-col overflow-hidden p-0 text-left transition hover:-translate-y-0.5 hover:border-[#C5A059] hover:shadow-md active:scale-[.98] lg:min-h-72 ${n > 0 ? 'border-[#C5A059] ring-2 ring-[#C5A059]/30' : ''}`}>
+                  <span className="relative block aspect-[4/3] w-full shrink-0 overflow-hidden bg-[#F1E8DA] text-[#4A3928]">
+                    {s.image ? <img src={s.image} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" /> : <span className="flex h-full w-full items-center justify-center"><Icon size={42} strokeWidth={1.5} /></span>}
+                    <span className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#24180f66] to-transparent" />
+                    <span className="absolute bottom-2.5 left-3 flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#6E5134] shadow-sm"><Plus size={12} strokeWidth={2.5} /> Add</span>
+                    {n > 0 && <span className="pop-in absolute right-3 top-3 flex h-8 min-w-8 items-center justify-center rounded-full bg-[#4A3928] px-2 text-xs font-bold text-white shadow-lg ring-2 ring-white/90">{n}</span>}
+                  </span>
+                  <span className="flex min-h-[82px] flex-1 items-center justify-between gap-2.5 px-3.5 py-3">
+                    <span className="line-clamp-2 min-w-0 text-[13px] font-bold leading-snug text-[#4A3928]">{s.name}</span>
+                    <span className="shrink-0 rounded-full bg-[#F6F0E6] px-2.5 py-1.5 text-xs font-bold text-[#8B5E3C]">₱{s.price.toLocaleString()}</span>
+                  </span>
                 </button>
               );
             })}

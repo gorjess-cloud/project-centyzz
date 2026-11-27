@@ -24,14 +24,41 @@ import MemberBook from './pages/MemberBook';
 import { useWorkspaceTheme } from './components/workspace/WorkspaceContext';
 import { useUnsavedChanges } from './components/UnsavedChangesProvider';
 
+const sessionStorageKey = 'centyzz-session';
+const pageStorageKey = 'centyzz-active-page';
+const publicPages = ['home', 'services', 'promos', 'about', 'auth', 'forgot-pin'];
+const memberPages = ['home', 'member-services', 'member-bookings', 'member-book', 'member-account'];
+const managementPages = ['admin'];
+
+function readSession() {
+  try {
+    const value = JSON.parse(localStorage.getItem(sessionStorageKey) || 'null');
+    return value?.accessToken ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function readPage(user) {
+  const params = new URLSearchParams(window.location.search);
+  if (window.location.pathname === '/forgot-pin') return 'forgot-pin';
+  if (params.get('page') === 'auth') return 'auth';
+  try {
+    const saved = localStorage.getItem(pageStorageKey);
+    const role = String(user?.role || '').toUpperCase();
+    const allowed = ['ADMIN', 'STAFF', 'SUPERADMIN'].includes(role)
+      ? managementPages
+      : user ? memberPages : publicPages;
+    return allowed.includes(saved) ? saved : 'home';
+  } catch {
+    return 'home';
+  }
+}
 
 export default function App() {
   const [credentialRecoveryHash] = useState(() => window.location.hash.startsWith('#/recover/') ? window.location.hash : null);
-  const [activePage, setActivePage] = useState(() => {
-    if (window.location.pathname === '/forgot-pin') return 'forgot-pin';
-    if (new URLSearchParams(window.location.search).get('page') === 'auth') return 'auth';
-    return 'home';
-  });
+  const [memberUser, setMemberUser] = useState(readSession);
+  const [activePage, setActivePage] = useState(() => readPage(readSession()));
   const [serviceFilter, setServiceFilter] = useState('all');
   const [isBookingOpen, setIsBookingOpen] = useState(() => new URLSearchParams(window.location.search).has('centyzz_booking'));
   const [selectedService, setSelectedService] = useState(null);
@@ -43,13 +70,24 @@ export default function App() {
     const resolved = typeof next === 'function' ? next(isDarkMode) : next;
     if (Boolean(resolved) !== isDarkMode) toggleTheme();
   };
-  const [memberUser, setMemberUser] = useState(null);
   const [maintenanceGate, setMaintenanceGate] = useState({ token: null, data: null, checking: true });
   const [memberAppointments, setMemberAppointments] = useState([]);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
   const [appointmentsError, setAppointmentsError] = useState('');
   const [appointmentsRefreshKey, setAppointmentsRefreshKey] = useState(0);
   const [confirmLogout, setConfirmLogout] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (memberUser?.accessToken) localStorage.setItem(sessionStorageKey, JSON.stringify(memberUser));
+      else localStorage.removeItem(sessionStorageKey);
+    } catch { /* Keep the active session in memory if browser storage is unavailable. */ }
+  }, [memberUser]);
+
+  useEffect(() => {
+    try { localStorage.setItem(pageStorageKey, activePage); }
+    catch { /* The current page remains available for this session. */ }
+  }, [activePage]);
   // Shared entry-point check only; the Admin and Staff components remain unchanged.
   useEffect(() => {
     const token = memberUser?.accessToken;
@@ -182,7 +220,8 @@ export default function App() {
       setMemberAppointments([]);
       setAppointmentsError('');
       setIsLoadingAppointments(false);
-      setActivePage('home');
+      setAuthMode('login');
+      setActivePage('auth');
       logoutPending.current = false;
     });
   };
@@ -209,7 +248,7 @@ export default function App() {
     if (checking || maintenanceGate.data?.enabled) return <MaintenanceGate
       checking={checking}
       status={maintenanceGate.data}
-      onSignOut={() => { setMemberUser(null); setMemberAppointments([]); setActivePage('home'); }}
+      onSignOut={handleLogout}
     />;
   }
 

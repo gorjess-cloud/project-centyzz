@@ -8,6 +8,25 @@
 .sa-maintenance-gate-sub{display:flex;align-items:center;justify-content:center;gap:8px;color:#8e8171;font-size:12px;line-height:1.6;margin:16px 0 22px}
 .sa-maintenance-gate-signout{border:1px solid #dac9b0;border-radius:10px;padding:11px 22px;color:#5b4936;background:#fff;cursor:pointer;font-weight:650}
 .sa-maintenance-gate-signout:hover{background:#f7f0e4}
+.sa-loading-screen{position:relative;isolation:isolate;min-height:100dvh;display:grid;place-items:center;overflow:hidden;padding:28px;background:radial-gradient(ellipse at 50% 42%,#fffdf8 0%,#f7f2e9 57%,#eee5d8 100%);color:#332a20;font-family:inherit}
+.sa-loading-content{position:relative;z-index:1;width:min(440px,100%);padding:32px 22px;text-align:center;animation:sa-loading-enter .55s ease-out both}
+.sa-loading-logo-wrap{position:relative;display:grid;place-items:center;width:112px;height:112px;margin:0 auto 27px}
+.sa-loading-logo{position:relative;z-index:1;width:76px;height:76px;object-fit:contain;border-radius:22px;background:#fffdf9;padding:8px;box-shadow:0 8px 30px #6045221c}
+.sa-loading-ring{position:absolute;inset:0;border:1px solid #c5a05945;border-top-color:#a17c43;border-right-color:#a17c4380;border-radius:50%;animation:sa-loading-spin 2.3s linear infinite}
+.sa-loading-sparkle{position:absolute;right:1px;top:8px;color:#a17c43;animation:sa-loading-twinkle 1.8s ease-in-out infinite}
+.sa-loading-eyebrow{margin:0;color:#987a4b;font-size:10px;font-weight:750;letter-spacing:2.5px}
+.sa-loading-content h1{margin:14px 0 9px;font-family:Georgia,serif;font-size:clamp(27px,6vw,38px);font-weight:500;letter-spacing:-.5px}
+.sa-loading-message{margin:0;color:#827667;font-size:14px;line-height:1.6}
+.sa-loading-progress{height:3px;width:min(190px,70%);margin:28px auto 0;overflow:hidden;border-radius:999px;background:#e6dccb}
+.sa-loading-progress span{display:block;width:42%;height:100%;border-radius:inherit;background:linear-gradient(90deg,#c5a059,#8b6335);animation:sa-loading-progress 1.6s ease-in-out infinite}
+.sa-loading-glow{position:absolute;z-index:-1;width:330px;height:330px;border-radius:50%;filter:blur(1px);pointer-events:none}
+.sa-loading-glow-one{top:-190px;left:-150px;background:radial-gradient(circle,#d8bf8b32,transparent 70%)}
+.sa-loading-glow-two{right:-190px;bottom:-230px;background:radial-gradient(circle,#b58d542b,transparent 70%)}
+@keyframes sa-loading-spin{to{transform:rotate(360deg)}}
+@keyframes sa-loading-twinkle{0%,100%{opacity:.5;transform:scale(.86) rotate(-8deg)}50%{opacity:1;transform:scale(1.08) rotate(8deg)}}
+@keyframes sa-loading-progress{0%{transform:translateX(-120%)}100%{transform:translateX(340%)}}
+@keyframes sa-loading-enter{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.sa-loading-content,.sa-loading-ring,.sa-loading-sparkle,.sa-loading-progress span{animation:none}}
 .sa-manager-dialog{width:min(940px,calc(100vw - 32px));max-height:calc(100dvh - 36px);margin:auto;padding:0;border:1px solid var(--workspace-border);border-radius:20px;overflow:auto;background:var(--workspace-surface);color:var(--workspace-text);box-shadow:0 26px 100px #120f0a66}
 .sa-manager-dialog::backdrop{background:#18130bb8;backdrop-filter:blur(3px)}
 .sa-manager-pad{padding:24px 27px}

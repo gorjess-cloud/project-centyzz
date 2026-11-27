@@ -21,7 +21,14 @@ export class ServicesService implements OnModuleDestroy {
       const result = await this.pool.query(`
         SELECT sc.id AS category_id, sc.name AS category_name,
                s.id AS service_id, s.name AS service_name,
-               s.description, s.price, s.duration_minutes
+               s.description, s.price, s.duration_minutes,
+               COALESCE(
+                 NULLIF(BTRIM(to_jsonb(s)->>'image_url'), ''),
+                 NULLIF(BTRIM(to_jsonb(s)->>'imageUrl'), ''),
+                 NULLIF(BTRIM(to_jsonb(s)->>'image'), ''),
+                 NULLIF(BTRIM(to_jsonb(s)->>'photo_url'), ''),
+                 NULLIF(BTRIM(to_jsonb(s)->>'image_path'), '')
+               ) AS image_url
         FROM public.service_categories sc
         JOIN public.services s ON s.category_id = sc.id
         WHERE sc.is_active = TRUE
@@ -32,7 +39,7 @@ export class ServicesService implements OnModuleDestroy {
       const groups = new Map<number, {
         id: number;
         category: string;
-        services: { id: number; name: string; description: string | null; price: number; durationMinutes: number }[];
+        services: { id: number; name: string; description: string | null; price: number; durationMinutes: number; imageUrl: string | null }[];
       }>();
       for (const row of result.rows) {
         if (!groups.has(row.category_id)) {
@@ -44,6 +51,7 @@ export class ServicesService implements OnModuleDestroy {
           description: row.description,
           price: Number(row.price),
           durationMinutes: Number(row.duration_minutes),
+          imageUrl: row.image_url || null,
         });
       }
       return [...groups.values()];

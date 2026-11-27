@@ -1,6 +1,6 @@
 
 import StaffCashierCloseout from '../../pages/staff/StaffCashierCloseout';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import StaffSidebar from './StaffSidebar';
 import { MotionStyles } from './ui';
 import StaffPOSView from '../../pages/staff/StaffPOSView';
@@ -22,7 +22,13 @@ const staffPages = [
 ];
 
 export default function StaffLayout({ currentUser, onLogout, onUserUpdated }) {
-  const [activePage, setActivePage] = useState('dashboard');
+  const pageKey = `centyzz-workspace-page:staff:${currentUser?.id || currentUser?.email || 'user'}`;
+  const staffPageIds = ['dashboard', 'pos', 'schedule', 'calendar', 'cashier-closeout', 'inventory', 'settings'];
+  const [activePage, setActivePage] = useState(() => {
+    try { const saved = localStorage.getItem(pageKey); return staffPageIds.includes(saved) ? saved : 'dashboard'; }
+    catch { return 'dashboard'; }
+  });
+  useEffect(() => { try { localStorage.setItem(pageKey, activePage); } catch { /* Keep navigation in memory if storage is unavailable. */ } }, [activePage, pageKey]);
   const { guardNavigation } = useUnsavedChanges();
 
   const navigate = (page) => {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X, CheckCircle2, Inbox } from 'lucide-react';
 import useModalScrollLock from '../../hooks/useModalScrollLock';
+import { useWorkspaceTheme } from '../workspace/WorkspaceContext';
 
 // Staff UI intentionally co-locates its existing formatting helpers.
 // eslint-disable-next-line react-refresh/only-export-components
@@ -128,12 +129,14 @@ export function Modal({ title, onClose, children, size = 'max-w-xl' }) {
 
 export function ConfirmModal({ message, onCancel, onConfirm, confirmLabel = 'Yes', danger = false }) {
   useModalScrollLock(true);
+  const { theme } = useWorkspaceTheme();
+  const isDark = theme === 'dark';
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#2A1E1B]/40 p-4" onMouseDown={(e) => e.target === e.currentTarget && onCancel?.()}>
-      <div role="alertdialog" aria-modal="true" className="w-full max-w-xl rounded-[2rem] border border-[#B9B07A] bg-[#FFFDF2] px-6 pb-6 pt-6 shadow-xl sm:px-10">
-        <p className="text-xl font-medium text-[#514633]">{message}</p>
+      <div role="alertdialog" aria-modal="true" className={`w-full max-w-xl rounded-[2rem] border px-6 pb-6 pt-6 shadow-xl sm:px-10 ${isDark ? 'border-[#494235] bg-[#24221e] text-[#f0e8da]' : 'border-[#B9B07A] bg-[#FFFDF2] text-[#514633]'}`}>
+        <p className={`text-xl font-medium ${isDark ? 'text-[#f0e8da]' : 'text-[#514633]'}`}>{message}</p>
         <div className="mt-16 flex justify-end gap-2">
-          <button type="button" onClick={onCancel} className="min-w-32 rounded-full border border-[#817565] bg-white px-6 py-2.5 text-sm font-bold text-[#6D6253] hover:bg-[#F8F5F0]">Cancel</button>
+          <button type="button" onClick={onCancel} className={`min-w-32 rounded-full border px-6 py-2.5 text-sm font-bold ${isDark ? 'border-[#5d5547] bg-[#302c25] text-[#f0e8da] hover:bg-[#3b362d]' : 'border-[#817565] bg-white text-[#6D6253] hover:bg-[#F8F5F0]'}`}>Cancel</button>
           <button type="button" onClick={onConfirm} className={`min-w-32 rounded-full px-6 py-2.5 text-sm font-bold text-white ${danger ? 'bg-[#7A6C5B] hover:bg-[#5C5043]' : 'bg-[#4A3928] hover:bg-[#2A1E1B]'}`}>{confirmLabel}</button>
         </div>
       </div>
