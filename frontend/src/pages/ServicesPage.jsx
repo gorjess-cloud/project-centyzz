@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
-import { getServiceImage } from '../utils/serviceImages';
+import { Sparkles } from 'lucide-react';
 
 export default function ServicesPage({ serviceFilter, setServiceFilter, onOpenBooking, setActivePage, setAuthMode, currentUser, isDarkMode }) {
 
@@ -54,7 +54,7 @@ export default function ServicesPage({ serviceFilter, setServiceFilter, onOpenBo
         <div className="mx-auto flex w-full max-w-7xl flex-wrap justify-center gap-6">
           {servicesToShow.map((service) => (
             <article key={service.id} className={`flex h-full w-full max-w-sm flex-col justify-between overflow-hidden rounded-2xl border shadow-sm sm:w-[calc(50%-1.5rem)] lg:w-[calc(25%-1.5rem)] ${isDarkMode ? 'border-[#2A2A2A] bg-[#1A1A1A]' : 'border-[#E8DFD1] bg-white'}`}>
-              <img src={getServiceImage(service.name, service.category)} alt={service.name} loading="lazy" className="h-44 w-full object-cover" />
+              {service.imageUrl ? <img src={service.imageUrl} alt={service.name} loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} className="h-44 w-full bg-[#F6F0E6] object-cover" /> : <div className="flex h-44 w-full items-center justify-center bg-[#F6F0E6] text-[#8B5E3C]" aria-label="No service photo available"><Sparkles size={34} strokeWidth={1.4} /></div>}
               <div className="p-4 sm:p-5">
                 <span className="text-[10px] font-bold uppercase text-[#C5A059]">{service.category}</span>
                 <h2 className={`mt-2 text-lg font-bold ${text}`}>{service.name}</h2>

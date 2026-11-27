@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import useModalScrollLock from "../hooks/useModalScrollLock";
+import { useWorkspaceTheme } from "./workspace/WorkspaceContext";
 
 export default function ConfirmationModal({
   title = "Please confirm",
@@ -9,21 +10,23 @@ export default function ConfirmationModal({
   danger = false,
   centered = false,
   confirmClassName,
-  isDarkMode = false,
+  isDarkMode,
   onCancel,
   onConfirm,
 }) {
   useModalScrollLock(true);
-  const shell = isDarkMode
+  const { theme } = useWorkspaceTheme();
+  const dark = isDarkMode ?? theme === "dark";
+  const shell = dark
     ? "border-[#51493B] bg-[#211F1B] text-[#F5F1EA]"
     : "border-[#E7DFD4] bg-[#FFFDF8] text-[#2A1E1B]";
-  const mutedText = isDarkMode ? "text-[#C7BDAE]" : "text-[#756D60]";
-  const secondaryButton = isDarkMode
+  const mutedText = dark ? "text-[#C7BDAE]" : "text-[#756D60]";
+  const secondaryButton = dark
     ? "border-[#51493B] bg-[#171512] text-[#F5F1EA] hover:bg-white/5"
     : "border-[#D7CDBD] bg-transparent text-[#6D6253] hover:bg-[#F6F0E6]";
   const primaryButton = danger
     ? "bg-red-700 hover:bg-red-800 font-bold"
-    : confirmClassName || (isDarkMode ? "bg-[#EAD6A2] text-[#1E1713] hover:bg-[#D8BE7C] font-bold" : "bg-[#4A3928] hover:bg-[#2A1E1B] font-bold");
+    : confirmClassName || (dark ? "bg-[#EAD6A2] text-[#1E1713] hover:bg-[#D8BE7C] font-bold" : "bg-[#4A3928] hover:bg-[#2A1E1B] font-bold");
 
   return createPortal(
     <div className={`fixed inset-0 z-[100] flex ${centered ? "items-center justify-center p-4" : "items-end justify-center p-0 sm:items-center sm:p-4"} bg-black/45`} onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel?.(); }}>

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import MemberSidebar from "../components/MemberSidebar";
-import { getServiceImage } from "../utils/serviceImages";
 import {
   Check,
   Eye,
@@ -257,7 +256,7 @@ export default function MemberServicesPage({
                   className={`grid grid-cols-1 gap-3 transition-all duration-300 sm:grid-cols-2 sm:gap-4 md:grid-cols-3 ${isCartOpen ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}
                 >
                   {filteredServices.map((service) => {
-                    const serviceImage = getServiceImage(service.title, service.category);
+                    const ServiceIcon = getServiceIcon(service);
                     const details = {
                       title: service.title,
                       price: service.price,
@@ -274,7 +273,7 @@ export default function MemberServicesPage({
                         aria-label={`${isAdded ? "Remove" : "Add"} ${details.title} ${isAdded ? "from" : "to"} cart`}
                         className={`group relative flex min-w-0 items-stretch gap-3 overflow-hidden rounded-2xl border p-3 text-left transition-all duration-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A059] sm:flex-col sm:items-stretch sm:justify-between sm:p-2.5 sm:hover:-translate-y-1 ${cardSurface} ${isAdded ? "border-[#C5A059] ring-2 ring-[#C5A059]/30" : ""}`}
                       >
-                        <img src={serviceImage} alt="" loading="lazy" className="h-24 w-24 shrink-0 self-center rounded-xl object-cover sm:h-32 sm:w-full" />
+                        {service.imageUrl ? <img src={service.imageUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} className="h-24 w-24 shrink-0 self-center rounded-xl bg-[#F6F0E6] object-cover sm:h-32 sm:w-full" /> : <span aria-hidden="true" className="flex h-24 w-24 shrink-0 items-center justify-center self-center rounded-xl bg-[#F6F0E6] text-[#8B5E3C] sm:h-32 sm:w-full"><ServiceIcon className="h-8 w-8" strokeWidth={1.4} /></span>}
 
                         {isAdded && <span className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-[#4A3928] text-white shadow sm:right-3 sm:top-3"><Check className="h-4 w-4" /></span>}
 

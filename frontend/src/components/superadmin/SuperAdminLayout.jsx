@@ -24,11 +24,21 @@ const demoUser = {
 };
 
 export default function SuperAdminLayout({ currentUser = demoUser, onUserUpdated, onLogout = () => { window.location.href = '/'; } }) {
-  const [activePage, setActivePage] = useState('dashboard');
+  const pageKey = `centyzz-workspace-page:superadmin:${currentUser?.id || currentUser?.email || 'user'}`;
+  const superadminPageIds = ['dashboard', ...superadminPages.map((page) => page.id)];
+  const [activePage, setActivePage] = useState(() => {
+    try { const saved = localStorage.getItem(pageKey); return superadminPageIds.includes(saved) ? saved : 'dashboard'; }
+    catch { return 'dashboard'; }
+  });
   const { guardNavigation } = useUnsavedChanges();
   const [maintenance, setMaintenance] = useState(defaultMaintenancePreview);
   const workspaceRef = useRef(null);
   const { theme } = useWorkspaceTheme();
+
+  useEffect(() => {
+    try { localStorage.setItem(pageKey, activePage); }
+    catch { /* Keep navigation in memory if storage is unavailable. */ }
+  }, [activePage, pageKey]);
   const preview = Boolean(currentUser?.isDemo && !currentUser?.accessToken);
   const name = currentUser.fullName || currentUser.name
     || [currentUser.firstName, currentUser.lastName].filter(Boolean).join(' ') || 'Super Admin';
